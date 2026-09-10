@@ -1,8 +1,29 @@
 import defaultCatalog from "../catalog/visions.json";
-import type { Catalog, PersistedState } from "./model";
+import type { Catalog, PersistedState, ShinyModRecord } from "./model";
 import { VISION_CYCLE_WAIT_STARTED_AT, validateCatalog } from "./model";
 
 const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
+
+function sanitizeShinyMods(value: unknown): ShinyModRecord[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const candidate = entry as Partial<ShinyModRecord>;
+    if (typeof candidate.id !== "string" || typeof candidate.modName !== "string" || typeof candidate.groupName !== "string" || typeof candidate.variant !== "string") return [];
+    return [{
+      id: candidate.id,
+      catalogId: typeof candidate.catalogId === "string" ? candidate.catalogId : undefined,
+      modName: candidate.modName,
+      englishName: typeof candidate.englishName === "string" ? candidate.englishName : undefined,
+      groupName: candidate.groupName,
+      variant: candidate.variant,
+      attempts: Math.min(100_000, Math.max(0, Math.floor(Number(candidate.attempts) || 0))),
+      isShiny: candidate.isShiny === true,
+      createdAt: typeof candidate.createdAt === "string" ? candidate.createdAt : new Date().toISOString(),
+      obtainedAt: typeof candidate.obtainedAt === "string" ? candidate.obtainedAt : undefined,
+    }];
+  }).slice(0, 1_000);
+}
 
 export function initialState(): PersistedState {
   return {
@@ -11,6 +32,7 @@ export function initialState(): PersistedState {
     actions: [],
     boxes: [],
     manualBaselinePoints: [],
+    shinyMods: [],
     settings: {
       selectedVisionId: "gravity",
       waitMinutes: 30,
@@ -50,6 +72,7 @@ export function loadState(): PersistedState {
       manualBaselinePoints: Array.isArray(parsed.manualBaselinePoints)
         ? parsed.manualBaselinePoints.filter((value) => Number.isFinite(value) && value > 0 && value <= 10_000).map(Math.round).slice(0, 500)
         : [],
+      shinyMods: sanitizeShinyMods(parsed.shinyMods),
       settings,
     };
   } catch {
@@ -85,6 +108,7 @@ export function importState(text: string) {
     manualBaselinePoints: Array.isArray(parsed.manualBaselinePoints)
       ? parsed.manualBaselinePoints.filter((value) => Number.isFinite(value) && value > 0 && value <= 10_000).map(Math.round).slice(0, 500)
       : [],
+    shinyMods: sanitizeShinyMods(parsed.shinyMods),
     settings: { ...fresh.settings, ...(parsed.settings ?? {}) },
   };
 }

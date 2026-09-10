@@ -20,6 +20,8 @@ Repositorio oficial: <https://github.com/OscarD0823/Caja-Fantasma>
 - Gravedad emite un aviso de voz anticipado configurable y un aviso nativo al comenzar. La app funciona minimizada en la bandeja e inicia con Windows.
 - Contador flotante movible y siempre visible. Funciona sobre juegos en ventana o pantalla completa sin bordes; Windows no permite garantizar superposición sobre pantalla completa exclusiva.
 - Historial de cambios incluido dentro del programa.
+- Apartado Mods Shiny con buscador bilingüe, filtros por los nueve estilos de arma y las seis piezas de armadura, contador individual de duplicados nivel 17 fallidos y colección de Shiny conseguidos.
+- Catálogo inicial de 100 módulos base actuales (36 de arma y 64 de armadura), con opción para añadir nombres futuros manualmente. Hora punta y su variante Estrella descendente están incluidas.
 - Respaldo e importación JSON. Los datos personales solo se guardan en el equipo.
 - Animación de apertura al iniciar: el emblema de Once Human funciona como cerradura de la caja.
 - La imagen de la recompensa conserva la caja y muestra una cantidad de 17.

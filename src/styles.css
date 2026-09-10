@@ -21,9 +21,9 @@
 * { box-sizing: border-box; }
 html, body, #root { min-width: 100%; min-height: 100%; margin: 0; }
 body { overflow: hidden; background: radial-gradient(circle at 78% -12%, rgba(73, 221, 207, .11), transparent 34%), radial-gradient(circle at 46% 110%, rgba(114, 83, 218, .09), transparent 35%), var(--bg); }
-button, input, textarea { font: inherit; }
+button, input, textarea, select { font: inherit; }
 button { color: inherit; }
-button:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
 
 .app-shell { display: grid; grid-template-columns: 244px minmax(0, 1fr); min-height: 100vh; }
 .startup-intro { position: fixed; z-index: 120; inset: 0; width: 100%; min-height: 100%; padding: 0; border: 0; overflow: hidden; display: grid; place-items: center; color: #eafffb; background: radial-gradient(circle at 50% 53%, rgba(80, 225, 210, .16), transparent 25%), linear-gradient(145deg, #030b10, #071824 58%, #041016); cursor: pointer; animation: intro-exit 4.2s ease forwards; perspective: 1000px; }
@@ -245,6 +245,61 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .history-record summary { color: var(--cyan); cursor: pointer; }
 .history-record details div { margin-top: 6px; display: flex; justify-content: space-between; gap: 8px; }
 
+.shiny-stats .stat-card:nth-child(2) > svg, .shiny-stats .stat-card:nth-child(4) > svg { color: var(--yellow); }
+.shiny-rule { min-height: 130px; margin-top: 17px; padding: 23px 27px; display: flex; align-items: center; gap: 18px; }
+.shiny-rule-icon { flex: none; width: 54px; height: 54px; border: 1px solid rgba(255, 206, 100, .2); border-radius: 16px; display: grid; place-items: center; color: var(--yellow); background: rgba(255, 206, 100, .07); box-shadow: 0 0 24px rgba(255, 206, 100, .06); }
+.shiny-rule h2, .shiny-catalog-panel h2 { margin: 7px 0 5px; font: 700 20px "Space Grotesk", sans-serif; }
+.shiny-rule p { max-width: 850px; margin: 0; color: #829aa1; font-size: 10px; line-height: 1.6; }
+.shiny-catalog-panel { margin-top: 13px; padding: 25px; }
+.catalog-count { min-height: 29px; padding: 0 10px; border-radius: 999px; display: inline-flex; align-items: center; color: var(--cyan); background: rgba(92, 225, 210, .07); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.shiny-search-controls { margin-top: 18px; display: grid; grid-template-columns: minmax(280px, 1fr) 260px; gap: 10px; align-items: end; }
+.shiny-search-controls label, .shiny-selection label { color: #829ba2; font-size: 9px; }
+.shiny-search-field > div { position: relative; }
+.shiny-search-field svg { position: absolute; z-index: 1; left: 11px; top: 14px; color: #5f7c83; pointer-events: none; }
+.shiny-search-field input { padding-left: 35px; }
+.shiny-search-controls input, .shiny-search-controls select, .shiny-selection select { width: 100%; min-height: 42px; margin-top: 5px; padding: 0 11px; border: 1px solid rgba(133, 175, 182, .17); border-radius: 10px; color: #e6f5f4; background: #071822; }
+.shiny-catalog-results { max-height: 330px; margin-top: 12px; padding: 9px; overflow-y: auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; border: 1px solid rgba(133, 175, 182, .1); border-radius: 12px; background: rgba(4, 15, 22, .42); scrollbar-color: #26515a transparent; scrollbar-width: thin; }
+.shiny-catalog-results > button { position: relative; min-height: 76px; padding: 11px 32px 10px 12px; border: 1px solid rgba(133, 175, 182, .1); border-radius: 10px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; color: #dceaea; background: rgba(17, 43, 53, .55); cursor: pointer; text-align: left; transition: .16s ease; }
+.shiny-catalog-results > button:hover { border-color: rgba(92, 225, 210, .28); background: rgba(37, 91, 94, .2); }
+.shiny-catalog-results > button.selected { border-color: rgba(92, 225, 210, .45); background: linear-gradient(135deg, rgba(54, 151, 147, .22), rgba(11, 35, 44, .7)); }
+.shiny-catalog-results button span { color: var(--cyan); font-size: 7px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.shiny-catalog-results button strong { margin-top: 4px; font: 700 11px "Space Grotesk", sans-serif; }
+.shiny-catalog-results button small { margin-top: 2px; color: #68838a; font-size: 8px; }
+.shiny-catalog-results button > svg { position: absolute; right: 11px; top: 12px; color: var(--cyan); }
+.shiny-no-results { grid-column: 1/-1; min-height: 95px; display: grid; place-items: center; align-content: center; gap: 7px; color: #6e8991; font-size: 9px; text-align: center; }
+.shiny-selection { margin-top: 12px; padding: 13px; border: 1px solid rgba(255, 206, 100, .13); border-radius: 12px; display: grid; grid-template-columns: minmax(190px, 1fr) 250px auto auto; gap: 9px; align-items: end; background: rgba(255, 206, 100, .025); }
+.shiny-selection > div span, .shiny-selection > div strong, .shiny-selection > div small { display: block; }
+.shiny-selection > div span { color: var(--yellow); font-size: 7px; font-weight: 800; letter-spacing: .1em; }
+.shiny-selection > div strong { margin-top: 4px; font: 700 14px "Space Grotesk", sans-serif; }
+.shiny-selection > div small { margin-top: 3px; color: #718990; font-size: 8px; }
+.catalog-source-note { margin: 11px 1px 0; color: #647e86; font-size: 8px; line-height: 1.5; }
+.shiny-heading { margin-top: 28px; }
+.shiny-tracker-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+.shiny-tracker-card { padding: 19px; }
+.shiny-tracker-card.obtained { border-color: rgba(255, 206, 100, .22); background: linear-gradient(145deg, rgba(54, 46, 25, .43), rgba(8, 24, 34, .86)); }
+.shiny-tracker-top { display: grid; grid-template-columns: 42px 1fr 30px; gap: 11px; align-items: center; }
+.shiny-mod-icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: var(--cyan); background: rgba(92, 225, 210, .08); }
+.obtained .shiny-mod-icon { color: var(--yellow); background: rgba(255, 206, 100, .09); }
+.shiny-tracker-top small, .shiny-tracker-top h3, .shiny-tracker-top em { display: block; }
+.shiny-tracker-top small { color: var(--cyan); font-size: 7px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
+.shiny-tracker-top h3 { margin: 3px 0 0; font: 700 14px "Space Grotesk", sans-serif; }
+.shiny-tracker-top em { margin-top: 2px; color: #667f86; font-size: 8px; font-style: normal; }
+.shiny-delete { width: 30px; height: 30px; padding: 0; border: 0; border-radius: 8px; display: grid; place-items: center; color: #825e64; background: rgba(255, 111, 120, .04); cursor: pointer; }
+.shiny-variant { margin-top: 14px; padding: 9px 11px; border-radius: 9px; background: rgba(119, 160, 167, .05); }
+.shiny-variant span, .shiny-variant strong { display: block; }
+.shiny-variant span { color: #6d878e; font-size: 7px; letter-spacing: .1em; }
+.shiny-variant strong { margin-top: 3px; color: #bed0d2; font-size: 10px; }
+.shiny-attempt-count { min-height: 78px; margin-top: 10px; padding: 13px; border: 1px solid rgba(92, 225, 210, .09); border-radius: 11px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.shiny-attempt-count span { max-width: 210px; color: #799299; font-size: 9px; line-height: 1.45; }
+.shiny-attempt-count strong { color: var(--cyan-bright); font: 800 31px "Space Grotesk", sans-serif; }
+.obtained .shiny-attempt-count strong { color: var(--yellow); }
+.shiny-attempt-actions { margin-top: 9px; display: grid; grid-template-columns: 40px 1fr; gap: 7px; }
+.shiny-attempt-actions > button:first-child { min-height: 40px; padding: 0; border: 1px solid rgba(133, 175, 182, .15); border-radius: 10px; display: grid; place-items: center; color: #86a0a6; background: rgba(133, 175, 182, .04); cursor: pointer; }
+.shiny-obtained-button { width: 100%; min-height: 38px; margin-top: 8px; border: 1px solid rgba(255, 206, 100, .18); border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 7px; color: #d8b769; background: rgba(255, 206, 100, .045); cursor: pointer; font-size: 10px; font-weight: 800; }
+.shiny-obtained-button.active { color: #082225; background: linear-gradient(135deg, #ffe08b, var(--yellow)); }
+.shiny-empty { min-height: 150px; }
+.shiny-empty.obtained { border-color: rgba(255, 206, 100, .12); }
+
 .release-hero { min-height: 151px; padding: 28px 30px; display: flex; justify-content: space-between; align-items: center; }
 .release-hero h2 { margin: 10px 0 4px; font: 700 24px "Space Grotesk", sans-serif; }
 .release-hero p { margin: 0; color: #7f989f; font-size: 11px; }
@@ -373,6 +428,8 @@ input { width: 100%; min-height: 34px; margin-top: 5px; padding: 0 10px; border:
   .baseline-note { grid-column: auto; }
   .chance-card { min-height: 190px; }
   .activity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .shiny-selection { grid-template-columns: 1fr 1fr; }
+  .shiny-selection > div { grid-column: 1/-1; }
 }
 
 @media (max-width: 760px) {
@@ -381,13 +438,16 @@ input { width: 100%; min-height: 34px; margin-top: 5px; padding: 0 10px; border:
   .page { padding-inline: 20px; }
   .ghost-orbit { opacity: .25; right: 10px; }
   .hero-copy { width: 100%; }
-  .activity-grid, .vision-cards, .settings-grid, .stats-grid { grid-template-columns: 1fr; }
+  .activity-grid, .vision-cards, .settings-grid, .stats-grid, .shiny-tracker-grid { grid-template-columns: 1fr; }
   .history-record { grid-template-columns: 43px 1fr; }
   .history-record details { grid-column: 2; }
   .catalog-toolbar, .backup-panel { align-items: stretch; flex-direction: column; }
   .counter-editor-controls { align-items: stretch; flex-direction: column; }
   .counter-phase-buttons button { flex: 1; }
   .manual-history-entry { grid-template-columns: 1fr; }
+  .shiny-search-controls, .shiny-selection { grid-template-columns: 1fr; }
+  .shiny-selection > div { grid-column: auto; }
+  .shiny-catalog-results { grid-template-columns: 1fr; }
   .catalog-toolbar label { width: 100%; }
   .catalog-toolbar > div { flex-wrap: wrap; }
   .voice-controls { align-items: stretch; flex-direction: column; }
