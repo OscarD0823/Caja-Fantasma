@@ -1,0 +1,505 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
+import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import {
+  Activity as ActivityIcon,
+  BarChart3,
+  Bell,
+  Box,
+  Check,
+  ChevronRight,
+  Clock3,
+  Download,
+  ExternalLink,
+  Eye,
+  FileClock,
+  Github,
+  History,
+  Minus,
+  MonitorUp,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  Trash2,
+  Undo2,
+  Upload,
+  Wifi,
+  WifiOff,
+  X,
+  Zap,
+} from "lucide-react";
+import CatalogEditor from "./CatalogEditor";
+import AppUpdater from "./Updater";
+import type { Activity, Catalog, PersistedState, PointAction, Vision } from "./model";
+import {
+  APP_VERSION,
+  AUTHOR,
+  REMOTE_CATALOG_URL,
+  REPOSITORY_URL,
+  boxStatistics,
+  buildBreakdown,
+  clampNumber,
+  computeCycle,
+  createId,
+  formatDuration,
+  validateCatalog,
+} from "./model";
+import { exportState, importState, loadState, saveState } from "./storage";
+
+type TabId = "progress" | "vision" | "history" | "changes" | "settings";
+
+const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
+  { id: "progress", label: "Caja", icon: Box },
+  { id: "vision", label: "Visión", icon: Eye },
+  { id: "history", label: "Historial", icon: History },
+  { id: "changes", label: "Cambios", icon: FileClock },
+  { id: "settings", label: "Configuración", icon: Settings2 },
+];
+
+const CHANGELOG = [
+  {
+    version: "1.0.0",
+    date: "10 de septiembre de 2026",
+    title: "Primera versión completa",
+    items: [
+      "Seguimiento ponderado de recompensas Pro y de la Rueda Visional.",
+      "Lunar, Gravedad y Simbiosis incluidas; Ballena vale 1 y Plataformas vale 4.",
+      "Simbiosis queda desactivada con Araña, Antena y Grandulón sin puntos.",
+      "Historial automático de cajas con fecha, hora, mínimo, máximo, promedio y porcentajes.",
+      "Temporizador cíclico, avisos, inicio con Windows y ventana flotante ajustable.",
+      "Catálogo remoto público y publicación desde el equipo del propietario mediante GitHub CLI.",
+      "Actualizaciones firmadas desde GitHub Releases siguiendo el patrón de Fortuna Real.",
+    ],
+  },
+];
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function pointsLabel(points: number) {
+  return `${points} ${points === 1 ? "punto" : "puntos"}`;
+}
+
+function normalizeCycleState(state: PersistedState, now: number): PersistedState {
+  const cycle = computeCycle(state.settings, now);
+  const durationMinutes = cycle.phase === "active" ? state.settings.activeMinutes : state.settings.waitMinutes;
+  const phaseStartedAt = new Date(new Date(cycle.phaseEndsAt).getTime() - durationMinutes * 60_000).toISOString();
+  if (state.settings.phase === cycle.phase && state.settings.phaseStartedAt === phaseStartedAt) return state;
+  return { ...state, settings: { ...state.settings, phase: cycle.phase, phaseStartedAt } };
+}
+
+async function showOverlay(show: boolean) {
+  if (!isTauri()) return;
+  const overlay = await WebviewWindow.getByLabel("overlay");
+  if (!overlay) return;
+  if (show) await overlay.show();
+  else await overlay.hide();
+}
+
+export default function App() {
+  const [state, setState] = useState<PersistedState>(() => loadState());
+  const [tab, setTab] = useState<TabId>("progress");
+  const [now, setNow] = useState(Date.now());
+  const [syncStatus, setSyncStatus] = useState("Catálogo local listo");
+  const [toast, setToast] = useState("");
+  const importRef = useRef<HTMLInputElement>(null);
+
+  const currentPoints = useMemo(() => state.actions.reduce((sum, action) => sum + action.points, 0), [state.actions]);
+  const currentClaims = state.actions.length;
+  const breakdown = useMemo(() => buildBreakdown(state.actions), [state.actions]);
+  const stats = useMemo(() => boxStatistics(state.boxes, currentPoints), [state.boxes, currentPoints]);
+  const selectedVision = state.catalog.visions.find((vision) => vision.id === state.settings.selectedVisionId) ?? state.catalog.visions[0];
+  const cycle = computeCycle(state.settings, now);
+  const target = clampNumber(state.catalog.boxTargetPoints, 1, 10_000);
+  const targetProgress = Math.min(100, Math.round((currentPoints / target) * 100));
+
+  const commitState = useCallback((update: PersistedState | ((current: PersistedState) => PersistedState)) => {
+    setState((current) => typeof update === "function" ? update(current) : update);
+  }, []);
+
+  useEffect(() => saveState(state), [state]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const timestamp = Date.now();
+      setNow(timestamp);
+      setState((current) => normalizeCycleState(current, timestamp));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    void showOverlay(state.settings.overlayEnabled);
+  }, [state.settings.overlayEnabled]);
+
+  useEffect(() => {
+    if (cycle.phase !== "active" || !state.settings.notificationsEnabled) return;
+    if (state.settings.lastNotificationPhaseStartedAt === state.settings.phaseStartedAt) return;
+
+    const notify = async () => {
+      if (!isTauri()) return;
+      let permitted = await isPermissionGranted();
+      if (!permitted) permitted = (await requestPermission()) === "granted";
+      if (!permitted) return;
+      sendNotification({
+        title: `Rueda Visional activa · ${selectedVision?.name ?? "Visión"}`,
+        body: `El evento acaba de comenzar. Termina en ${formatDuration(cycle.remainingMs)}.`,
+      });
+      commitState((current) => ({
+        ...current,
+        settings: { ...current.settings, lastNotificationPhaseStartedAt: current.settings.phaseStartedAt },
+      }));
+    };
+    void notify();
+  }, [commitState, cycle.phase, cycle.remainingMs, selectedVision?.name, state.settings.lastNotificationPhaseStartedAt, state.settings.notificationsEnabled, state.settings.phaseStartedAt]);
+
+  const syncCatalog = useCallback(async (silent = false) => {
+    if (!silent) setSyncStatus("Buscando catálogo público…");
+    try {
+      const response = await fetch(`${REMOTE_CATALOG_URL}?v=${Date.now()}`, { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const catalog = await response.json() as unknown;
+      if (!validateCatalog(catalog)) throw new Error("formato no válido");
+      setState((current) => {
+        if (catalog.catalogVersion <= current.catalog.catalogVersion) return current;
+        return { ...current, catalog };
+      });
+      setSyncStatus(`Catálogo público v${catalog.catalogVersion} comprobado`);
+    } catch (error) {
+      setSyncStatus(`Sin conexión · usando catálogo local`);
+      if (!silent) console.info("No se pudo sincronizar el catálogo", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    void syncCatalog(true);
+    const timer = window.setInterval(() => void syncCatalog(true), 30 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [syncCatalog]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    void isEnabled().then((enabled) => {
+      if (state.settings.autoStartEnabled && !enabled) void enable().catch(() => undefined);
+      if (!state.settings.autoStartEnabled && enabled) void disable().catch(() => undefined);
+    });
+  }, [state.settings.autoStartEnabled]);
+
+  const addActivity = (activity: Activity, vision?: Vision) => {
+    if (!activity.enabled || activity.points <= 0 || (vision && !vision.enabled)) return;
+    const action: PointAction = {
+      id: createId("claim"),
+      activityId: activity.id,
+      activityName: activity.name,
+      visionId: vision?.id,
+      visionName: vision?.name,
+      points: activity.points,
+      occurredAt: new Date().toISOString(),
+    };
+    commitState((current) => ({ ...current, actions: [...current.actions, action] }));
+    setToast(`+${activity.points} · ${activity.name}`);
+    window.setTimeout(() => setToast(""), 1800);
+  };
+
+  const removeLastActivity = (activityId: string, visionId?: string) => {
+    commitState((current) => {
+      const index = current.actions.map((action) => `${action.visionId ?? "pro"}:${action.activityId}`).lastIndexOf(`${visionId ?? "pro"}:${activityId}`);
+      if (index < 0) return current;
+      return { ...current, actions: current.actions.filter((_, actionIndex) => actionIndex !== index) };
+    });
+  };
+
+  const markBox = () => {
+    if (state.actions.length === 0) return;
+    const record = {
+      id: createId("box"),
+      occurredAt: new Date().toISOString(),
+      points: currentPoints,
+      claims: currentClaims,
+      breakdown,
+    };
+    commitState((current) => ({ ...current, actions: [], boxes: [record, ...current.boxes] }));
+    setToast(`Caja registrada con ${currentPoints} puntos`);
+    window.setTimeout(() => setToast(""), 2400);
+  };
+
+  const resetAttempt = () => {
+    if (state.actions.length === 0) return;
+    commitState((current) => ({ ...current, actions: [] }));
+  };
+
+  const setCyclePhase = (phase: "waiting" | "active") => {
+    commitState((current) => ({
+      ...current,
+      settings: {
+        ...current.settings,
+        phase,
+        phaseStartedAt: new Date().toISOString(),
+        lastNotificationPhaseStartedAt: phase === "active" ? undefined : current.settings.lastNotificationPhaseStartedAt,
+      },
+    }));
+    setNow(Date.now());
+  };
+
+  const saveCatalog = (catalog: Catalog) => {
+    commitState((current) => ({ ...current, catalog }));
+    setSyncStatus(`Cambios locales v${catalog.catalogVersion} listos para publicar`);
+  };
+
+  const publishCatalog = async (catalog: Catalog) => {
+    if (!isTauri()) throw new Error("La publicación solo está disponible en la aplicación de escritorio.");
+    const message = await invoke<string>("publish_catalog", { catalogJson: JSON.stringify(catalog, null, 2) });
+    setSyncStatus(message);
+    return message;
+  };
+
+  const toggleAutostart = async (enabled: boolean) => {
+    if (!isTauri()) return;
+    if (enabled) await enable();
+    else await disable();
+  };
+
+  const openRepository = () => {
+    if (isTauri()) void openUrl(REPOSITORY_URL);
+    else window.open(REPOSITORY_URL, "_blank", "noopener,noreferrer");
+  };
+
+  const onImport = async (file?: File) => {
+    if (!file) return;
+    try {
+      commitState(importState(await file.text()));
+      setToast("Respaldo importado correctamente");
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : "No se pudo importar el respaldo.");
+    } finally {
+      if (importRef.current) importRef.current.value = "";
+      window.setTimeout(() => setToast(""), 3000);
+    }
+  };
+
+  return (
+    <div className="app-shell">
+      <AppUpdater />
+      {toast && <div className="toast" role="status"><Check size={17} />{toast}</div>}
+
+      <aside className="sidebar">
+        <div className="brand">
+          <div className="brand-mark"><Box size={25} /><Sparkles size={13} /></div>
+          <div><strong>Caja Fantasma</strong><span>Once Human</span></div>
+        </div>
+
+        <nav aria-label="Navegación principal">
+          {TABS.map(({ id, label, icon: Icon }) => (
+            <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
+              <Icon size={19} /><span>{label}</span>{tab === id && <ChevronRight size={15} />}
+            </button>
+          ))}
+        </nav>
+
+        <div className="sidebar-status">
+          <span className={syncStatus.startsWith("Sin") ? "offline" : "online"}>
+            {syncStatus.startsWith("Sin") ? <WifiOff size={14} /> : <Wifi size={14} />}
+            {syncStatus}
+          </span>
+          <button type="button" onClick={() => void syncCatalog()}><RefreshCw size={14} /> Sincronizar</button>
+        </div>
+
+        <button type="button" className="author-card" onClick={openRepository}>
+          <Github size={21} />
+          <span><small>Creado por</small><strong>{AUTHOR}</strong></span>
+          <ExternalLink size={14} />
+        </button>
+      </aside>
+
+      <main>
+        <header className="topbar">
+          <div>
+            <span className="eyebrow">{tab === "progress" ? "SEGUIMIENTO ACTUAL" : tab === "vision" ? "RUEDA VISIONAL" : tab === "history" ? "REGISTRO PERSONAL" : tab === "changes" ? "NOVEDADES" : "PREFERENCIAS"}</span>
+            <h1>{TABS.find((item) => item.id === tab)?.label}</h1>
+          </div>
+          <div className={`phase-chip ${cycle.phase}`}>
+            <span className="pulse" />
+            <div><small>{cycle.phase === "active" ? `${selectedVision?.name ?? "Visión"} activa` : "Próxima activación"}</small><strong>{formatDuration(cycle.remainingMs)}</strong></div>
+          </div>
+        </header>
+
+        {tab === "progress" && (
+          <section className="page progress-page">
+            <div className="hero-grid">
+              <article className="progress-hero panel">
+                <div className="hero-copy">
+                  <span className="eyebrow"><Sparkles size={14} /> INTENTO EN CURSO</span>
+                  <h2>{currentPoints}<small> / {target} puntos</small></h2>
+                  <p>{currentClaims} {currentClaims === 1 ? "recompensa reclamada" : "recompensas reclamadas"}. La caja puede salir antes: regístrala cuando aparezca.</p>
+                  <div className="progress-track" role="progressbar" aria-label="Progreso del intento" aria-valuemin={0} aria-valuemax={target} aria-valuenow={Math.min(currentPoints, target)}>
+                    <span style={{ width: `${targetProgress}%` }} />
+                  </div>
+                  <div className="hero-actions">
+                    <button type="button" className="primary" disabled={state.actions.length === 0} onClick={markBox}><Box size={19} /> ¡Salió la caja!</button>
+                    <button type="button" className="secondary" disabled={state.actions.length === 0} onClick={() => commitState((current) => ({ ...current, actions: current.actions.slice(0, -1) }))}><Undo2 size={18} /> Deshacer último</button>
+                  </div>
+                </div>
+                <div className="ghost-orbit" aria-hidden="true"><div className="orbital-ring" /><Box size={74} /><Sparkles className="spark-one" /><Sparkles className="spark-two" /></div>
+              </article>
+
+              <article className="chance-card panel">
+                <span className="eyebrow"><BarChart3 size={14} /> ESTIMACIÓN PERSONAL</span>
+                <strong className="chance-value">{stats.currentChancePercent.toFixed(1)}%</strong>
+                <p>Probabilidad acumulada estimada en este intento según tu historial.</p>
+                <div className="mini-stats"><span><small>Promedio</small><strong>{stats.count ? stats.average.toFixed(1) : "—"}</strong></span><span><small>Muestras</small><strong>{stats.count}</strong></span></div>
+              </article>
+            </div>
+
+            <div className="section-heading"><div><span className="eyebrow">RECOMPENSAS PRO</span><h2>Suma lo que reclames</h2></div><span>Solo las recompensas completadas cuentan</span></div>
+            <div className="activity-grid">
+              {state.catalog.proActivities.map((activity) => (
+                <ActivityCard key={activity.id} activity={activity} count={state.actions.filter((action) => !action.visionId && action.activityId === activity.id).length} onAdd={() => addActivity(activity)} onRemove={() => removeLastActivity(activity.id)} />
+              ))}
+            </div>
+
+            <div className="section-heading"><div><span className="eyebrow">VISIÓN SELECCIONADA</span><h2>{selectedVision?.name ?? "Sin visión"}</h2></div><button type="button" className="link-button" onClick={() => setTab("vision")}>Configurar rueda <ChevronRight size={15} /></button></div>
+            {!selectedVision?.enabled && <div className="notice warning"><ActivityIcon size={18} /><span><strong>Evento desactivado.</strong> Sus opciones se muestran como referencia y no suman puntos.</span></div>}
+            <div className="activity-grid">
+              {selectedVision?.activities.length ? selectedVision.activities.map((activity) => (
+                <ActivityCard key={activity.id} activity={activity} disabled={!selectedVision.enabled} count={state.actions.filter((action) => action.visionId === selectedVision.id && action.activityId === activity.id).length} onAdd={() => addActivity(activity, selectedVision)} onRemove={() => removeLastActivity(activity.id, selectedVision.id)} />
+              )) : <div className="empty-card"><Sparkles size={28} /><strong>Aún no hay recompensas para {selectedVision?.name}</strong><span>Puedes añadirlas en Configuración y publicarlas para todos.</span></div>}
+            </div>
+
+            {breakdown.length > 0 && <article className="attempt-log panel">
+              <div className="panel-title"><div><span className="eyebrow">DESGLOSE</span><h3>Intento actual</h3></div><button type="button" className="danger-quiet" onClick={resetAttempt}><RotateCcw size={16} /> Reiniciar</button></div>
+              {breakdown.map((item) => <div className="log-row" key={item.name}><span>{item.name}<small>{item.count}× reclamado</small></span><strong>{pointsLabel(item.points)}</strong></div>)}
+            </article>}
+          </section>
+        )}
+
+        {tab === "vision" && (
+          <section className="page vision-page">
+            <div className="vision-layout">
+              <article className={`timer-panel panel ${cycle.phase}`}>
+                <div className="timer-top"><span className="eyebrow"><Clock3 size={15} /> CICLO AUTOMÁTICO</span><span className="live-dot">{cycle.phase === "active" ? "EN CURSO" : "EN ESPERA"}</span></div>
+                <h2>{cycle.phase === "active" ? "La Rueda está activa" : "La Rueda comenzará en"}</h2>
+                <strong className="timer-value">{formatDuration(cycle.remainingMs)}</strong>
+                <div className="cycle-track"><span style={{ width: `${Math.round(cycle.progress * 100)}%` }} /></div>
+                <p>{cycle.phase === "active" ? `Termina el ${formatDate(cycle.phaseEndsAt)}.` : `Comienza el ${formatDate(cycle.phaseEndsAt)}.`}</p>
+                <div className="hero-actions">
+                  <button type="button" className="primary" onClick={() => setCyclePhase(cycle.phase === "active" ? "waiting" : "active")}>
+                    {cycle.phase === "active" ? <X size={18} /> : <Zap size={18} />}{cycle.phase === "active" ? "Terminar ahora" : "Activar ahora"}
+                  </button>
+                  <button type="button" className="secondary" onClick={() => setCyclePhase(cycle.phase)}><RotateCcw size={17} /> Reiniciar contador</button>
+                </div>
+              </article>
+
+              <article className="overlay-preview panel">
+                <div className="panel-title"><div><span className="eyebrow">VENTANA FLOTANTE</span><h3>Siempre visible</h3></div><button type="button" className={`switch ${state.settings.overlayEnabled ? "on" : ""}`} aria-pressed={state.settings.overlayEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><span /></button></div>
+                <div className={`mock-overlay ${cycle.phase}`}><span>{cycle.phase === "active" ? `${selectedVision?.name} activa` : `Próxima ${selectedVision?.name}`}</span><strong>{formatDuration(cycle.remainingMs)}</strong></div>
+                <p>Arrástrala a cualquier zona de la pantalla. Se mantiene encima en juegos con pantalla completa sin bordes.</p>
+              </article>
+            </div>
+
+            <div className="section-heading"><div><span className="eyebrow">RUEDA ACTUAL</span><h2>Elige la visión</h2></div><span>La selección se conserva al reiniciar</span></div>
+            <div className="vision-cards">
+              {state.catalog.visions.map((vision) => (
+                <button key={vision.id} type="button" className={`${state.settings.selectedVisionId === vision.id ? "selected" : ""} ${!vision.enabled ? "disabled" : ""}`} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, selectedVisionId: vision.id } }))}>
+                  <span className="vision-icon">{vision.id === "gravity" ? <Zap /> : vision.id === "lunar" ? <Sparkles /> : <ActivityIcon />}</span>
+                  <span><small>{vision.enabled ? "DISPONIBLE" : "DESACTIVADA"}</small><strong>{vision.name}</strong><em>{vision.description}</em></span>
+                  {state.settings.selectedVisionId === vision.id && <Check size={20} />}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {tab === "history" && (
+          <section className="page history-page">
+            <div className="stats-grid">
+              <StatCard icon={Box} label="Cajas registradas" value={String(stats.count)} />
+              <StatCard icon={Minus} label="Más baja" value={stats.count ? pointsLabel(stats.minimum) : "—"} />
+              <StatCard icon={MonitorUp} label="Más alta" value={stats.count ? pointsLabel(stats.maximum) : "—"} />
+              <StatCard icon={BarChart3} label="Promedio" value={stats.count ? pointsLabel(Number(stats.average.toFixed(1))) : "—"} />
+            </div>
+            <article className="probability-explainer panel">
+              <div><span className="eyebrow">PROBABILIDAD OBSERVADA</span><strong>{stats.perPointPercent.toFixed(2)}%</strong><p>Una caja por cada {stats.perPointPercent ? (100 / stats.perPointPercent).toFixed(1) : "—"} puntos, según tus registros. No es una tasa oficial del juego.</p></div>
+              <div className="probability-ring" style={{ "--value": `${Math.min(100, stats.currentChancePercent) * 3.6}deg` } as React.CSSProperties}><span>{stats.currentChancePercent.toFixed(0)}%</span></div>
+            </article>
+
+            <div className="panel-title history-title"><div><span className="eyebrow">CAJAS SACADAS</span><h2>Historial con fecha y hora</h2></div><button type="button" className="secondary compact" onClick={() => exportState(state)}><Download size={16} /> Exportar</button></div>
+            {state.boxes.length === 0 ? <div className="empty-card history-empty"><History size={32} /><strong>Todavía no hay cajas registradas</strong><span>Cuando pulses “¡Salió la caja!”, aparecerá aquí con todos los datos del intento.</span></div> : (
+              <div className="history-list">
+                {state.boxes.map((box, index) => (
+                  <article className="history-record panel" key={box.id}>
+                    <div className="record-number">#{state.boxes.length - index}</div>
+                    <div className="record-main"><span>{formatDate(box.occurredAt)}</span><strong>{pointsLabel(box.points)}</strong><small>{box.claims} recompensas reclamadas</small></div>
+                    <details><summary>Ver desglose</summary>{box.breakdown.map((item) => <div key={item.name}><span>{item.name} · {item.count}×</span><strong>{item.points}</strong></div>)}</details>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {tab === "changes" && (
+          <section className="page changes-page">
+            <article className="release-hero panel"><div><span className="eyebrow"><ShieldCheck size={15} /> VERSIÓN INSTALADA</span><h2>Versión {APP_VERSION}</h2><p>Las actualizaciones se comprueban al abrir y llegan firmadas desde GitHub Releases.</p></div><button type="button" className="secondary" onClick={openRepository}><Github size={18} /> Ver repositorio</button></article>
+            <div className="timeline">
+              {CHANGELOG.map((release) => <article key={release.version} className="release-entry"><span className="timeline-dot" /><div className="panel"><div className="release-heading"><div><span>v{release.version}</span><h3>{release.title}</h3></div><time>{release.date}</time></div><ul>{release.items.map((item) => <li key={item}>{item}</li>)}</ul></div></article>)}
+            </div>
+          </section>
+        )}
+
+        {tab === "settings" && (
+          <section className="page settings-page">
+            <div className="settings-grid">
+              <article className="settings-card panel">
+                <div className="settings-icon"><Clock3 /></div><div><h3>Duración del ciclo</h3><p>Define cuánto espera la rueda para empezar y cuánto permanece activa.</p><div className="field-row"><label>Espera (minutos)<input type="number" min={1} max={525600} value={state.settings.waitMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, waitMinutes: clampNumber(Number(event.target.value), 1, 525600), phaseStartedAt: new Date().toISOString() } }))} /></label><label>Activa (minutos)<input type="number" min={1} max={525600} value={state.settings.activeMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, activeMinutes: clampNumber(Number(event.target.value), 1, 525600), phaseStartedAt: new Date().toISOString() } }))} /></label></div></div>
+              </article>
+              <SettingToggle icon={Bell} title="Recordatorios" description="Muestra un aviso de Windows cada vez que comienza la fase activa." enabled={state.settings.notificationsEnabled} onToggle={() => commitState((current) => ({ ...current, settings: { ...current.settings, notificationsEnabled: !current.settings.notificationsEnabled } }))} />
+              <SettingToggle icon={MonitorUp} title="Iniciar con Windows" description="Arranca en segundo plano; la ventana principal no interrumpe al encender el PC." enabled={state.settings.autoStartEnabled} onToggle={(enabled) => { commitState((current) => ({ ...current, settings: { ...current.settings, autoStartEnabled: enabled } })); void toggleAutostart(enabled); }} />
+              <SettingToggle icon={Eye} title="Ventana flotante" description="Contador pequeño, movible y siempre encima del juego." enabled={state.settings.overlayEnabled} onToggle={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))} />
+            </div>
+
+            <article className="backup-panel panel"><div><span className="eyebrow">DATOS PERSONALES</span><h2>Respaldo local</h2><p>El historial permanece en este equipo y no se sube al repositorio público.</p></div><div><button type="button" className="secondary" onClick={() => exportState(state)}><Download size={17} /> Exportar</button><button type="button" className="secondary" onClick={() => importRef.current?.click()}><Upload size={17} /> Importar</button><input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(event) => void onImport(event.target.files?.[0])} /></div></article>
+
+            <article className="owner-panel panel">
+              <div className="panel-title"><div><span className="eyebrow">CATÁLOGO COMPARTIDO</span><h2>Editor de OscarD0823</h2></div><button type="button" className={`switch ${state.settings.ownerMode ? "on" : ""}`} aria-pressed={state.settings.ownerMode} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, ownerMode: !current.settings.ownerMode } }))}><span /></button></div>
+              <p>Las opciones publicadas aquí se descargan automáticamente en los demás equipos. Publicar requiere una sesión válida de GitHub CLI con permiso sobre el repositorio.</p>
+              {state.settings.ownerMode ? <CatalogEditor catalog={state.catalog} onSave={saveCatalog} onPublish={publishCatalog} /> : <div className="owner-locked"><Github size={22} /><span>Activa el modo editor solo en el equipo del propietario.</span></div>}
+            </article>
+          </section>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function ActivityCard({ activity, count, disabled = false, onAdd, onRemove }: { activity: Activity; count: number; disabled?: boolean; onAdd: () => void; onRemove: () => void }) {
+  const inactive = disabled || !activity.enabled || activity.points <= 0;
+  return (
+    <article className={`activity-card ${inactive ? "disabled" : ""}`}>
+      <div className="activity-points"><strong>{activity.points}</strong><small>PTS</small></div>
+      <div className="activity-copy"><strong>{activity.name}</strong><span>{activity.note ?? "Recompensa reclamada"}</span></div>
+      <div className="activity-counter">
+        {count > 0 && <button type="button" aria-label={`Quitar una de ${activity.name}`} onClick={onRemove}><Minus size={15} /></button>}
+        {count > 0 && <span>{count}</span>}
+        <button type="button" aria-label={`Sumar ${activity.name}`} disabled={inactive} onClick={onAdd}><Plus size={19} /></button>
+      </div>
+    </article>
+  );
+}
+
+function StatCard({ icon: Icon, label, value }: { icon: typeof Box; label: string; value: string }) {
+  return <article className="stat-card panel"><Icon size={21} /><span><small>{label}</small><strong>{value}</strong></span></article>;
+}
+
+function SettingToggle({ icon: Icon, title, description, enabled, onToggle }: { icon: typeof Box; title: string; description: string; enabled: boolean; onToggle: (enabled: boolean) => void }) {
+  const [actual, setActual] = useState(enabled);
+  useEffect(() => setActual(enabled), [enabled]);
+  return <article className="settings-card panel"><div className="settings-icon"><Icon /></div><div><h3>{title}</h3><p>{description}</p></div><button type="button" className={`switch ${actual ? "on" : ""}`} aria-pressed={actual} onClick={() => { const next = !actual; setActual(next); onToggle(next); }}><span /></button></article>;
+}
