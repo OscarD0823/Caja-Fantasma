@@ -22,7 +22,7 @@ function sanitizeShinyMods(value: unknown): ShinyModRecord[] {
       createdAt: typeof candidate.createdAt === "string" ? candidate.createdAt : new Date().toISOString(),
       obtainedAt: typeof candidate.obtainedAt === "string" ? candidate.obtainedAt : undefined,
     }];
-  }).slice(0, 1_000);
+  }).slice(0, 5_000);
 }
 
 export function initialState(): PersistedState {

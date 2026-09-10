@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import catalog from "../catalog/visions.json" with { type: "json" };
 import { BASELINE_BOX_POINTS, VISION_CYCLE_WAIT_STARTED_AT, boxStatistics, buildBreakdown, computeCycle, parseManualBaseline, splitPlatformCarryover, validateCatalog, type BoxRecord, type PointAction, type Settings } from "../src/model.ts";
-import { SHINY_MOD_CATALOG, SHINY_MOD_GROUPS, normalizeModSearch } from "../src/shinyModsCatalog.ts";
+import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesModSearch, normalizeModSearch } from "../src/shinyModsCatalog.ts";
 
 assert.equal(validateCatalog(catalog), true, "El catálogo incluido debe ser válido.");
 assert.equal(catalog.proActivities.find((item) => item.id === "pro-monolith-boss")?.points, 1);
@@ -85,14 +85,27 @@ const platformSplit = splitPlatformCarryover(platformActions, Date.parse("2026-0
 assert.deepEqual(platformSplit.completedAttempt.map((action) => action.id), ["old"]);
 assert.deepEqual(platformSplit.carryOver.map((action) => action.id), ["new-1", "new-2"]);
 
-assert.equal(SHINY_MOD_CATALOG.length, 100, "El catálogo Shiny debe contener 100 módulos base actuales.");
-assert.equal(SHINY_MOD_CATALOG.filter((item) => item.category === "weapon").length, 36);
-assert.equal(SHINY_MOD_CATALOG.filter((item) => item.category === "armor").length, 64);
+assert.equal(SHINY_MOD_CATALOG.length, 1_825, "El catálogo debe contener los 1.825 registros exactos.");
+assert.deepEqual(SHINY_MOD_CATALOG_META, {
+  sourceUrl: "https://wikily.gg/es-la/once-human/mods/",
+  sourceCheckedAt: SHINY_MOD_CATALOG_META.sourceCheckedAt,
+  total: 1_825,
+  legacy: 207,
+  normal: 809,
+  shiny: 809,
+});
+assert.equal(SHINY_MOD_CATALOG.filter((item) => item.system === "legacy").length, 207);
+assert.equal(SHINY_MOD_CATALOG.filter((item) => item.system === "new" && !item.isCatalogShiny).length, 809);
+assert.equal(SHINY_MOD_CATALOG.filter((item) => item.system === "new" && item.isCatalogShiny).length, 809);
 assert.equal(new Set(SHINY_MOD_CATALOG.map((item) => item.id)).size, SHINY_MOD_CATALOG.length);
-assert.equal(SHINY_MOD_GROUPS.filter((item) => item.category === "weapon").length, 9);
-const rushHour = SHINY_MOD_CATALOG.find((item) => item.englishName === "Rush Hour");
-assert.equal(rushHour?.name, "Hora punta");
-assert.equal(rushHour?.variants.includes("Estrella descendente"), true);
+assert.ok(SHINY_MOD_GROUPS.filter((item) => item.category === "weapon").length >= 9);
+const rushHourNormal = SHINY_MOD_CATALOG.find((item) => item.englishName === "Rush Hour <Downstar>" && !item.isCatalogShiny);
+const rushHourShiny = SHINY_MOD_CATALOG.find((item) => item.englishName === "Rush Hour <Downstar>" && item.isCatalogShiny);
+assert.equal(rushHourNormal?.name, "Hora punta <Estrella descendente>");
+assert.equal(rushHourNormal?.variant, "Estrella Descendente");
+assert.equal(rushHourShiny?.name, "Hora punta <Estrella descendente>");
+assert.equal(matchesModSearch(rushHourNormal!, normalizeModSearch("19500542")), true);
+assert.equal(matchesModSearch(rushHourNormal!, normalizeModSearch("hora punta estrella descendente")), true);
 assert.equal(normalizeModSearch("Vórtice de escarcha"), "vortice de escarcha");
 
 console.log(JSON.stringify({ catalog: "OK", cycle: "OK", points: "OK", statistics: "OK", baseline: "OK", platformCarryover: "OK", shinyMods: "OK" }));

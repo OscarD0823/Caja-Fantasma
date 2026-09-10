@@ -90,7 +90,7 @@ export type CycleSnapshot = {
   phaseEndsAt: string;
 };
 
-export const APP_VERSION = "1.4.0";
+export const APP_VERSION = "1.5.0";
 export const AUTHOR = "OscarD0823";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
 export const REMOTE_CATALOG_URL = "https://raw.githubusercontent.com/OscarD0823/Caja-Fantasma/main/catalog/visions.json";

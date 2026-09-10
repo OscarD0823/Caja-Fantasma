@@ -64,7 +64,15 @@ import {
   validateCatalog,
 } from "./model";
 import { exportState, importState, loadState, saveState } from "./storage";
-import { SHINY_MOD_CATALOG, SHINY_MOD_GROUPS, normalizeModSearch, type ShinyModCatalogItem } from "./shinyModsCatalog";
+import {
+  SHINY_MOD_CATALOG,
+  SHINY_MOD_CATALOG_META,
+  SHINY_MOD_GROUPS,
+  catalogStatusLabel,
+  matchesModSearch,
+  normalizeModSearch,
+  type ShinyModCatalogItem,
+} from "./shinyModsCatalog";
 
 type TabId = "progress" | "vision" | "history" | "shiny" | "changes" | "settings";
 type CreatorAccess = "checking" | "locked" | "granted";
@@ -79,6 +87,17 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.5.0",
+    date: "10 de septiembre de 2026",
+    title: "Catálogo completo de módulos",
+    items: [
+      "El buscador ahora cubre los 1.825 registros exactos: 207 del sistema anterior, 809 normales 2.0 y 809 Shiny 2.0.",
+      "Cada combinación de nombre, variante, ranura, estilo e ID se puede buscar y añadir al seguimiento.",
+      "Todos los registros se pueden controlar como objetivo Shiny, sin restricciones por su clasificación de origen.",
+      "Nuevo buscador para localizar objetivos activos y módulos Shiny ya conseguidos dentro del historial personal.",
+    ],
+  },
   {
     version: "1.4.0",
     date: "10 de septiembre de 2026",
@@ -204,11 +223,12 @@ export default function App() {
   const [counterMinutes, setCounterMinutes] = useState(() => String(Math.floor(initialCycleSeconds / 60)));
   const [counterSeconds, setCounterSeconds] = useState(() => String(initialCycleSeconds % 60));
   const [manualHistoryText, setManualHistoryText] = useState("");
-  const defaultShinyMod = SHINY_MOD_CATALOG.find((item) => item.englishName === "Rush Hour") ?? SHINY_MOD_CATALOG[0];
+  const defaultShinyMod = SHINY_MOD_CATALOG.find((item) => item.englishName === "Rush Hour <Downstar>" && !item.isCatalogShiny) ?? SHINY_MOD_CATALOG[0];
   const [shinySearch, setShinySearch] = useState("");
   const [shinyGroupFilter, setShinyGroupFilter] = useState("all");
+  const [shinySystemFilter, setShinySystemFilter] = useState("all");
+  const [shinyRecordSearch, setShinyRecordSearch] = useState("");
   const [selectedShinyModId, setSelectedShinyModId] = useState(defaultShinyMod.id);
-  const [selectedShinyVariant, setSelectedShinyVariant] = useState("Estrella descendente");
   const importRef = useRef<HTMLInputElement>(null);
   const voiceAlertRef = useRef("");
 
@@ -226,13 +246,20 @@ export default function App() {
   const normalizedShinySearch = normalizeModSearch(shinySearch);
   const filteredShinyCatalog = useMemo(() => SHINY_MOD_CATALOG.filter((item) => {
     if (shinyGroupFilter !== "all" && item.groupId !== shinyGroupFilter) return false;
-    if (!normalizedShinySearch) return true;
-    return normalizeModSearch(`${item.name} ${item.englishName} ${item.groupName} ${item.variants.join(" ")}`).includes(normalizedShinySearch);
-  }), [normalizedShinySearch, shinyGroupFilter]);
-  const activeShinyGoals = state.shinyMods.filter((item) => !item.isShiny);
-  const obtainedShinyMods = state.shinyMods.filter((item) => item.isShiny);
+    if (shinySystemFilter === "legacy" && item.system !== "legacy") return false;
+    if (shinySystemFilter === "normal" && (item.system !== "new" || item.isCatalogShiny)) return false;
+    if (shinySystemFilter === "shiny" && (item.system !== "new" || !item.isCatalogShiny)) return false;
+    return matchesModSearch(item, normalizedShinySearch);
+  }), [normalizedShinySearch, shinyGroupFilter, shinySystemFilter]);
+  const visibleShinyCatalog = filteredShinyCatalog.slice(0, 150);
+  const normalizedRecordSearch = normalizeModSearch(shinyRecordSearch);
+  const matchesRecordSearch = (item: ShinyModRecord) => !normalizedRecordSearch || normalizeModSearch(`${item.modName} ${item.englishName ?? ""} ${item.groupName} ${item.variant}`).includes(normalizedRecordSearch);
+  const allActiveShinyGoals = state.shinyMods.filter((item) => !item.isShiny);
+  const allObtainedShinyMods = state.shinyMods.filter((item) => item.isShiny);
+  const activeShinyGoals = allActiveShinyGoals.filter(matchesRecordSearch);
+  const obtainedShinyMods = allObtainedShinyMods.filter(matchesRecordSearch);
   const totalShinyAttempts = state.shinyMods.reduce((sum, item) => sum + item.attempts, 0);
-  const catalogShinyOwned = new Set(obtainedShinyMods.flatMap((item) => item.catalogId ? [item.catalogId] : [])).size;
+  const catalogShinyOwned = new Set(allObtainedShinyMods.flatMap((item) => item.catalogId ? [item.catalogId] : [])).size;
   const shinyCollectionPercent = (catalogShinyOwned / SHINY_MOD_CATALOG.length) * 100;
 
   const commitState = useCallback((update: PersistedState | ((current: PersistedState) => PersistedState)) => {
@@ -498,16 +525,15 @@ export default function App() {
 
   const chooseShinyMod = (item: ShinyModCatalogItem) => {
     setSelectedShinyModId(item.id);
-    if (!item.variants.includes(selectedShinyVariant)) setSelectedShinyVariant(item.variants[0]);
   };
 
   const addShinyTracker = (customName?: string) => {
     const custom = customName?.trim();
-    const modName = custom || selectedShinyMod.name;
+    const modName = custom || selectedShinyMod.baseName;
     const catalogId = custom ? undefined : selectedShinyMod.id;
-    const groupName = custom ? "Módulo personalizado" : selectedShinyMod.groupName;
-    const englishName = custom ? undefined : selectedShinyMod.englishName;
-    const variant = selectedShinyVariant.trim() || "Sin variante";
+    const groupName = custom ? "Módulo personalizado" : `${selectedShinyMod.groupName} · ${catalogStatusLabel(selectedShinyMod)}`;
+    const englishName = custom ? undefined : selectedShinyMod.baseEnglishName;
+    const variant = custom ? "Personalizado" : selectedShinyMod.variant;
     const duplicate = state.shinyMods.some((item) => (catalogId ? item.catalogId === catalogId : normalizeModSearch(item.modName) === normalizeModSearch(modName)) && normalizeModSearch(item.variant) === normalizeModSearch(variant));
     if (duplicate) {
       setToast("Ese módulo y variante ya están en tu seguimiento");
@@ -783,41 +809,45 @@ export default function App() {
         {tab === "shiny" && (
           <section className="page shiny-page">
             <div className="stats-grid shiny-stats">
-              <StatCard icon={Search} label="Buscando convertir" value={String(activeShinyGoals.length)} />
-              <StatCard icon={Gem} label="Shiny conseguidos" value={String(obtainedShinyMods.length)} />
+              <StatCard icon={Search} label="Buscando convertir" value={String(allActiveShinyGoals.length)} />
+              <StatCard icon={Gem} label="Shiny conseguidos" value={String(allObtainedShinyMods.length)} />
               <StatCard icon={RotateCcw} label="Duplicados +17 fallidos" value={String(totalShinyAttempts)} />
               <StatCard icon={Trophy} label="Colección del catálogo" value={`${shinyCollectionPercent.toFixed(1)}%`} />
             </div>
 
             <article className="shiny-rule panel">
               <div className="shiny-rule-icon"><Gem /></div>
-              <div><span className="eyebrow">CÓMO FUNCIONA</span><h2>Cada fallo suma un intento</h2><p>Cuando ya tienes un módulo nivel 17, obtener otro nivel 17 del mismo módulo puede convertirlo aleatoriamente en Shiny. Pulsa “Otro +17 no se convirtió” después de cada fallo; cuando salga, márcalo como conseguido.</p></div>
+              <div><span className="eyebrow">CÓMO FUNCIONA</span><h2>Cada fallo suma un intento</h2><p>Cuando ya tienes un módulo nivel 17, obtener otro nivel 17 del mismo módulo puede convertirlo aleatoriamente en Shiny. Los 1.825 registros del catálogo se pueden añadir al seguimiento. Pulsa “Otro +17 no se convirtió” después de cada fallo; cuando salga, márcalo como conseguido.</p></div>
             </article>
 
             <article className="shiny-catalog-panel panel">
-              <div className="panel-title"><div><span className="eyebrow"><Search size={15} /> CATÁLOGO DE MÓDULOS</span><h2>Buscar y agregar un objetivo</h2></div><span className="catalog-count">{SHINY_MOD_CATALOG.length} módulos base</span></div>
+              <div className="panel-title"><div><span className="eyebrow"><Search size={15} /> CATÁLOGO DE MÓDULOS</span><h2>Buscar y agregar un objetivo exacto</h2></div><span className="catalog-count">{SHINY_MOD_CATALOG.length.toLocaleString("es-CO")} registros</span></div>
               <div className="shiny-search-controls">
-                <label className="shiny-search-field">Buscar por nombre en español o inglés<div><Search size={16} /><input value={shinySearch} onChange={(event) => setShinySearch(event.target.value)} placeholder="Ejemplo: Hora punta o Rush Hour" /></div></label>
-                <label>Estilo o pieza<select value={shinyGroupFilter} onChange={(event) => setShinyGroupFilter(event.target.value)}><option value="all">Todos los estilos y piezas</option>{SHINY_MOD_GROUPS.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select></label>
+                <label className="shiny-search-field">Buscar nombre, variante, estilo o ID<div><Search size={16} /><input value={shinySearch} onChange={(event) => setShinySearch(event.target.value)} placeholder="Ejemplo: Hora punta, Downstar o 19500542" /></div></label>
+                <label>Estilo o pieza<select value={shinyGroupFilter} onChange={(event) => setShinyGroupFilter(event.target.value)}><option value="all">Todos los estilos y piezas</option>{SHINY_MOD_GROUPS.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} ({entry.count})</option>)}</select></label>
+                <label>Sistema de origen<select value={shinySystemFilter} onChange={(event) => setShinySystemFilter(event.target.value)}><option value="all">Todos ({SHINY_MOD_CATALOG_META.total.toLocaleString("es-CO")})</option><option value="legacy">Sistema anterior ({SHINY_MOD_CATALOG_META.legacy})</option><option value="normal">Normal 2.0 ({SHINY_MOD_CATALOG_META.normal})</option><option value="shiny">Shiny 2.0 ({SHINY_MOD_CATALOG_META.shiny})</option></select></label>
               </div>
+              <div className="shiny-result-summary"><span>{filteredShinyCatalog.length.toLocaleString("es-CO")} coincidencias</span>{filteredShinyCatalog.length > visibleShinyCatalog.length && <small>Se muestran las primeras {visibleShinyCatalog.length}. Escribe más datos para precisar la búsqueda.</small>}</div>
               <div className="shiny-catalog-results">
-                {filteredShinyCatalog.map((item) => <button type="button" key={item.id} className={selectedShinyMod.id === item.id ? "selected" : ""} onClick={() => chooseShinyMod(item)}><span>{item.groupName}</span><strong>{item.name}</strong><small>{item.englishName}</small>{selectedShinyMod.id === item.id && <Check size={16} />}</button>)}
+                {visibleShinyCatalog.map((item) => <button type="button" key={item.id} className={selectedShinyMod.id === item.id ? "selected" : ""} onClick={() => chooseShinyMod(item)}><span>{item.groupName} · {catalogStatusLabel(item)}</span><strong>{item.name}</strong><small>{item.englishName} · ID {item.itemId}</small>{selectedShinyMod.id === item.id && <Check size={16} />}</button>)}
                 {filteredShinyCatalog.length === 0 && <div className="shiny-no-results"><Search size={23} /><span>No aparece en el catálogo. Puedes agregar el nombre escrito como personalizado.</span></div>}
               </div>
               <div className="shiny-selection">
-                <div><span>MÓDULO SELECCIONADO</span><strong>{selectedShinyMod.name}</strong><small>{selectedShinyMod.groupName} · {selectedShinyMod.englishName}</small></div>
-                <label>Variante del nivel 17<select value={selectedShinyVariant} onChange={(event) => setSelectedShinyVariant(event.target.value)}>{selectedShinyMod.variants.map((variant) => <option key={variant} value={variant}>{variant}</option>)}</select></label>
+                <div><span>MÓDULO SELECCIONADO</span><strong>{selectedShinyMod.name}</strong><small>{selectedShinyMod.groupName} · {catalogStatusLabel(selectedShinyMod)} · ID {selectedShinyMod.itemId}</small></div>
+                <div className="shiny-selected-variant"><span>VARIANTE EXACTA</span><strong>{selectedShinyMod.variant}</strong><small>{selectedShinyMod.englishName}</small></div>
                 <button type="button" className="primary" onClick={() => addShinyTracker()}><Plus size={17} /> Empezar en 0</button>
                 <button type="button" className="secondary" disabled={!shinySearch.trim()} onClick={() => addShinyTracker(shinySearch)}><Plus size={17} /> Agregar nombre escrito</button>
               </div>
-              <p className="catalog-source-note">Catálogo bilingüe revisado el 10 de septiembre de 2026: 36 módulos de arma y 64 de armadura. Los nombres personalizados permiten registrar incorporaciones futuras.</p>
+              <p className="catalog-source-note">Cobertura exacta verificada: {SHINY_MOD_CATALOG_META.legacy} registros del sistema anterior, {SHINY_MOD_CATALOG_META.normal} normales 2.0 y {SHINY_MOD_CATALOG_META.shiny} Shiny 2.0. La clasificación de origen solo ayuda a buscar: cualquiera se puede registrar y marcar como conseguido.</p>
             </article>
 
-            <div className="section-heading shiny-heading"><div><span className="eyebrow">EN PROCESO</span><h2>Intentos de conversión</h2></div><span>{activeShinyGoals.length} activos</span></div>
-            {activeShinyGoals.length === 0 ? <div className="empty-card shiny-empty"><Gem size={30} /><strong>No estás siguiendo ningún módulo</strong><span>Busca uno arriba, elige su variante y pulsa “Empezar en 0”.</span></div> : <div className="shiny-tracker-grid">{activeShinyGoals.map((record) => <ShinyTrackerCard key={record.id} record={record} onDecrease={() => adjustShinyAttempts(record.id, -1)} onIncrease={() => adjustShinyAttempts(record.id, 1)} onToggle={() => setShinyObtained(record.id, true)} onDelete={() => commitState((current) => ({ ...current, shinyMods: current.shinyMods.filter((item) => item.id !== record.id) }))} />)}</div>}
+            <label className="shiny-search-field shiny-record-search">Buscar en mi registro<div><Search size={16} /><input value={shinyRecordSearch} onChange={(event) => setShinyRecordSearch(event.target.value)} placeholder="Buscar entre objetivos e historial Shiny" /></div></label>
 
-            <div className="section-heading shiny-heading"><div><span className="eyebrow">COLECCIÓN SHINY</span><h2>Módulos conseguidos</h2></div><span>{obtainedShinyMods.length} marcados</span></div>
-            {obtainedShinyMods.length === 0 ? <div className="empty-card shiny-empty obtained"><Trophy size={30} /><strong>Aún no has marcado ningún Shiny</strong><span>También puedes agregar un módulo y marcarlo directamente si ya lo tenías.</span></div> : <div className="shiny-tracker-grid">{obtainedShinyMods.map((record) => <ShinyTrackerCard key={record.id} record={record} onDecrease={() => adjustShinyAttempts(record.id, -1)} onIncrease={() => adjustShinyAttempts(record.id, 1)} onToggle={() => setShinyObtained(record.id, false)} onDelete={() => commitState((current) => ({ ...current, shinyMods: current.shinyMods.filter((item) => item.id !== record.id) }))} />)}</div>}
+            <div className="section-heading shiny-heading"><div><span className="eyebrow">EN PROCESO</span><h2>Intentos de conversión</h2></div><span>{activeShinyGoals.length}{normalizedRecordSearch ? ` de ${allActiveShinyGoals.length}` : ""} activos</span></div>
+            {activeShinyGoals.length === 0 ? <div className="empty-card shiny-empty"><Gem size={30} /><strong>{normalizedRecordSearch ? "No hay coincidencias en los objetivos" : "No estás siguiendo ningún módulo"}</strong><span>{normalizedRecordSearch ? "Prueba con otro nombre, variante o estilo." : "Busca uno arriba, elige el registro exacto y pulsa “Empezar en 0”."}</span></div> : <div className="shiny-tracker-grid">{activeShinyGoals.map((record) => <ShinyTrackerCard key={record.id} record={record} onDecrease={() => adjustShinyAttempts(record.id, -1)} onIncrease={() => adjustShinyAttempts(record.id, 1)} onToggle={() => setShinyObtained(record.id, true)} onDelete={() => commitState((current) => ({ ...current, shinyMods: current.shinyMods.filter((item) => item.id !== record.id) }))} />)}</div>}
+
+            <div className="section-heading shiny-heading"><div><span className="eyebrow">COLECCIÓN SHINY</span><h2>Módulos conseguidos</h2></div><span>{obtainedShinyMods.length}{normalizedRecordSearch ? ` de ${allObtainedShinyMods.length}` : ""} marcados</span></div>
+            {obtainedShinyMods.length === 0 ? <div className="empty-card shiny-empty obtained"><Trophy size={30} /><strong>{normalizedRecordSearch ? "No hay coincidencias en los conseguidos" : "Aún no has marcado ningún Shiny"}</strong><span>{normalizedRecordSearch ? "La búsqueda también revisa nombre, variante y estilo." : "También puedes agregar un módulo y marcarlo directamente si ya lo tenías."}</span></div> : <div className="shiny-tracker-grid">{obtainedShinyMods.map((record) => <ShinyTrackerCard key={record.id} record={record} onDecrease={() => adjustShinyAttempts(record.id, -1)} onIncrease={() => adjustShinyAttempts(record.id, 1)} onToggle={() => setShinyObtained(record.id, false)} onDelete={() => commitState((current) => ({ ...current, shinyMods: current.shinyMods.filter((item) => item.id !== record.id) }))} />)}</div>}
           </section>
         )}
 
