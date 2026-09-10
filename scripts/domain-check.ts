@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import catalog from "../catalog/visions.json" with { type: "json" };
-import { BASELINE_BOX_POINTS, boxStatistics, buildBreakdown, computeCycle, splitPlatformCarryover, validateCatalog, type BoxRecord, type PointAction, type Settings } from "../src/model.ts";
+import { BASELINE_BOX_POINTS, VISION_CYCLE_WAIT_STARTED_AT, boxStatistics, buildBreakdown, computeCycle, splitPlatformCarryover, validateCatalog, type BoxRecord, type PointAction, type Settings } from "../src/model.ts";
 
 assert.equal(validateCatalog(catalog), true, "El catálogo incluido debe ser válido.");
 assert.equal(catalog.proActivities.find((item) => item.id === "pro-monolith-boss")?.points, 1);
@@ -34,6 +34,10 @@ const settings: Settings = {
 assert.deepEqual(computeCycle(settings, Date.parse("2026-09-10T10:15:00.000Z")).phase, "waiting");
 assert.deepEqual(computeCycle(settings, Date.parse("2026-09-10T10:40:00.000Z")).phase, "active");
 assert.deepEqual(computeCycle(settings, Date.parse("2026-09-10T11:10:00.000Z")).phase, "waiting");
+const synchronizedSettings = { ...settings, phaseStartedAt: VISION_CYCLE_WAIT_STARTED_AT };
+const synchronizedSnapshot = computeCycle(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 3 * 60_000);
+assert.equal(synchronizedSnapshot.phase, "waiting");
+assert.equal(synchronizedSnapshot.remainingMs, 27 * 60_000);
 
 const actions: PointAction[] = [
   { id: "1", activityId: "gravity-whale", activityName: "Ballena", visionId: "gravity", visionName: "Gravedad", points: 1, occurredAt: "2026-09-10T10:00:00Z" },

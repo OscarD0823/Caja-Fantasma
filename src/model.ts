@@ -76,10 +76,12 @@ export type CycleSnapshot = {
   phaseEndsAt: string;
 };
 
-export const APP_VERSION = "1.1.0";
+export const APP_VERSION = "1.1.1";
 export const AUTHOR = "OscarD0823";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
 export const REMOTE_CATALOG_URL = "https://raw.githubusercontent.com/OscarD0823/Caja-Fantasma/main/catalog/visions.json";
+// A las 15:55:59 de Colombia del 10/09/2026 faltaban 27 minutos para la fase activa.
+export const VISION_CYCLE_WAIT_STARTED_AT = "2026-09-10T20:52:59.452Z";
 export const BASELINE_BOX_POINTS = [1209, 762, 966, 1143, 320, 797, 1180, 909, 1028, 1098, 408, 889, 1447, 1211, 1333, 588] as const;
 
 export function createId(prefix: string) {

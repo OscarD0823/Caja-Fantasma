@@ -1,6 +1,6 @@
 import defaultCatalog from "../catalog/visions.json";
 import type { Catalog, PersistedState } from "./model";
-import { validateCatalog } from "./model";
+import { VISION_CYCLE_WAIT_STARTED_AT, validateCatalog } from "./model";
 
 const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
 
@@ -14,13 +14,13 @@ export function initialState(): PersistedState {
       selectedVisionId: "gravity",
       waitMinutes: 30,
       activeMinutes: 30,
-      phaseStartedAt: new Date().toISOString(),
+      phaseStartedAt: VISION_CYCLE_WAIT_STARTED_AT,
       phase: "waiting",
       overlayEnabled: false,
       notificationsEnabled: true,
       voiceNotificationsEnabled: true,
       voiceLeadMinutes: 5,
-      timingPresetVersion: 1,
+      timingPresetVersion: 2,
       autoStartEnabled: true,
       ownerMode: false,
     },
@@ -33,12 +33,14 @@ export function loadState(): PersistedState {
     if (!parsed || parsed.schemaVersion !== 1 || !validateCatalog(parsed.catalog)) return initialState();
     const fresh = initialState();
     const settings = { ...fresh.settings, ...(parsed.settings ?? {}) };
-    if (!parsed.settings?.timingPresetVersion) {
+    if ((parsed.settings?.timingPresetVersion ?? 0) < 2) {
       settings.waitMinutes = 30;
       settings.activeMinutes = 30;
       settings.phase = "waiting";
-      settings.phaseStartedAt = new Date().toISOString();
-      settings.timingPresetVersion = 1;
+      settings.phaseStartedAt = VISION_CYCLE_WAIT_STARTED_AT;
+      settings.lastNotificationPhaseStartedAt = undefined;
+      settings.lastVoiceAlertPhaseStartedAt = undefined;
+      settings.timingPresetVersion = 2;
     }
     return {
       ...fresh,

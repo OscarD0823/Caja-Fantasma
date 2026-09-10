@@ -69,6 +69,15 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 
 const CHANGELOG = [
   {
+    version: "1.1.1",
+    date: "10 de septiembre de 2026",
+    title: "Ciclo sincronizado",
+    items: [
+      "La imagen de la caja ya no muestra el símbolo azul de enlace.",
+      "El ciclo se sincronizó cuando faltaban 27 minutos para comenzar y continuará alternando 30 minutos activo y 30 minutos en espera.",
+    ],
+  },
+  {
     version: "1.1.0",
     date: "10 de septiembre de 2026",
     title: "Promedio real y alertas por voz",
