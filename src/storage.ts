@@ -10,6 +10,7 @@ export function initialState(): PersistedState {
     catalog: defaultCatalog as Catalog,
     actions: [],
     boxes: [],
+    manualBaselinePoints: [],
     settings: {
       selectedVisionId: "gravity",
       waitMinutes: 30,
@@ -20,7 +21,7 @@ export function initialState(): PersistedState {
       notificationsEnabled: true,
       voiceNotificationsEnabled: true,
       voiceLeadMinutes: 5,
-      timingPresetVersion: 2,
+      timingPresetVersion: 3,
       autoStartEnabled: true,
     },
   };
@@ -32,20 +33,23 @@ export function loadState(): PersistedState {
     if (!parsed || parsed.schemaVersion !== 1 || !validateCatalog(parsed.catalog)) return initialState();
     const fresh = initialState();
     const settings = { ...fresh.settings, ...(parsed.settings ?? {}) };
-    if ((parsed.settings?.timingPresetVersion ?? 0) < 2) {
+    if ((parsed.settings?.timingPresetVersion ?? 0) < 3) {
       settings.waitMinutes = 30;
       settings.activeMinutes = 30;
       settings.phase = "waiting";
       settings.phaseStartedAt = VISION_CYCLE_WAIT_STARTED_AT;
       settings.lastNotificationPhaseStartedAt = undefined;
       settings.lastVoiceAlertPhaseStartedAt = undefined;
-      settings.timingPresetVersion = 2;
+      settings.timingPresetVersion = 3;
     }
     return {
       ...fresh,
       ...parsed,
       actions: Array.isArray(parsed.actions) ? parsed.actions : [],
       boxes: Array.isArray(parsed.boxes) ? parsed.boxes : [],
+      manualBaselinePoints: Array.isArray(parsed.manualBaselinePoints)
+        ? parsed.manualBaselinePoints.filter((value) => Number.isFinite(value) && value > 0 && value <= 10_000).map(Math.round).slice(0, 500)
+        : [],
       settings,
     };
   } catch {
@@ -68,9 +72,19 @@ export function exportState(state: PersistedState) {
 }
 
 export function importState(text: string) {
-  const parsed = JSON.parse(text) as PersistedState;
+  const parsed = JSON.parse(text) as Partial<PersistedState>;
   if (parsed.schemaVersion !== 1 || !validateCatalog(parsed.catalog) || !Array.isArray(parsed.actions) || !Array.isArray(parsed.boxes)) {
     throw new Error("El archivo no es un respaldo válido de Caja Fantasma.");
   }
-  return parsed;
+  const fresh = initialState();
+  return {
+    ...fresh,
+    ...parsed,
+    actions: parsed.actions,
+    boxes: parsed.boxes,
+    manualBaselinePoints: Array.isArray(parsed.manualBaselinePoints)
+      ? parsed.manualBaselinePoints.filter((value) => Number.isFinite(value) && value > 0 && value <= 10_000).map(Math.round).slice(0, 500)
+      : [],
+    settings: { ...fresh.settings, ...(parsed.settings ?? {}) },
+  };
 }

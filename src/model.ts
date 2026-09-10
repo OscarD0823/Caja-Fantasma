@@ -65,6 +65,7 @@ export type PersistedState = {
   catalog: Catalog;
   actions: PointAction[];
   boxes: BoxRecord[];
+  manualBaselinePoints: number[];
   settings: Settings;
 };
 
@@ -75,12 +76,12 @@ export type CycleSnapshot = {
   phaseEndsAt: string;
 };
 
-export const APP_VERSION = "1.2.0";
+export const APP_VERSION = "1.3.0";
 export const AUTHOR = "OscarD0823";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
 export const REMOTE_CATALOG_URL = "https://raw.githubusercontent.com/OscarD0823/Caja-Fantasma/main/catalog/visions.json";
-// A las 15:55:59 de Colombia del 10/09/2026 faltaban 27 minutos para la fase activa.
-export const VISION_CYCLE_WAIT_STARTED_AT = "2026-09-10T20:52:59.452Z";
+// Gravedad terminó y comenzó su espera a las 16:52:30 de Colombia del 10/09/2026.
+export const VISION_CYCLE_WAIT_STARTED_AT = "2026-09-10T21:52:30.000Z";
 export const BASELINE_BOX_POINTS = [1209, 762, 966, 1143, 320, 797, 1180, 909, 1028, 1098, 408, 889, 1447, 1211, 1333, 588] as const;
 
 export function createId(prefix: string) {
@@ -153,6 +154,15 @@ export function boxStatistics(boxes: BoxRecord[], currentPoints: number, baselin
     perPointPercent: probability * 100,
     currentChancePercent: (1 - Math.pow(1 - probability, Math.max(0, currentPoints))) * 100,
   };
+}
+
+export function parseManualBaseline(text: string, limit = 500) {
+  return text
+    .split(/[\s,;]+/)
+    .map((value) => Number(value.trim()))
+    .filter((value) => Number.isFinite(value) && value > 0 && value <= 10_000)
+    .map((value) => Math.round(value))
+    .slice(0, Math.max(0, limit));
 }
 
 export function buildBreakdown(actions: PointAction[]) {

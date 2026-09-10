@@ -47,6 +47,7 @@ import type { Activity, Catalog, PersistedState, PointAction, Vision } from "./m
 import {
   APP_VERSION,
   AUTHOR,
+  BASELINE_BOX_POINTS,
   REMOTE_CATALOG_URL,
   REPOSITORY_URL,
   boxStatistics,
@@ -55,6 +56,7 @@ import {
   computeCycle,
   createId,
   formatDuration,
+  parseManualBaseline,
   splitPlatformCarryover,
   validateCatalog,
 } from "./model";
@@ -72,6 +74,17 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.3.0",
+    date: "10 de septiembre de 2026",
+    title: "Contador exacto e historial aproximado",
+    items: [
+      "Gravedad quedó sincronizada con el cierre indicado a las 4:52:30 p. m. de Colombia.",
+      "La sección Visión permite escribir el tiempo exacto restante y elegir si falta para empezar o terminar.",
+      "Se pueden cargar valores históricos aproximados manualmente para ampliar la base de estimación.",
+      "Los valores aproximados permanecen separados de las cajas confirmadas y se guardan en el respaldo local.",
+    ],
+  },
   {
     version: "1.2.0",
     date: "10 de septiembre de 2026",
@@ -169,14 +182,21 @@ export default function App() {
   const [introVisible, setIntroVisible] = useState(true);
   const [creatorAccess, setCreatorAccess] = useState<CreatorAccess>("checking");
   const [creatorMessage, setCreatorMessage] = useState("Comprobando la cuenta de GitHub…");
+  const initialCycle = useRef(computeCycle(state.settings));
+  const initialCycleSeconds = Math.ceil(initialCycle.current.remainingMs / 1000);
+  const [counterPhase, setCounterPhase] = useState<"waiting" | "active">(initialCycle.current.phase);
+  const [counterMinutes, setCounterMinutes] = useState(() => String(Math.floor(initialCycleSeconds / 60)));
+  const [counterSeconds, setCounterSeconds] = useState(() => String(initialCycleSeconds % 60));
+  const [manualHistoryText, setManualHistoryText] = useState("");
   const importRef = useRef<HTMLInputElement>(null);
   const voiceAlertRef = useRef("");
 
   const currentPoints = useMemo(() => state.actions.reduce((sum, action) => sum + action.points, 0), [state.actions]);
   const currentClaims = state.actions.length;
   const breakdown = useMemo(() => buildBreakdown(state.actions), [state.actions]);
-  const stats = useMemo(() => boxStatistics(state.boxes, currentPoints), [state.boxes, currentPoints]);
-  const baselineStats = useMemo(() => boxStatistics([], 0), []);
+  const referencePoints = useMemo(() => [...BASELINE_BOX_POINTS, ...state.manualBaselinePoints], [state.manualBaselinePoints]);
+  const stats = useMemo(() => boxStatistics(state.boxes, currentPoints, referencePoints), [state.boxes, currentPoints, referencePoints]);
+  const baselineStats = useMemo(() => boxStatistics([], 0, referencePoints), [referencePoints]);
   const selectedVision = state.catalog.visions.find((vision) => vision.id === state.settings.selectedVisionId) ?? state.catalog.visions[0];
   const cycle = computeCycle(state.settings, now);
   const target = clampNumber(state.catalog.boxTargetPoints, 1, 10_000);
@@ -392,6 +412,57 @@ export default function App() {
     setNow(Date.now());
   };
 
+  const synchronizeCountdown = () => {
+    const minutes = Math.max(0, Math.floor(Number(counterMinutes) || 0));
+    const seconds = clampNumber(Math.floor(Number(counterSeconds) || 0), 0, 59);
+    const durationMinutes = counterPhase === "active" ? state.settings.activeMinutes : state.settings.waitMinutes;
+    const durationMs = durationMinutes * 60_000;
+    const requestedMs = (minutes * 60 + seconds) * 1000;
+    if (requestedMs < 1000 || requestedMs > durationMs) {
+      setToast(`El tiempo debe estar entre 00:01 y ${formatDuration(durationMs)}`);
+      window.setTimeout(() => setToast(""), 3000);
+      return;
+    }
+    const timestamp = Date.now();
+    const phaseStartedAt = new Date(timestamp - (durationMs - requestedMs)).toISOString();
+    commitState((current) => ({
+      ...current,
+      settings: {
+        ...current.settings,
+        phase: counterPhase,
+        phaseStartedAt,
+        lastNotificationPhaseStartedAt: undefined,
+        lastVoiceAlertPhaseStartedAt: undefined,
+      },
+    }));
+    setCounterMinutes(String(minutes));
+    setCounterSeconds(String(seconds));
+    setNow(timestamp);
+    setToast(counterPhase === "waiting" ? "Contador ajustado: falta para empezar" : "Contador ajustado: falta para terminar");
+    window.setTimeout(() => setToast(""), 2400);
+  };
+
+  const loadCurrentCountdown = () => {
+    const remainingSeconds = Math.ceil(cycle.remainingMs / 1000);
+    setCounterPhase(cycle.phase);
+    setCounterMinutes(String(Math.floor(remainingSeconds / 60)));
+    setCounterSeconds(String(remainingSeconds % 60));
+  };
+
+  const addManualHistory = () => {
+    const available = Math.max(0, 500 - state.manualBaselinePoints.length);
+    const values = parseManualBaseline(manualHistoryText, available);
+    if (values.length === 0) {
+      setToast(available === 0 ? "Alcanzaste el máximo de 500 valores aproximados" : "Escribe al menos un valor válido entre 1 y 10.000");
+      window.setTimeout(() => setToast(""), 3000);
+      return;
+    }
+    commitState((current) => ({ ...current, manualBaselinePoints: [...current.manualBaselinePoints, ...values] }));
+    setManualHistoryText("");
+    setToast(`${values.length} ${values.length === 1 ? "valor aproximado agregado" : "valores aproximados agregados"}`);
+    window.setTimeout(() => setToast(""), 2400);
+  };
+
   const saveCatalog = useCallback((catalog: Catalog) => {
     commitState((current) => ({ ...current, catalog }));
     setSyncStatus(`Cambios locales v${catalog.catalogVersion} listos para publicar`);
@@ -498,7 +569,7 @@ export default function App() {
               <article className="chance-card panel">
                 <span className="eyebrow"><BarChart3 size={14} /> ESTIMACIÓN OBSERVADA</span>
                 <strong className="chance-value">{stats.currentChancePercent.toFixed(1)}%</strong>
-                <p>Probabilidad acumulada estimada con la hoja base y tu historial.</p>
+                <p>Probabilidad acumulada estimada con la hoja base, valores manuales y tus cajas confirmadas.</p>
                 <div className="mini-stats"><span><small>Promedio</small><strong>{stats.count ? stats.average.toFixed(1) : "—"}</strong></span><span><small>Muestras</small><strong>{stats.count}</strong></span></div>
               </article>
             </div>
@@ -549,6 +620,27 @@ export default function App() {
               </article>
             </div>
 
+            <article className="counter-editor panel">
+              <div className="panel-title">
+                <div><span className="eyebrow"><Clock3 size={15} /> AJUSTE DIRECTO</span><h2>Modificar el contador</h2></div>
+                <button type="button" className="secondary compact" onClick={loadCurrentCountdown}><RefreshCw size={15} /> Copiar tiempo actual</button>
+              </div>
+              <p>Corrige el contador con el tiempo exacto que muestra el juego. El ciclo seguirá alternando automáticamente desde ese punto.</p>
+              <div className="counter-editor-controls">
+                <div className="counter-phase-buttons" aria-label="Fase que se está contando">
+                  <button type="button" className={counterPhase === "waiting" ? "selected" : ""} aria-pressed={counterPhase === "waiting"} onClick={() => setCounterPhase("waiting")}>Falta para empezar</button>
+                  <button type="button" className={counterPhase === "active" ? "selected active" : ""} aria-pressed={counterPhase === "active"} onClick={() => setCounterPhase("active")}>Falta para terminar</button>
+                </div>
+                <div className="counter-time-fields">
+                  <label>Minutos<input type="number" min={0} max={counterPhase === "active" ? state.settings.activeMinutes : state.settings.waitMinutes} value={counterMinutes} onChange={(event) => setCounterMinutes(event.target.value)} /></label>
+                  <span>:</span>
+                  <label>Segundos<input type="number" min={0} max={59} value={counterSeconds} onChange={(event) => setCounterSeconds(event.target.value)} /></label>
+                </div>
+                <button type="button" className="primary" onClick={synchronizeCountdown}><Save size={17} /> Aplicar tiempo</button>
+              </div>
+              <small className="counter-anchor-note">Sincronización inicial: Gravedad terminó a las 4:52:30 p. m. de Colombia el 10 de septiembre de 2026.</small>
+            </article>
+
             <div className="section-heading"><div><span className="eyebrow">RUEDA ACTUAL</span><h2>Elige la visión</h2></div><span>La selección se conserva al reiniciar</span></div>
             <div className="vision-cards">
               {state.catalog.visions.map((vision) => (
@@ -571,14 +663,25 @@ export default function App() {
               <StatCard icon={BarChart3} label="Promedio" value={stats.count ? pointsLabel(Number(stats.average.toFixed(1))) : "—"} />
             </div>
             <article className="probability-explainer panel">
-              <div><span className="eyebrow">PROBABILIDAD OBSERVADA</span><strong>{stats.perPointPercent.toFixed(3)}%</strong><p>Una caja por cada {stats.perPointPercent ? (100 / stats.perPointPercent).toFixed(1) : "—"} puntos, usando la hoja base y tus registros. No es una tasa oficial del juego.</p></div>
+              <div><span className="eyebrow">PROBABILIDAD OBSERVADA</span><strong>{stats.perPointPercent.toFixed(3)}%</strong><p>Una caja por cada {stats.perPointPercent ? (100 / stats.perPointPercent).toFixed(1) : "—"} puntos, usando la hoja base, el historial manual aproximado y tus cajas confirmadas. No es una tasa oficial del juego.</p></div>
               <div className="probability-ring" style={{ "--value": `${Math.min(100, stats.currentChancePercent) * 3.6}deg` } as React.CSSProperties}><span>{stats.currentChancePercent.toFixed(0)}%</span></div>
             </article>
 
             <article className="baseline-panel panel">
-              <div><span className="eyebrow">BASE DE LA COLUMNA A</span><h2>16 salidas analizadas</h2><p>Valores: 1209, 762, 966, 1143, 320, 797, 1180, 909, 1028, 1098, 408, 889, 1447, 1211, 1333 y 588.</p></div>
+              <div><span className="eyebrow">BASE DE ESTIMACIÓN</span><h2>{baselineStats.count} salidas de referencia</h2><p>La columna A aporta 16 valores: 1209, 762, 966, 1143, 320, 797, 1180, 909, 1028, 1098, 408, 889, 1447, 1211, 1333 y 588. Has añadido {state.manualBaselinePoints.length} aproximados.</p></div>
               <div className="baseline-ranges"><span><small>Zona baja</small><strong>{baselineStats.lowerAverage.toFixed(3)}</strong></span><span><small>Centro</small><strong>{baselineStats.average.toFixed(1)}</strong></span><span><small>Zona alta</small><strong>{baselineStats.upperAverage.toFixed(3)}</strong></span></div>
-              <p className="baseline-note">La hoja mostraba 935,0769 como promedio, pero 15.288 ÷ 16 da 955,5. Las cajas que registres aquí se añadirán a esta base.</p>
+              <p className="baseline-note">La hoja mostraba 935,0769 como promedio, pero 15.288 ÷ 16 da 955,5. Los valores manuales amplían la referencia y las cajas registradas se suman como muestras confirmadas.</p>
+            </article>
+
+            <article className="manual-history-panel panel">
+              <div className="panel-title"><div><span className="eyebrow"><Plus size={15} /> HISTORIAL APROXIMADO</span><h2>Cargar valores manualmente</h2></div>{state.manualBaselinePoints.length > 0 && <button type="button" className="danger-quiet compact" onClick={() => commitState((current) => ({ ...current, manualBaselinePoints: [] }))}><Trash2 size={15} /> Borrar manuales</button>}</div>
+              <p>Pega puntos separados por espacios, comas o líneas. Se usarán solo como referencia estadística; no aparecerán como cajas confirmadas ni tendrán fecha inventada.</p>
+              <div className="manual-history-entry">
+                <textarea value={manualHistoryText} onChange={(event) => setManualHistoryText(event.target.value)} placeholder={"Ejemplo:\n762, 966, 1143, 909"} aria-label="Valores históricos aproximados" />
+                <button type="button" className="primary" onClick={addManualHistory}><Plus size={17} /> Agregar a la estimación</button>
+              </div>
+              {state.manualBaselinePoints.length > 0 && <div className="manual-values" aria-label="Valores aproximados guardados">{state.manualBaselinePoints.map((value, index) => <button type="button" key={`${value}-${index}`} title="Quitar este valor" onClick={() => commitState((current) => ({ ...current, manualBaselinePoints: current.manualBaselinePoints.filter((_, itemIndex) => itemIndex !== index) }))}><span>{value}</span><X size={12} /></button>)}</div>}
+              <small>{state.manualBaselinePoints.length} de 500 valores manuales guardados en este equipo.</small>
             </article>
 
             <div className="panel-title history-title"><div><span className="eyebrow">CAJAS SACADAS</span><h2>Historial con fecha y hora</h2></div><button type="button" className="secondary compact" onClick={() => exportState(state)}><Download size={16} /> Exportar</button></div>
