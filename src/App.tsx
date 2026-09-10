@@ -18,6 +18,8 @@ import {
   FileClock,
   Github,
   History,
+  LockKeyhole,
+  LogIn,
   Mail,
   Minus,
   MonitorUp,
@@ -31,6 +33,7 @@ import {
   Trash2,
   Undo2,
   Upload,
+  UserCheck,
   Volume2,
   Wifi,
   WifiOff,
@@ -58,6 +61,7 @@ import {
 import { exportState, importState, loadState, saveState } from "./storage";
 
 type TabId = "progress" | "vision" | "history" | "changes" | "settings";
+type CreatorAccess = "checking" | "locked" | "granted";
 
 const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
   { id: "progress", label: "Caja", icon: Box },
@@ -68,6 +72,17 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.2.0",
+    date: "10 de septiembre de 2026",
+    title: "Editor protegido y apertura animada",
+    items: [
+      "Un único instalador sirve para todos los usuarios.",
+      "El modo desarrollador se desbloquea únicamente al verificar la cuenta propietaria OscarD0823 mediante GitHub CLI.",
+      "Nueva animación de inicio: el emblema actúa como cerradura y abre la caja.",
+      "La cantidad mostrada en la imagen de referencia cambió de 1 a 17.",
+    ],
+  },
   {
     version: "1.1.1",
     date: "10 de septiembre de 2026",
@@ -151,6 +166,9 @@ export default function App() {
   const [now, setNow] = useState(Date.now());
   const [syncStatus, setSyncStatus] = useState("Catálogo local listo");
   const [toast, setToast] = useState("");
+  const [introVisible, setIntroVisible] = useState(true);
+  const [creatorAccess, setCreatorAccess] = useState<CreatorAccess>("checking");
+  const [creatorMessage, setCreatorMessage] = useState("Comprobando la cuenta de GitHub…");
   const importRef = useRef<HTMLInputElement>(null);
   const voiceAlertRef = useRef("");
 
@@ -167,6 +185,44 @@ export default function App() {
   const commitState = useCallback((update: PersistedState | ((current: PersistedState) => PersistedState)) => {
     setState((current) => typeof update === "function" ? update(current) : update);
   }, []);
+
+  const checkCreatorAccess = useCallback(async () => {
+    if (!isTauri()) {
+      setCreatorAccess("locked");
+      setCreatorMessage("La verificación solo funciona en el instalador Creador de Windows.");
+      return;
+    }
+    setCreatorAccess("checking");
+    setCreatorMessage("Comprobando la cuenta de GitHub…");
+    try {
+      const login = await invoke<string>("verify_github_owner");
+      setCreatorAccess("granted");
+      setCreatorMessage(`Acceso verificado como ${login}.`);
+    } catch (error) {
+      setCreatorAccess("locked");
+      setCreatorMessage(error instanceof Error ? error.message : String(error));
+    }
+  }, []);
+
+  const startCreatorLogin = async () => {
+    try {
+      const message = await invoke<string>("start_github_login");
+      setCreatorAccess("locked");
+      setCreatorMessage(message);
+    } catch (error) {
+      setCreatorAccess("locked");
+      setCreatorMessage(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setIntroVisible(false), 4200);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    void checkCreatorAccess();
+  }, [checkCreatorAccess]);
 
   useEffect(() => saveState(state), [state]);
 
@@ -375,6 +431,7 @@ export default function App() {
   return (
     <div className="app-shell">
       <AppUpdater />
+      {introVisible && <StartupIntro onSkip={() => setIntroVisible(false)} />}
       {toast && <div className="toast" role="status"><Check size={17} />{toast}</div>}
 
       <aside className="sidebar">
@@ -565,15 +622,29 @@ export default function App() {
             <article className="backup-panel panel"><div><span className="eyebrow">DATOS PERSONALES</span><h2>Respaldo local</h2><p>El historial permanece en este equipo y no se sube al repositorio público.</p></div><div><button type="button" className="secondary" onClick={() => exportState(state)}><Download size={17} /> Exportar</button><button type="button" className="secondary" onClick={() => importRef.current?.click()}><Upload size={17} /> Importar</button><input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(event) => void onImport(event.target.files?.[0])} /></div></article>
 
             <article className="owner-panel panel">
-              <div className="panel-title"><div><span className="eyebrow">CATÁLOGO COMPARTIDO</span><h2>Editor de OscarD0823</h2></div><button type="button" className={`switch ${state.settings.ownerMode ? "on" : ""}`} aria-pressed={state.settings.ownerMode} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, ownerMode: !current.settings.ownerMode } }))}><span /></button></div>
-              <p>Cada cambio se guarda y se publica automáticamente tras una pausa breve. Los demás equipos comprueban el catálogo cada minuto. Requiere una sesión válida de GitHub CLI con permiso sobre el repositorio.</p>
-              {state.settings.ownerMode ? <CatalogEditor catalog={state.catalog} onSave={saveCatalog} onPublish={publishCatalog} /> : <div className="owner-locked"><Github size={22} /><span>Activa el modo editor solo en el equipo del propietario.</span></div>}
+              <div className="panel-title"><div><span className="eyebrow">MODO DESARROLLADOR</span><h2>Editor de OscarD0823</h2></div><span className={`creator-access-badge ${creatorAccess}`}>{creatorAccess === "granted" ? <UserCheck size={15} /> : <LockKeyhole size={15} />}{creatorAccess === "granted" ? "Propietario verificado" : creatorAccess === "checking" ? "Comprobando" : "Bloqueado"}</span></div>
+              <p>Cada cambio se publica automáticamente. El servidor vuelve a comprobar la cuenta de GitHub antes de aceptar cada actualización.</p>
+              {creatorAccess === "granted" ? <CatalogEditor catalog={state.catalog} onSave={saveCatalog} onPublish={publishCatalog} /> : <div className="creator-login-card"><div className="creator-lock"><LockKeyhole size={25} /></div><div><strong>Inicia sesión con la cuenta propietaria</strong><span>{creatorMessage}</span><div className="creator-login-actions"><button type="button" className="primary compact" onClick={() => void startCreatorLogin()}><LogIn size={15} /> Iniciar sesión con GitHub</button><button type="button" className="secondary compact" disabled={creatorAccess === "checking"} onClick={() => void checkCreatorAccess()}><RefreshCw size={15} /> Comprobar cuenta</button></div></div></div>}
             </article>
           </section>
         )}
       </main>
     </div>
   );
+}
+
+function StartupIntro({ onSkip }: { onSkip: () => void }) {
+  return <button type="button" className="startup-intro" onClick={onSkip} aria-label="Omitir animación de apertura">
+    <span className="intro-aura" />
+    <span className="intro-crate" aria-hidden="true">
+      <img className="intro-card-bottom" src={PHANTOM_CRATE_IMAGE} alt="" />
+      <span className="intro-card-top"><img src={PHANTOM_CRATE_IMAGE} alt="" /></span>
+      <span className="intro-lock"><GameLogoMark /></span>
+      <span className="intro-light" />
+    </span>
+    <span className="intro-title"><strong>CAJA FANTASMA</strong><small>ONCE HUMAN</small></span>
+    <span className="intro-hint">Pulsa para continuar</span>
+  </button>;
 }
 
 function ActivityCard({ activity, count, disabled = false, onAdd, onRemove }: { activity: Activity; count: number; disabled?: boolean; onAdd: () => void; onRemove: () => void }) {

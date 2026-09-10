@@ -2,6 +2,8 @@
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use serde_json::{json, Value};
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
 use std::{fs, process::Command};
 use tauri::{
     menu::{Menu, MenuItem},
@@ -11,6 +13,9 @@ use tauri::{
 
 const REPOSITORY: &str = "OscarD0823/Caja-Fantasma";
 const CATALOG_PATH: &str = "catalog/visions.json";
+const OWNER_LOGIN: &str = "OscarD0823";
+#[cfg(target_os = "windows")]
+const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
 
 fn command_error(output: &std::process::Output, fallback: &str) -> String {
     let message = String::from_utf8_lossy(&output.stderr).trim().to_string();
@@ -21,8 +26,62 @@ fn command_error(output: &std::process::Output, fallback: &str) -> String {
     }
 }
 
+fn authenticated_owner() -> Result<String, String> {
+    let output = Command::new("gh")
+        .args(["api", "user", "--jq", ".login"])
+        .output()
+        .map_err(|_| {
+            "No se encontró GitHub CLI. Instálalo y usa el botón para iniciar sesión.".to_string()
+        })?;
+    if !output.status.success() {
+        return Err(
+            "GitHub no tiene una sesión activa. Inicia sesión y vuelve a comprobar.".into(),
+        );
+    }
+    let login = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if !login.eq_ignore_ascii_case(OWNER_LOGIN) {
+        return Err(format!(
+            "La cuenta conectada es {login}. Solo {OWNER_LOGIN}, propietario del repositorio, puede habilitar el editor."
+        ));
+    }
+    Ok(login)
+}
+
+#[tauri::command]
+fn verify_github_owner() -> Result<String, String> {
+    authenticated_owner()
+}
+
+#[tauri::command]
+fn start_github_login() -> Result<String, String> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("gh")
+            .args([
+                "auth",
+                "login",
+                "--hostname",
+                "github.com",
+                "--git-protocol",
+                "https",
+                "--web",
+            ])
+            .creation_flags(CREATE_NEW_CONSOLE)
+            .spawn()
+            .map_err(|_| {
+                "No se pudo abrir GitHub CLI. Verifica que `gh` esté instalado.".to_string()
+            })?;
+        Ok("Completa el acceso en la ventana de GitHub y luego pulsa «Comprobar cuenta».".into())
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Err("El inicio de sesión guiado solo está disponible en Windows.".into())
+    }
+}
+
 #[tauri::command]
 fn publish_catalog(catalog_json: String) -> Result<String, String> {
+    let login = authenticated_owner()?;
     if catalog_json.len() > 262_144 {
         return Err("El catálogo supera el tamaño permitido.".into());
     }
@@ -36,19 +95,6 @@ fn publish_catalog(catalog_json: String) -> Result<String, String> {
         || catalog.get("visions").and_then(Value::as_array).is_none()
     {
         return Err("El catálogo no cumple el formato esperado.".into());
-    }
-
-    let auth = Command::new("gh")
-        .args(["auth", "status", "--hostname", "github.com"])
-        .output()
-        .map_err(|_| {
-            "No se encontró GitHub CLI. Instálalo e inicia sesión con gh auth login.".to_string()
-        })?;
-    if !auth.status.success() {
-        return Err(
-            "GitHub CLI no tiene una sesión válida. Ejecuta gh auth login y vuelve a intentarlo."
-                .into(),
-        );
     }
 
     let endpoint = format!("repos/{REPOSITORY}/contents/{CATALOG_PATH}");
@@ -112,7 +158,7 @@ fn publish_catalog(catalog_json: String) -> Result<String, String> {
     }
 
     Ok(format!(
-        "Catálogo v{version} publicado. Los demás equipos lo recibirán automáticamente."
+        "Catálogo v{version} publicado por {login}. Los demás equipos lo recibirán automáticamente."
     ))
 }
 
@@ -128,7 +174,11 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![publish_catalog])
+        .invoke_handler(tauri::generate_handler![
+            publish_catalog,
+            verify_github_owner,
+            start_github_login
+        ])
         .setup(|app| {
             let open = MenuItem::with_id(app, "open", "Abrir Caja Fantasma", true, None::<&str>)?;
             let overlay = MenuItem::with_id(

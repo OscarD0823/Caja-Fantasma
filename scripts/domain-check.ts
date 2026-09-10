@@ -29,7 +29,6 @@ const settings: Settings = {
   voiceLeadMinutes: 5,
   timingPresetVersion: 1,
   autoStartEnabled: true,
-  ownerMode: false,
 };
 assert.deepEqual(computeCycle(settings, Date.parse("2026-09-10T10:15:00.000Z")).phase, "waiting");
 assert.deepEqual(computeCycle(settings, Date.parse("2026-09-10T10:40:00.000Z")).phase, "active");

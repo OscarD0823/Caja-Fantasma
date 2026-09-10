@@ -22,7 +22,6 @@ export function initialState(): PersistedState {
       voiceLeadMinutes: 5,
       timingPresetVersion: 2,
       autoStartEnabled: true,
-      ownerMode: false,
     },
   };
 }
