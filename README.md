@@ -7,26 +7,28 @@ Repositorio oficial: <https://github.com/OscarD0823/Caja-Fantasma>
 ## Funciones
 
 - Recompensas Pro con valores configurables: jefes de monolito y silos valen 1; Desafío de Manibus, Guerra Pro y Manibus de Manibus valen 2.
+- Endless Dream incluye Invasión de Zona Onírica y Soñador de Luz, Soñador Profundo y Soñador Eterno; cada uno vale 1.
 - División Visión con Lunar, Gravedad y Simbiosis, además de un editor para ruedas futuras.
 - Gravedad incluye Ballena (1) y Plataformas (4).
 - Simbiosis permanece desactivada con Araña, Antena y Grandulón sin puntos.
-- La caja puede marcarse en cualquier momento. Se guarda automáticamente fecha, hora, puntos, número de recompensas y desglose.
-- Historial con el intento más bajo, el más alto, promedio, porcentaje observado por punto y estimación acumulada del intento actual.
-- Espera y duración de la Rueda Visional configurables en minutos.
-- Aviso nativo cuando comienza la rueda, funcionamiento minimizado en la bandeja e inicio automático con Windows.
+- La caja puede marcarse en cualquier momento. Se guarda automáticamente fecha, hora, puntos, número de recompensas, origen y desglose.
+- Cuando una caja llega por correo de Plataformas, las actividades hechas durante la última hora no se atribuyen a la caja anterior: permanecen contadas en el intento nuevo.
+- Historial con una base inicial de 16 cajas tomada de la columna A: mínimo 320, máximo 1.447, promedio 955,5, mediana 997, zona baja 704,875 y zona alta 1.206,125.
+- Espera y duración de la Rueda Visional configurables; el valor inicial es 30 minutos de espera y 30 minutos activa.
+- Gravedad emite un aviso de voz anticipado configurable y un aviso nativo al comenzar. La app funciona minimizada en la bandeja e inicia con Windows.
 - Contador flotante movible y siempre visible. Funciona sobre juegos en ventana o pantalla completa sin bordes; Windows no permite garantizar superposición sobre pantalla completa exclusiva.
 - Historial de cambios incluido dentro del programa.
 - Respaldo e importación JSON. Los datos personales solo se guardan en el equipo.
 
 ## Catálogo compartido
 
-El archivo [`catalog/visions.json`](catalog/visions.json) es la fuente pública de recompensas y ruedas. La aplicación lo comprueba al abrir y cada 30 minutos. Si `catalogVersion` es superior a la copia local, los demás equipos reciben las opciones nuevas sin perder su historial.
+El archivo [`catalog/visions.json`](catalog/visions.json) es la fuente pública de recompensas y ruedas. La aplicación lo comprueba al abrir, al recuperar el foco, al volver Internet y cada minuto. Si `catalogVersion` es superior a la copia local, los demás equipos reciben las opciones nuevas sin perder su historial.
 
-En el equipo de OscarD0823, `Configuración > Editor de OscarD0823` permite añadir ruedas u opciones y publicarlas. El botón usa GitHub CLI ya autenticado; no guarda tokens ni contraseñas dentro de la aplicación. GitHub aplica los permisos del repositorio.
+En el equipo de OscarD0823, `Configuración > Editor de OscarD0823` permite añadir ruedas u opciones. Cada cambio se guarda y se publica automáticamente después de 1,8 segundos sin escribir; también existe un botón para publicar de inmediato. El editor usa GitHub CLI ya autenticado, no guarda tokens ni contraseñas dentro de la aplicación y GitHub aplica los permisos del repositorio.
 
 ## Actualizaciones
 
-El actualizador sigue el patrón de [Fortuna Real](https://github.com/OscarD0823/Fortuna-Real): consulta `latest.json` en GitHub Releases, descarga el instalador, verifica su firma antes de instalarlo y vuelve a abrir la aplicación. Sin Internet, el programa inicia normalmente con los datos locales.
+El actualizador sigue el patrón de [Fortuna Real](https://github.com/OscarD0823/Fortuna-Real): consulta `latest.json` en GitHub Releases al abrir, cada 15 minutos, al volver Internet y al recuperar el foco; descarga el instalador, verifica su firma antes de instalarlo y vuelve a abrir la aplicación. Sin Internet, el programa inicia normalmente con los datos locales.
 
 La clave privada y su contraseña DPAPI permanecen fuera del repositorio, en el perfil local de Windows. El repositorio contiene únicamente la clave pública necesaria para verificar instalaciones.
 

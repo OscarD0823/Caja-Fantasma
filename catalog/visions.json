@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": 1,
-  "updatedAt": "2026-09-10T15:30:00.000Z",
+  "catalogVersion": 2,
+  "updatedAt": "2026-09-10T18:30:00.000Z",
   "updatedBy": "OscarD0823",
-  "boxTargetPoints": 20,
+  "boxTargetPoints": 956,
   "proActivities": [
     {
       "id": "pro-monolith-boss",
@@ -39,6 +39,34 @@
       "points": 2,
       "enabled": true,
       "note": "Recompensa del encuentro de Manibus."
+    },
+    {
+      "id": "dream-zone-invasion",
+      "name": "Invasión de Zona Onírica",
+      "points": 1,
+      "enabled": true,
+      "note": "Invasión de Endless Dream."
+    },
+    {
+      "id": "dreamer-light",
+      "name": "Soñador de Luz",
+      "points": 1,
+      "enabled": true,
+      "note": "Light Dreamer de Endless Dream."
+    },
+    {
+      "id": "dreamer-deep",
+      "name": "Soñador Profundo",
+      "points": 1,
+      "enabled": true,
+      "note": "Deep Dreamer de Endless Dream."
+    },
+    {
+      "id": "dreamer-eternal",
+      "name": "Soñador Eterno",
+      "points": 1,
+      "enabled": true,
+      "note": "Eternal Dreamer de Endless Dream."
     }
   ],
   "visions": [

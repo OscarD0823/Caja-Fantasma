@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Github, Plus, Save, Trash2, UploadCloud } from "lucide-react";
 import type { Activity, Catalog, Vision } from "./model";
 import { AUTHOR, clampNumber, createId } from "./model";
@@ -14,6 +14,9 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState("");
   const [publishing, setPublishing] = useState(false);
+  const [revision, setRevision] = useState(0);
+  const revisionRef = useRef(0);
+  const autoAttemptedRevision = useRef(0);
 
   useEffect(() => {
     if (!dirty) setDraft(structuredClone(catalog));
@@ -22,6 +25,8 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
   const change = (updater: (current: Catalog) => Catalog) => {
     setDraft((current) => updater(structuredClone(current)));
     setDirty(true);
+    revisionRef.current += 1;
+    setRevision(revisionRef.current);
     setStatus("");
   };
 
@@ -52,13 +57,13 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
 
   const removeVision = (visionId: string) => change((current) => ({ ...current, visions: current.visions.filter((vision) => vision.id !== visionId) }));
 
-  const prepareVersion = () => ({
+  const prepareVersion = useCallback(() => ({
     ...draft,
     catalogVersion: Math.max(catalog.catalogVersion + 1, draft.catalogVersion),
     updatedAt: new Date().toISOString(),
     updatedBy: AUTHOR,
     boxTargetPoints: clampNumber(draft.boxTargetPoints, 1, 10_000),
-  });
+  }), [catalog.catalogVersion, draft]);
 
   const save = () => {
     const next = prepareVersion();
@@ -68,28 +73,42 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
     setStatus(`Versión local v${next.catalogVersion} guardada.`);
   };
 
-  const publish = async () => {
+  const publish = useCallback(async (automatic = false) => {
+    const publishingRevision = revisionRef.current;
     const next = prepareVersion();
     setPublishing(true);
-    setStatus("Publicando en GitHub…");
+    setStatus(automatic ? "Guardando y enviando automáticamente…" : "Publicando en GitHub…");
     try {
       onSave(next);
       setDraft(next);
       const message = await onPublish(next);
-      setDirty(false);
-      setStatus(message);
+      if (revisionRef.current === publishingRevision) {
+        setDirty(false);
+        setStatus(message);
+      } else {
+        setStatus(`${message} Hay cambios nuevos pendientes de enviar.`);
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
       setPublishing(false);
     }
-  };
+  }, [onPublish, onSave, prepareVersion]);
+
+  useEffect(() => {
+    if (!dirty || publishing || revision === autoAttemptedRevision.current) return;
+    const timer = window.setTimeout(() => {
+      autoAttemptedRevision.current = revision;
+      void publish(true);
+    }, 1800);
+    return () => window.clearTimeout(timer);
+  }, [dirty, draft, publish, publishing, revision]);
 
   return (
     <div className="catalog-editor">
       <div className="catalog-toolbar">
         <label>Objetivo visual de la caja<input type="number" min={1} max={10000} value={draft.boxTargetPoints} onChange={(event) => change((current) => ({ ...current, boxTargetPoints: clampNumber(Number(event.target.value), 1, 10_000) }))} /></label>
-        <div><button type="button" className="secondary compact" disabled={!dirty} onClick={save}><Save size={16} /> Guardar local</button><button type="button" className="primary compact" disabled={publishing} onClick={() => void publish()}><UploadCloud size={16} /> {publishing ? "Publicando…" : "Publicar para todos"}</button></div>
+        <div><span className="auto-publish-badge"><Check size={14} /> Envío automático</span><button type="button" className="secondary compact" disabled={!dirty} onClick={save}><Save size={16} /> Guardar local</button><button type="button" className="primary compact" disabled={publishing} onClick={() => void publish(false)}><UploadCloud size={16} /> {publishing ? "Publicando…" : "Publicar ahora"}</button></div>
       </div>
       {status && <div className={`catalog-status ${status.toLowerCase().includes("error") || status.toLowerCase().includes("no ") ? "error" : ""}`}><Github size={16} />{status}</div>}
 

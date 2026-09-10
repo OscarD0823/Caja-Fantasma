@@ -18,6 +18,7 @@ import {
   FileClock,
   Github,
   History,
+  Mail,
   Minus,
   MonitorUp,
   Plus,
@@ -30,6 +31,7 @@ import {
   Trash2,
   Undo2,
   Upload,
+  Volume2,
   Wifi,
   WifiOff,
   X,
@@ -37,6 +39,7 @@ import {
 } from "lucide-react";
 import CatalogEditor from "./CatalogEditor";
 import AppUpdater from "./Updater";
+import { PHANTOM_CRATE_IMAGE } from "./assets";
 import type { Activity, Catalog, PersistedState, PointAction, Vision } from "./model";
 import {
   APP_VERSION,
@@ -49,6 +52,7 @@ import {
   computeCycle,
   createId,
   formatDuration,
+  splitPlatformCarryover,
   validateCatalog,
 } from "./model";
 import { exportState, importState, loadState, saveState } from "./storage";
@@ -64,6 +68,22 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.1.0",
+    date: "10 de septiembre de 2026",
+    title: "Promedio real y alertas por voz",
+    items: [
+      "La columna A de la hoja aporta 16 salidas iniciales: promedio 955,5; mínima 320; máxima 1.447.",
+      "Rangos observados: zona baja 704,875, centro 955,5 y zona alta 1.206,125.",
+      "Las cajas recibidas por correo de Plataformas conservan en el intento nuevo lo reclamado durante la última hora.",
+      "Invasión de Zona Onírica y los tres tipos de Soñador se añadieron con 1 punto cada uno.",
+      "El ciclo inicial de la Rueda Visional ahora es de 30 minutos de espera y 30 minutos activa.",
+      "Gravedad avisa por voz antes de comenzar, con anticipación configurable y botón de prueba.",
+      "La caja de referencia ahora muestra la marca de Once Human en lugar de la tarjeta del arma.",
+      "El catálogo del propietario se publica automáticamente y los demás equipos lo revisan cada minuto.",
+      "El actualizador comprueba nuevas versiones también mientras la aplicación permanece abierta.",
+    ],
+  },
   {
     version: "1.0.0",
     date: "10 de septiembre de 2026",
@@ -86,6 +106,18 @@ function formatDate(value: string) {
 
 function pointsLabel(points: number) {
   return `${points} ${points === 1 ? "punto" : "puntos"}`;
+}
+
+function speakMessage(message: string) {
+  if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") return false;
+  window.speechSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(message);
+  utterance.lang = "es-CO";
+  utterance.rate = 0.92;
+  utterance.pitch = 1;
+  utterance.volume = 1;
+  window.speechSynthesis.speak(utterance);
+  return true;
 }
 
 function normalizeCycleState(state: PersistedState, now: number): PersistedState {
@@ -111,11 +143,13 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState("Catálogo local listo");
   const [toast, setToast] = useState("");
   const importRef = useRef<HTMLInputElement>(null);
+  const voiceAlertRef = useRef("");
 
   const currentPoints = useMemo(() => state.actions.reduce((sum, action) => sum + action.points, 0), [state.actions]);
   const currentClaims = state.actions.length;
   const breakdown = useMemo(() => buildBreakdown(state.actions), [state.actions]);
   const stats = useMemo(() => boxStatistics(state.boxes, currentPoints), [state.boxes, currentPoints]);
+  const baselineStats = useMemo(() => boxStatistics([], 0), []);
   const selectedVision = state.catalog.visions.find((vision) => vision.id === state.settings.selectedVisionId) ?? state.catalog.visions[0];
   const cycle = computeCycle(state.settings, now);
   const target = clampNumber(state.catalog.boxTargetPoints, 1, 10_000);
@@ -161,6 +195,30 @@ export default function App() {
     void notify();
   }, [commitState, cycle.phase, cycle.remainingMs, selectedVision?.name, state.settings.lastNotificationPhaseStartedAt, state.settings.notificationsEnabled, state.settings.phaseStartedAt]);
 
+  useEffect(() => {
+    const leadMinutes = clampNumber(state.settings.voiceLeadMinutes, 1, 60);
+    const phaseKey = state.settings.phaseStartedAt;
+    if (cycle.phase !== "waiting" || selectedVision?.id !== "gravity" || !state.settings.voiceNotificationsEnabled) return;
+    if (cycle.remainingMs > leadMinutes * 60_000 || state.settings.lastVoiceAlertPhaseStartedAt === phaseKey || voiceAlertRef.current === phaseKey) return;
+
+    voiceAlertRef.current = phaseKey;
+    const remainingMinutes = Math.max(1, Math.ceil(cycle.remainingMs / 60_000));
+    const message = `Atención. La Rueda Visional de Gravedad comienza en ${remainingMinutes} ${remainingMinutes === 1 ? "minuto" : "minutos"}.`;
+    speakMessage(message);
+    commitState((current) => ({
+      ...current,
+      settings: { ...current.settings, lastVoiceAlertPhaseStartedAt: phaseKey },
+    }));
+
+    if (isTauri() && state.settings.notificationsEnabled) {
+      void (async () => {
+        let permitted = await isPermissionGranted();
+        if (!permitted) permitted = (await requestPermission()) === "granted";
+        if (permitted) sendNotification({ title: "Gravedad comenzará pronto", body: message });
+      })();
+    }
+  }, [commitState, cycle.phase, cycle.remainingMs, selectedVision?.id, state.settings.lastVoiceAlertPhaseStartedAt, state.settings.notificationsEnabled, state.settings.phaseStartedAt, state.settings.voiceLeadMinutes, state.settings.voiceNotificationsEnabled]);
+
   const syncCatalog = useCallback(async (silent = false) => {
     if (!silent) setSyncStatus("Buscando catálogo público…");
     try {
@@ -181,8 +239,18 @@ export default function App() {
 
   useEffect(() => {
     void syncCatalog(true);
-    const timer = window.setInterval(() => void syncCatalog(true), 30 * 60_000);
-    return () => window.clearInterval(timer);
+    const timer = window.setInterval(() => void syncCatalog(true), 60_000);
+    const refresh = () => void syncCatalog(true);
+    const refreshWhenVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    window.addEventListener("online", refresh);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, [syncCatalog]);
 
   useEffect(() => {
@@ -217,17 +285,27 @@ export default function App() {
     });
   };
 
-  const markBox = () => {
+  const markBox = (source: "normal" | "platform-mail" = "normal") => {
     if (state.actions.length === 0) return;
+    const split = source === "platform-mail" ? splitPlatformCarryover(state.actions) : { completedAttempt: state.actions, carryOver: [] as PointAction[] };
+    if (split.completedAttempt.length === 0) {
+      setToast("Todavía no hay recompensas con una hora de antigüedad para cerrar esta caja");
+      window.setTimeout(() => setToast(""), 3200);
+      return;
+    }
+    const recordedPoints = split.completedAttempt.reduce((sum, action) => sum + action.points, 0);
+    const carriedPoints = split.carryOver.reduce((sum, action) => sum + action.points, 0);
     const record = {
       id: createId("box"),
       occurredAt: new Date().toISOString(),
-      points: currentPoints,
-      claims: currentClaims,
-      breakdown,
+      points: recordedPoints,
+      claims: split.completedAttempt.length,
+      source,
+      carriedPoints,
+      breakdown: buildBreakdown(split.completedAttempt),
     };
-    commitState((current) => ({ ...current, actions: [], boxes: [record, ...current.boxes] }));
-    setToast(`Caja registrada con ${currentPoints} puntos`);
+    commitState((current) => ({ ...current, actions: split.carryOver, boxes: [record, ...current.boxes] }));
+    setToast(source === "platform-mail" ? `Caja de Plataformas registrada; ${carriedPoints} puntos pasan al nuevo intento` : `Caja registrada con ${recordedPoints} puntos`);
     window.setTimeout(() => setToast(""), 2400);
   };
 
@@ -249,17 +327,17 @@ export default function App() {
     setNow(Date.now());
   };
 
-  const saveCatalog = (catalog: Catalog) => {
+  const saveCatalog = useCallback((catalog: Catalog) => {
     commitState((current) => ({ ...current, catalog }));
     setSyncStatus(`Cambios locales v${catalog.catalogVersion} listos para publicar`);
-  };
+  }, [commitState]);
 
-  const publishCatalog = async (catalog: Catalog) => {
+  const publishCatalog = useCallback(async (catalog: Catalog) => {
     if (!isTauri()) throw new Error("La publicación solo está disponible en la aplicación de escritorio.");
     const message = await invoke<string>("publish_catalog", { catalogJson: JSON.stringify(catalog, null, 2) });
     setSyncStatus(message);
     return message;
-  };
+  }, []);
 
   const toggleAutostart = async (enabled: boolean) => {
     if (!isTauri()) return;
@@ -292,7 +370,7 @@ export default function App() {
 
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark"><Box size={25} /><Sparkles size={13} /></div>
+          <div className="brand-mark"><GameLogoMark /></div>
           <div><strong>Caja Fantasma</strong><span>Once Human</span></div>
         </div>
 
@@ -343,17 +421,18 @@ export default function App() {
                     <span style={{ width: `${targetProgress}%` }} />
                   </div>
                   <div className="hero-actions">
-                    <button type="button" className="primary" disabled={state.actions.length === 0} onClick={markBox}><Box size={19} /> ¡Salió la caja!</button>
+                    <button type="button" className="primary" disabled={state.actions.length === 0} onClick={() => markBox("normal")}><Box size={19} /> ¡Salió la caja!</button>
+                    <button type="button" className="secondary platform-mail-button" disabled={state.actions.length === 0} onClick={() => markBox("platform-mail")}><Mail size={18} /> Llegó por Plataformas</button>
                     <button type="button" className="secondary" disabled={state.actions.length === 0} onClick={() => commitState((current) => ({ ...current, actions: current.actions.slice(0, -1) }))}><Undo2 size={18} /> Deshacer último</button>
                   </div>
                 </div>
-                <div className="ghost-orbit" aria-hidden="true"><div className="orbital-ring" /><Box size={74} /><Sparkles className="spark-one" /><Sparkles className="spark-two" /></div>
+                <div className="ghost-orbit" aria-hidden="true"><div className="orbital-ring" /><img className="ghost-crate-image" src={PHANTOM_CRATE_IMAGE} alt="" /><div className="once-human-wordmark"><span>ONCE</span><strong>HUMAN</strong></div><Sparkles className="spark-one" /><Sparkles className="spark-two" /></div>
               </article>
 
               <article className="chance-card panel">
-                <span className="eyebrow"><BarChart3 size={14} /> ESTIMACIÓN PERSONAL</span>
+                <span className="eyebrow"><BarChart3 size={14} /> ESTIMACIÓN OBSERVADA</span>
                 <strong className="chance-value">{stats.currentChancePercent.toFixed(1)}%</strong>
-                <p>Probabilidad acumulada estimada en este intento según tu historial.</p>
+                <p>Probabilidad acumulada estimada con la hoja base y tu historial.</p>
                 <div className="mini-stats"><span><small>Promedio</small><strong>{stats.count ? stats.average.toFixed(1) : "—"}</strong></span><span><small>Muestras</small><strong>{stats.count}</strong></span></div>
               </article>
             </div>
@@ -420,14 +499,20 @@ export default function App() {
         {tab === "history" && (
           <section className="page history-page">
             <div className="stats-grid">
-              <StatCard icon={Box} label="Cajas registradas" value={String(stats.count)} />
+              <StatCard icon={Box} label="Muestras totales" value={String(stats.count)} />
               <StatCard icon={Minus} label="Más baja" value={stats.count ? pointsLabel(stats.minimum) : "—"} />
               <StatCard icon={MonitorUp} label="Más alta" value={stats.count ? pointsLabel(stats.maximum) : "—"} />
               <StatCard icon={BarChart3} label="Promedio" value={stats.count ? pointsLabel(Number(stats.average.toFixed(1))) : "—"} />
             </div>
             <article className="probability-explainer panel">
-              <div><span className="eyebrow">PROBABILIDAD OBSERVADA</span><strong>{stats.perPointPercent.toFixed(2)}%</strong><p>Una caja por cada {stats.perPointPercent ? (100 / stats.perPointPercent).toFixed(1) : "—"} puntos, según tus registros. No es una tasa oficial del juego.</p></div>
+              <div><span className="eyebrow">PROBABILIDAD OBSERVADA</span><strong>{stats.perPointPercent.toFixed(3)}%</strong><p>Una caja por cada {stats.perPointPercent ? (100 / stats.perPointPercent).toFixed(1) : "—"} puntos, usando la hoja base y tus registros. No es una tasa oficial del juego.</p></div>
               <div className="probability-ring" style={{ "--value": `${Math.min(100, stats.currentChancePercent) * 3.6}deg` } as React.CSSProperties}><span>{stats.currentChancePercent.toFixed(0)}%</span></div>
+            </article>
+
+            <article className="baseline-panel panel">
+              <div><span className="eyebrow">BASE DE LA COLUMNA A</span><h2>16 salidas analizadas</h2><p>Valores: 1209, 762, 966, 1143, 320, 797, 1180, 909, 1028, 1098, 408, 889, 1447, 1211, 1333 y 588.</p></div>
+              <div className="baseline-ranges"><span><small>Zona baja</small><strong>{baselineStats.lowerAverage.toFixed(3)}</strong></span><span><small>Centro</small><strong>{baselineStats.average.toFixed(1)}</strong></span><span><small>Zona alta</small><strong>{baselineStats.upperAverage.toFixed(3)}</strong></span></div>
+              <p className="baseline-note">La hoja mostraba 935,0769 como promedio, pero 15.288 ÷ 16 da 955,5. Las cajas que registres aquí se añadirán a esta base.</p>
             </article>
 
             <div className="panel-title history-title"><div><span className="eyebrow">CAJAS SACADAS</span><h2>Historial con fecha y hora</h2></div><button type="button" className="secondary compact" onClick={() => exportState(state)}><Download size={16} /> Exportar</button></div>
@@ -436,7 +521,7 @@ export default function App() {
                 {state.boxes.map((box, index) => (
                   <article className="history-record panel" key={box.id}>
                     <div className="record-number">#{state.boxes.length - index}</div>
-                    <div className="record-main"><span>{formatDate(box.occurredAt)}</span><strong>{pointsLabel(box.points)}</strong><small>{box.claims} recompensas reclamadas</small></div>
+                    <div className="record-main"><span>{formatDate(box.occurredAt)}</span><strong>{pointsLabel(box.points)}</strong><small>{box.claims} recompensas reclamadas{box.source === "platform-mail" ? ` · correo de Plataformas · ${box.carriedPoints ?? 0} pts transferidos` : ""}</small></div>
                     <details><summary>Ver desglose</summary>{box.breakdown.map((item) => <div key={item.name}><span>{item.name} · {item.count}×</span><strong>{item.points}</strong></div>)}</details>
                   </article>
                 ))}
@@ -461,6 +546,9 @@ export default function App() {
                 <div className="settings-icon"><Clock3 /></div><div><h3>Duración del ciclo</h3><p>Define cuánto espera la rueda para empezar y cuánto permanece activa.</p><div className="field-row"><label>Espera (minutos)<input type="number" min={1} max={525600} value={state.settings.waitMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, waitMinutes: clampNumber(Number(event.target.value), 1, 525600), phaseStartedAt: new Date().toISOString() } }))} /></label><label>Activa (minutos)<input type="number" min={1} max={525600} value={state.settings.activeMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, activeMinutes: clampNumber(Number(event.target.value), 1, 525600), phaseStartedAt: new Date().toISOString() } }))} /></label></div></div>
               </article>
               <SettingToggle icon={Bell} title="Recordatorios" description="Muestra un aviso de Windows cada vez que comienza la fase activa." enabled={state.settings.notificationsEnabled} onToggle={() => commitState((current) => ({ ...current, settings: { ...current.settings, notificationsEnabled: !current.settings.notificationsEnabled } }))} />
+              <article className="settings-card voice-settings panel">
+                <div className="settings-icon"><Volume2 /></div><div><h3>Aviso por voz · Gravedad</h3><p>Habla antes de que empiece el evento aunque la aplicación esté minimizada.</p><div className="voice-controls"><label>Anticipación (minutos)<input type="number" min={1} max={60} value={state.settings.voiceLeadMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, voiceLeadMinutes: clampNumber(Number(event.target.value), 1, 60), lastVoiceAlertPhaseStartedAt: undefined } }))} /></label><button type="button" className="secondary compact" onClick={() => { speakMessage("Prueba de voz. El aviso de Gravedad está funcionando."); setToast("Prueba de voz reproducida"); window.setTimeout(() => setToast(""), 1800); }}><Volume2 size={15} /> Probar voz</button></div></div><button type="button" className={`switch ${state.settings.voiceNotificationsEnabled ? "on" : ""}`} aria-pressed={state.settings.voiceNotificationsEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, voiceNotificationsEnabled: !current.settings.voiceNotificationsEnabled } }))}><span /></button>
+              </article>
               <SettingToggle icon={MonitorUp} title="Iniciar con Windows" description="Arranca en segundo plano; la ventana principal no interrumpe al encender el PC." enabled={state.settings.autoStartEnabled} onToggle={(enabled) => { commitState((current) => ({ ...current, settings: { ...current.settings, autoStartEnabled: enabled } })); void toggleAutostart(enabled); }} />
               <SettingToggle icon={Eye} title="Ventana flotante" description="Contador pequeño, movible y siempre encima del juego." enabled={state.settings.overlayEnabled} onToggle={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))} />
             </div>
@@ -469,7 +557,7 @@ export default function App() {
 
             <article className="owner-panel panel">
               <div className="panel-title"><div><span className="eyebrow">CATÁLOGO COMPARTIDO</span><h2>Editor de OscarD0823</h2></div><button type="button" className={`switch ${state.settings.ownerMode ? "on" : ""}`} aria-pressed={state.settings.ownerMode} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, ownerMode: !current.settings.ownerMode } }))}><span /></button></div>
-              <p>Las opciones publicadas aquí se descargan automáticamente en los demás equipos. Publicar requiere una sesión válida de GitHub CLI con permiso sobre el repositorio.</p>
+              <p>Cada cambio se guarda y se publica automáticamente tras una pausa breve. Los demás equipos comprueban el catálogo cada minuto. Requiere una sesión válida de GitHub CLI con permiso sobre el repositorio.</p>
               {state.settings.ownerMode ? <CatalogEditor catalog={state.catalog} onSave={saveCatalog} onPublish={publishCatalog} /> : <div className="owner-locked"><Github size={22} /><span>Activa el modo editor solo en el equipo del propietario.</span></div>}
             </article>
           </section>
@@ -492,6 +580,10 @@ function ActivityCard({ activity, count, disabled = false, onAdd, onRemove }: { 
       </div>
     </article>
   );
+}
+
+function GameLogoMark() {
+  return <svg viewBox="0 0 48 48" role="img" aria-label="Logo de Once Human"><path d="M13 11h9l5 6-5 6h-9l-5-6 5-6Zm13 14h9l5 6-5 6h-9l-5-6 5-6Z" /><path d="m19 25 10-10M18 31l12-12" /></svg>;
 }
 
 function StatCard({ icon: Icon, label, value }: { icon: typeof Box; label: string; value: string }) {

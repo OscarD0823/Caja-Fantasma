@@ -12,12 +12,15 @@ export function initialState(): PersistedState {
     boxes: [],
     settings: {
       selectedVisionId: "gravity",
-      waitMinutes: 60,
+      waitMinutes: 30,
       activeMinutes: 30,
       phaseStartedAt: new Date().toISOString(),
       phase: "waiting",
       overlayEnabled: false,
       notificationsEnabled: true,
+      voiceNotificationsEnabled: true,
+      voiceLeadMinutes: 5,
+      timingPresetVersion: 1,
       autoStartEnabled: true,
       ownerMode: false,
     },
@@ -29,12 +32,20 @@ export function loadState(): PersistedState {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as Partial<PersistedState> | null;
     if (!parsed || parsed.schemaVersion !== 1 || !validateCatalog(parsed.catalog)) return initialState();
     const fresh = initialState();
+    const settings = { ...fresh.settings, ...(parsed.settings ?? {}) };
+    if (!parsed.settings?.timingPresetVersion) {
+      settings.waitMinutes = 30;
+      settings.activeMinutes = 30;
+      settings.phase = "waiting";
+      settings.phaseStartedAt = new Date().toISOString();
+      settings.timingPresetVersion = 1;
+    }
     return {
       ...fresh,
       ...parsed,
       actions: Array.isArray(parsed.actions) ? parsed.actions : [],
       boxes: Array.isArray(parsed.boxes) ? parsed.boxes : [],
-      settings: { ...fresh.settings, ...(parsed.settings ?? {}) },
+      settings,
     };
   } catch {
     return initialState();

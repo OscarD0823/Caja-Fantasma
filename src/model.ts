@@ -39,6 +39,8 @@ export type BoxRecord = {
   occurredAt: string;
   points: number;
   claims: number;
+  source?: "normal" | "platform-mail";
+  carriedPoints?: number;
   breakdown: Array<{ name: string; count: number; points: number }>;
 };
 
@@ -50,9 +52,13 @@ export type Settings = {
   phase: "waiting" | "active";
   overlayEnabled: boolean;
   notificationsEnabled: boolean;
+  voiceNotificationsEnabled: boolean;
+  voiceLeadMinutes: number;
+  timingPresetVersion: number;
   autoStartEnabled: boolean;
   ownerMode: boolean;
   lastNotificationPhaseStartedAt?: string;
+  lastVoiceAlertPhaseStartedAt?: string;
 };
 
 export type PersistedState = {
@@ -70,10 +76,11 @@ export type CycleSnapshot = {
   phaseEndsAt: string;
 };
 
-export const APP_VERSION = "1.0.0";
+export const APP_VERSION = "1.1.0";
 export const AUTHOR = "OscarD0823";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
 export const REMOTE_CATALOG_URL = "https://raw.githubusercontent.com/OscarD0823/Caja-Fantasma/main/catalog/visions.json";
+export const BASELINE_BOX_POINTS = [1209, 762, 966, 1143, 320, 797, 1180, 909, 1028, 1098, 408, 889, 1447, 1211, 1333, 588] as const;
 
 export function createId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${crypto.getRandomValues(new Uint32Array(1))[0].toString(36)}`;
@@ -117,18 +124,31 @@ export function formatDuration(milliseconds: number) {
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${rest.toString().padStart(2, "0")}`;
 }
 
-export function boxStatistics(boxes: BoxRecord[], currentPoints: number) {
-  const samples = boxes.map((box) => box.points).filter((value) => value > 0);
+export function boxStatistics(boxes: BoxRecord[], currentPoints: number, baseline: readonly number[] = BASELINE_BOX_POINTS) {
+  const referenceSamples = baseline.filter((value) => Number.isFinite(value) && value > 0);
+  const personalSamples = boxes.map((box) => box.points).filter((value) => value > 0);
+  const samples = [...referenceSamples, ...personalSamples];
   if (samples.length === 0) {
-    return { count: 0, minimum: 0, maximum: 0, average: 0, perPointPercent: 0, currentChancePercent: 0 };
+    return { count: 0, baselineCount: 0, personalCount: 0, minimum: 0, maximum: 0, average: 0, median: 0, lowerAverage: 0, upperAverage: 0, perPointPercent: 0, currentChancePercent: 0 };
   }
   const total = samples.reduce((sum, value) => sum + value, 0);
   const probability = samples.length / total;
+  const sorted = [...samples].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
+  const lower = sorted.length === 1 ? sorted : sorted.slice(0, middle);
+  const upper = sorted.length === 1 ? sorted : sorted.slice(Math.ceil(sorted.length / 2));
+  const averageOf = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
   return {
     count: samples.length,
+    baselineCount: referenceSamples.length,
+    personalCount: personalSamples.length,
     minimum: Math.min(...samples),
     maximum: Math.max(...samples),
     average: total / samples.length,
+    median,
+    lowerAverage: averageOf(lower),
+    upperAverage: averageOf(upper),
     perPointPercent: probability * 100,
     currentChancePercent: (1 - Math.pow(1 - probability, Math.max(0, currentPoints))) * 100,
   };
@@ -144,6 +164,18 @@ export function buildBreakdown(actions: PointAction[]) {
     groups.set(key, current);
   }
   return [...groups.values()].sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+}
+
+export function splitPlatformCarryover(actions: PointAction[], now = Date.now(), delayMinutes = 60) {
+  const cutoff = now - clampNumber(delayMinutes, 1, 1_440) * 60_000;
+  const completedAttempt: PointAction[] = [];
+  const carryOver: PointAction[] = [];
+  for (const action of actions) {
+    const occurredAt = new Date(action.occurredAt).getTime();
+    if (Number.isFinite(occurredAt) && occurredAt > cutoff) carryOver.push(action);
+    else completedAttempt.push(action);
+  }
+  return { completedAttempt, carryOver, cutoff: new Date(cutoff).toISOString() };
 }
 
 export function validateCatalog(value: unknown): value is Catalog {

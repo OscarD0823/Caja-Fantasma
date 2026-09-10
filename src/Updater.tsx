@@ -9,6 +9,7 @@ type Status = "downloading" | "installing" | "restarting" | "error";
 export default function AppUpdater() {
   const updateRef = useRef<Update | null>(null);
   const running = useRef(false);
+  const checking = useRef(false);
   const [visible, setVisible] = useState(false);
   const [status, setStatus] = useState<Status>("downloading");
   const [route, setRoute] = useState({ current: "", next: "" });
@@ -43,23 +44,38 @@ export default function AppUpdater() {
     }
   }, []);
 
-  useEffect(() => {
-    if (!isTauri() || navigator.onLine === false) return;
-    const timer = window.setTimeout(async () => {
-      try {
-        const update = await check({ timeout: 8000 });
-        if (!update) return;
-        updateRef.current = update;
-        setRoute({ current: update.currentVersion, next: update.version });
-        setNotes(update.body ?? "Incluye mejoras y correcciones.");
-        setVisible(true);
-        void install();
-      } catch (reason) {
-        console.info("[Caja Fantasma] Comprobación automática aplazada.", reason);
-      }
-    }, 900);
-    return () => window.clearTimeout(timer);
+  const checkForUpdate = useCallback(async () => {
+    if (!isTauri() || navigator.onLine === false || checking.current || running.current) return;
+    checking.current = true;
+    try {
+      const update = await check({ timeout: 8000 });
+      if (!update) return;
+      updateRef.current = update;
+      setRoute({ current: update.currentVersion, next: update.version });
+      setNotes(update.body ?? "Incluye mejoras y correcciones.");
+      setVisible(true);
+      void install();
+    } catch (reason) {
+      console.info("[Caja Fantasma] Comprobación automática aplazada.", reason);
+    } finally {
+      checking.current = false;
+    }
   }, [install]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    const firstCheck = window.setTimeout(() => void checkForUpdate(), 900);
+    const periodicCheck = window.setInterval(() => void checkForUpdate(), 15 * 60_000);
+    const refresh = () => void checkForUpdate();
+    window.addEventListener("online", refresh);
+    window.addEventListener("focus", refresh);
+    return () => {
+      window.clearTimeout(firstCheck);
+      window.clearInterval(periodicCheck);
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [checkForUpdate]);
 
   if (!visible) return null;
   return <div className="update-overlay" role="dialog" aria-modal="true" aria-labelledby="update-title"><section className="update-card" aria-live="polite">
