@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": 4,
-  "updatedAt": "2026-09-10T23:45:08.508Z",
+  "catalogVersion": 5,
+  "updatedAt": "2026-09-10T23:45:20.127Z",
   "updatedBy": "OscarD0823",
   "boxTargetPoints": 956,
   "proActivities": [
@@ -108,7 +108,7 @@
         {
           "id": "symbiosis-spider",
           "name": "Araña",
-          "points": 2,
+          "points": 1,
           "enabled": false,
           "note": "Sin puntos mientras el evento esté desactivado."
         },
