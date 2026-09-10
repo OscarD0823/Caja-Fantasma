@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": 2,
-  "updatedAt": "2026-09-10T18:30:00.000Z",
+  "catalogVersion": 3,
+  "updatedAt": "2026-09-10T23:44:57.123Z",
   "updatedBy": "OscarD0823",
   "boxTargetPoints": 956,
   "proActivities": [
@@ -115,14 +115,14 @@
         {
           "id": "symbiosis-antenna",
           "name": "Antena",
-          "points": 0,
+          "points": 1,
           "enabled": false,
           "note": "Sin puntos mientras el evento esté desactivado."
         },
         {
           "id": "symbiosis-big-one",
           "name": "Grandulón",
-          "points": 0,
+          "points": 1,
           "enabled": false,
           "note": "Sin puntos mientras el evento esté desactivado."
         }
