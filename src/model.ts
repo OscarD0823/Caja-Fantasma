@@ -14,6 +14,16 @@ export type Vision = {
   activities: Activity[];
 };
 
+export type SharedEventTiming = {
+  selectedVisionId: string;
+  waitMinutes: number;
+  activeMinutes: number;
+  phaseStartedAt: string;
+  phase: "waiting" | "active";
+  updatedAt: string;
+  updatedBy: string;
+};
+
 export type Catalog = {
   schemaVersion: 1;
   catalogVersion: number;
@@ -22,6 +32,7 @@ export type Catalog = {
   boxTargetPoints: number;
   proActivities: Activity[];
   visions: Vision[];
+  eventTiming?: SharedEventTiming;
 };
 
 export type PointAction = {
@@ -71,6 +82,8 @@ export type Settings = {
   autoStartEnabled: boolean;
   lastNotificationPhaseStartedAt?: string;
   lastVoiceAlertPhaseStartedAt?: string;
+  sharedTimingUpdatedAt?: string;
+  dataResetVersion: number;
 };
 
 export type PersistedState = {
@@ -90,7 +103,7 @@ export type CycleSnapshot = {
   phaseEndsAt: string;
 };
 
-export const APP_VERSION = "1.5.0";
+export const APP_VERSION = "1.6.0";
 export const AUTHOR = "OscarD0823";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
 export const REMOTE_CATALOG_URL = "https://raw.githubusercontent.com/OscarD0823/Caja-Fantasma/main/catalog/visions.json";
@@ -110,12 +123,17 @@ export function clampNumber(value: number, min: number, max: number) {
 export function computeCycle(settings: Settings, now = Date.now()): CycleSnapshot {
   const waitMs = clampNumber(settings.waitMinutes, 1, 525_600) * 60_000;
   const activeMs = clampNumber(settings.activeMinutes, 1, 525_600) * 60_000;
-  let phase = settings.phase;
   let startedAt = new Date(settings.phaseStartedAt).getTime();
   if (!Number.isFinite(startedAt)) startedAt = now;
+  const fullCycleMs = waitMs + activeMs;
+  const elapsedFromAnchor = Math.max(0, now - startedAt);
+  const completedCycles = Math.floor(elapsedFromAnchor / fullCycleMs);
+  const remainder = elapsedFromAnchor - completedCycles * fullCycleMs;
+  startedAt += completedCycles * fullCycleMs;
 
+  let phase = settings.phase;
   let duration = phase === "active" ? activeMs : waitMs;
-  while (now >= startedAt + duration) {
+  if (remainder >= duration) {
     startedAt += duration;
     phase = phase === "active" ? "waiting" : "active";
     duration = phase === "active" ? activeMs : waitMs;
@@ -128,6 +146,17 @@ export function computeCycle(settings: Settings, now = Date.now()): CycleSnapsho
     progress: Math.min(1, elapsed / duration),
     phaseEndsAt: new Date(startedAt + duration).toISOString(),
   };
+}
+
+export function shouldShowGravityWhale(settings: Settings, now = Date.now()) {
+  if (settings.selectedVisionId !== "gravity") return false;
+  const cycle = computeCycle(settings, now);
+  if (cycle.phase === "active") {
+    const elapsedMs = clampNumber(settings.activeMinutes, 1, 525_600) * 60_000 - cycle.remainingMs;
+    return elapsedMs >= 15 * 60_000;
+  }
+  const elapsedWaitingMs = clampNumber(settings.waitMinutes, 1, 525_600) * 60_000 - cycle.remainingMs;
+  return elapsedWaitingMs <= 5 * 60_000;
 }
 
 export function formatDuration(milliseconds: number) {
@@ -207,6 +236,16 @@ export function validateCatalog(value: unknown): value is Catalog {
   if (!value || typeof value !== "object") return false;
   const catalog = value as Partial<Catalog>;
   const validActivity = (activity: Activity) => Boolean(activity && typeof activity.id === "string" && typeof activity.name === "string" && Number.isFinite(activity.points) && typeof activity.enabled === "boolean");
+  const timing = catalog.eventTiming;
+  const validTiming = timing === undefined || (typeof timing.selectedVisionId === "string"
+    && Number.isFinite(timing.waitMinutes) && timing.waitMinutes >= 1 && timing.waitMinutes <= 525_600
+    && Number.isFinite(timing.activeMinutes) && timing.activeMinutes >= 1 && timing.activeMinutes <= 525_600
+    && typeof timing.phaseStartedAt === "string"
+    && Number.isFinite(Date.parse(timing.phaseStartedAt))
+    && (timing.phase === "waiting" || timing.phase === "active")
+    && typeof timing.updatedAt === "string"
+    && Number.isFinite(Date.parse(timing.updatedAt))
+    && typeof timing.updatedBy === "string");
   return catalog.schemaVersion === 1
     && Number.isInteger(catalog.catalogVersion)
     && typeof catalog.updatedAt === "string"
@@ -215,5 +254,6 @@ export function validateCatalog(value: unknown): value is Catalog {
     && Array.isArray(catalog.proActivities)
     && catalog.proActivities.every(validActivity)
     && Array.isArray(catalog.visions)
-    && catalog.visions.every((vision) => vision && typeof vision.id === "string" && typeof vision.name === "string" && typeof vision.enabled === "boolean" && Array.isArray(vision.activities) && vision.activities.every(validActivity));
+    && catalog.visions.every((vision) => vision && typeof vision.id === "string" && typeof vision.name === "string" && typeof vision.enabled === "boolean" && Array.isArray(vision.activities) && vision.activities.every(validActivity))
+    && validTiming;
 }

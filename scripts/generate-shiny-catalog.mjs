@@ -93,12 +93,13 @@ function normalizeEntry(entry, index) {
     englishName: String(entry.english_name ?? ""),
     baseName: String(entry.base_name ?? entry.name),
     baseEnglishName,
-    variant: entry.family ? String(entry.family) : `Tier ${Number(entry.name_replace) || 1}`,
+    variant: entry.family ? String(entry.family) : "Sin variante",
+    levelLabel: isCatalogShiny ? "Nivel 17 brillante" : "Nivel 1–17",
     applyRange: canonicalRange(entry.apply_range_desc),
     modType: entry.mod_type ? String(entry.mod_type) : "",
     system,
     isCatalogShiny,
-    tier: Number(entry.name_replace) || 1,
+    sourceTier: Number(entry.name_replace) || 1,
     ...group,
   };
 }
@@ -126,7 +127,7 @@ const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const outputPath = resolve(currentDirectory, "../catalog/shiny-mods.json");
 await mkdir(dirname(outputPath), { recursive: true });
 await writeFile(outputPath, `${JSON.stringify({
-  schemaVersion: 1,
+  schemaVersion: 2,
   sourceUrl: SOURCE_URL,
   sourceCheckedAt: new Date().toISOString(),
   counts,

@@ -10,11 +10,12 @@ export type ShinyModCatalogItem = {
   baseName: string;
   baseEnglishName: string;
   variant: string;
+  levelLabel: "Nivel 1–17" | "Nivel 17 brillante";
   applyRange: string;
   modType: string;
   system: ShinyModSystem;
   isCatalogShiny: boolean;
-  tier: number;
+  sourceTier: number;
   category: "weapon" | "armor";
   groupId: string;
   groupName: string;
@@ -42,7 +43,42 @@ type ShinyCatalogDocument = {
 
 const document = catalogData as ShinyCatalogDocument;
 
-export const SHINY_MOD_CATALOG = document.records;
+const GROUP_ORDER = [
+  "weapon-fast-gunner",
+  "weapon-burn",
+  "weapon-power-surge",
+  "weapon-frost-vortex",
+  "weapon-the-bull-s-eye",
+  "weapon-fortress-warfare",
+  "weapon-unstable-bomber",
+  "weapon-bounce",
+  "weapon-shrapnel",
+  "weapon-todas-las-armas",
+  "weapon-arma-a-distancia",
+  "weapon-arma-cuerpo-a-cuerpo",
+  "armor-casco",
+  "armor-mascara",
+  "armor-parte-superior",
+  "armor-guantes",
+  "armor-pantalones",
+  "armor-zapatos",
+  "armor-toda-la-armadura",
+] as const;
+
+const groupOrder = new Map<string, number>(GROUP_ORDER.map((id, index) => [id, index]));
+
+export function compareModCatalogItems(left: ShinyModCatalogItem, right: ShinyModCatalogItem) {
+  const groupDifference = (groupOrder.get(left.groupId) ?? 999) - (groupOrder.get(right.groupId) ?? 999);
+  if (groupDifference !== 0) return groupDifference;
+  const nameDifference = left.baseName.localeCompare(right.baseName, "es");
+  if (nameDifference !== 0) return nameDifference;
+  const variantDifference = left.variant.localeCompare(right.variant, "es");
+  if (variantDifference !== 0) return variantDifference;
+  if (left.isCatalogShiny !== right.isCatalogShiny) return left.isCatalogShiny ? 1 : -1;
+  return left.itemId.localeCompare(right.itemId, "es", { numeric: true });
+}
+
+export const SHINY_MOD_CATALOG = [...document.records].sort(compareModCatalogItems);
 export const SHINY_MOD_CATALOG_META = {
   sourceUrl: document.sourceUrl,
   sourceCheckedAt: document.sourceCheckedAt,
@@ -57,13 +93,17 @@ for (const item of SHINY_MOD_CATALOG) {
 }
 
 export const SHINY_MOD_GROUPS = [...groups.values()].sort((left, right) => {
-  if (left.category !== right.category) return left.category === "weapon" ? -1 : 1;
+  const orderDifference = (groupOrder.get(left.id) ?? 999) - (groupOrder.get(right.id) ?? 999);
+  if (orderDifference !== 0) return orderDifference;
   return left.name.localeCompare(right.name, "es");
 });
 
-export function catalogStatusLabel(item: Pick<ShinyModCatalogItem, "system" | "isCatalogShiny">) {
-  if (item.system === "legacy") return "Sistema anterior";
-  return item.isCatalogShiny ? "Shiny 2.0" : "Normal 2.0";
+export function catalogStatusLabel(item: Pick<ShinyModCatalogItem, "levelLabel">) {
+  return item.levelLabel;
+}
+
+export function catalogOriginLabel(item: Pick<ShinyModCatalogItem, "system">) {
+  return item.system === "legacy" ? "Sistema anterior" : "Sistema 2.0";
 }
 
 export function normalizeModSearch(value: string) {
@@ -82,6 +122,7 @@ export function matchesModSearch(item: ShinyModCatalogItem, search: string) {
     item.modType,
     item.groupName,
     catalogStatusLabel(item),
+    catalogOriginLabel(item),
     item.itemId,
   ].join(" "));
   return search.split(/\s+/).filter(Boolean).every((term) => haystack.includes(term));

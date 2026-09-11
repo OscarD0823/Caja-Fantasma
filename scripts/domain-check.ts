@@ -1,22 +1,18 @@
 import assert from "node:assert/strict";
 import catalog from "../catalog/visions.json" with { type: "json" };
-import { BASELINE_BOX_POINTS, VISION_CYCLE_WAIT_STARTED_AT, boxStatistics, buildBreakdown, computeCycle, parseManualBaseline, splitPlatformCarryover, validateCatalog, type BoxRecord, type PointAction, type Settings } from "../src/model.ts";
+import { BASELINE_BOX_POINTS, VISION_CYCLE_WAIT_STARTED_AT, boxStatistics, buildBreakdown, computeCycle, parseManualBaseline, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type PointAction, type Settings } from "../src/model.ts";
 import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesModSearch, normalizeModSearch } from "../src/shinyModsCatalog.ts";
 
 assert.equal(validateCatalog(catalog), true, "El catálogo incluido debe ser válido.");
-assert.equal(catalog.proActivities.find((item) => item.id === "pro-monolith-boss")?.points, 1);
-assert.equal(catalog.proActivities.find((item) => item.id === "pro-silo")?.points, 1);
-assert.equal(catalog.proActivities.find((item) => item.id === "pro-war")?.points, 2);
-assert.equal(catalog.proActivities.find((item) => item.id === "dream-zone-invasion")?.points, 1);
-assert.deepEqual(
-  ["dreamer-light", "dreamer-deep", "dreamer-eternal"].map((id) => catalog.proActivities.find((item) => item.id === id)?.points),
-  [1, 1, 1],
-);
-assert.equal(catalog.boxTargetPoints, 956);
-assert.equal(catalog.visions.find((vision) => vision.id === "gravity")?.activities.find((item) => item.id === "gravity-whale")?.points, 1);
-assert.equal(catalog.visions.find((vision) => vision.id === "gravity")?.activities.find((item) => item.id === "gravity-platforms")?.points, 4);
-assert.equal(catalog.visions.find((vision) => vision.id === "symbiosis")?.enabled, false);
-assert.ok(catalog.visions.find((vision) => vision.id === "symbiosis")?.activities.every((item) => item.points === 0 && !item.enabled));
+for (const id of ["pro-monolith-boss", "pro-silo", "dream-manibus-challenge", "pro-war", "manibus-manibus", "dream-zone-invasion", "dreamer-light", "dreamer-deep", "dreamer-eternal"]) {
+  assert.ok(catalog.proActivities.some((item) => item.id === id), `Falta la recompensa editable ${id}.`);
+}
+for (const visionId of ["lunar", "gravity", "symbiosis"]) {
+  assert.ok(catalog.visions.some((vision) => vision.id === visionId), `Falta la rueda editable ${visionId}.`);
+}
+assert.ok(catalog.boxTargetPoints >= 1 && catalog.boxTargetPoints <= 10_000);
+assert.ok(catalog.proActivities.every((item) => item.points >= 0 && item.points <= 1_000));
+assert.ok(catalog.visions.flatMap((vision) => vision.activities).every((item) => item.points >= 0 && item.points <= 1_000));
 
 const settings: Settings = {
   selectedVisionId: "gravity",
@@ -25,11 +21,13 @@ const settings: Settings = {
   phase: "waiting",
   phaseStartedAt: "2026-09-10T10:00:00.000Z",
   overlayEnabled: true,
-  notificationsEnabled: true,
+  notificationsEnabled: false,
   voiceNotificationsEnabled: true,
   voiceLeadMinutes: 5,
-  timingPresetVersion: 3,
+  timingPresetVersion: 4,
   autoStartEnabled: true,
+  dataResetVersion: 1,
+  sharedTimingUpdatedAt: "2026-09-10T21:52:30.000Z",
 };
 assert.deepEqual(computeCycle(settings, Date.parse("2026-09-10T10:15:00.000Z")).phase, "waiting");
 assert.deepEqual(computeCycle(settings, Date.parse("2026-09-10T10:40:00.000Z")).phase, "active");
@@ -43,6 +41,11 @@ assert.equal(synchronizedSnapshot.phase, "waiting");
 assert.equal(synchronizedSnapshot.remainingMs, 27 * 60_000);
 assert.equal(computeCycle(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 30 * 60_000).phase, "active");
 assert.equal(computeCycle(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 60 * 60_000).phase, "waiting");
+assert.equal(computeCycle(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 24 * 60 * 60_000).phase, "waiting", "El ciclo absoluto debe avanzar aunque el PC haya estado apagado.");
+assert.equal(shouldShowGravityWhale(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 44 * 60_000), false);
+assert.equal(shouldShowGravityWhale(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 45 * 60_000), true);
+assert.equal(shouldShowGravityWhale(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 65 * 60_000), true);
+assert.equal(shouldShowGravityWhale(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 65 * 60_000 + 1), false);
 
 const actions: PointAction[] = [
   { id: "1", activityId: "gravity-whale", activityName: "Ballena", visionId: "gravity", visionName: "Gravedad", points: 1, occurredAt: "2026-09-10T10:00:00Z" },
@@ -103,7 +106,9 @@ const rushHourNormal = SHINY_MOD_CATALOG.find((item) => item.englishName === "Ru
 const rushHourShiny = SHINY_MOD_CATALOG.find((item) => item.englishName === "Rush Hour <Downstar>" && item.isCatalogShiny);
 assert.equal(rushHourNormal?.name, "Hora punta <Estrella descendente>");
 assert.equal(rushHourNormal?.variant, "Estrella Descendente");
+assert.equal(rushHourNormal?.levelLabel, "Nivel 1–17");
 assert.equal(rushHourShiny?.name, "Hora punta <Estrella descendente>");
+assert.equal(rushHourShiny?.levelLabel, "Nivel 17 brillante");
 assert.equal(matchesModSearch(rushHourNormal!, normalizeModSearch("19500542")), true);
 assert.equal(matchesModSearch(rushHourNormal!, normalizeModSearch("hora punta estrella descendente")), true);
 assert.equal(normalizeModSearch("Vórtice de escarcha"), "vortice de escarcha");

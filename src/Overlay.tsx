@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
+import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Box, GripHorizontal, Sparkles, X, Zap } from "lucide-react";
 import type { PersistedState } from "./model";
 import { computeCycle, formatDuration } from "./model";
-import { loadState, saveState } from "./storage";
+import { loadOverlayPosition, loadState, saveOverlayPosition, saveState } from "./storage";
 
 export default function Overlay() {
   const [state, setState] = useState<PersistedState>(() => loadState());
@@ -32,8 +33,24 @@ export default function Overlay() {
     };
   }, []);
 
+  useEffect(() => {
+    const overlayWindow = getCurrentWindow();
+    const savedPosition = loadOverlayPosition();
+    if (savedPosition) void overlayWindow.setPosition(new PhysicalPosition(savedPosition.x, savedPosition.y));
+    let unlisten: (() => void) | undefined;
+    let pendingSave: number | undefined;
+    void overlayWindow.onMoved(({ payload }) => {
+      if (pendingSave !== undefined) window.clearTimeout(pendingSave);
+      pendingSave = window.setTimeout(() => saveOverlayPosition({ x: payload.x, y: payload.y }), 180);
+    }).then((stop) => { unlisten = stop; });
+    return () => {
+      unlisten?.();
+      if (pendingSave !== undefined) window.clearTimeout(pendingSave);
+    };
+  }, []);
+
   return (
-    <div className={`floating-overlay ${cycle.phase}`} onMouseDown={(event) => { if ((event.target as HTMLElement).closest("button")) return; void getCurrentWindow().startDragging(); }}>
+    <div className={`floating-overlay ${cycle.phase} vision-${selectedVision?.id ?? "none"}`} onMouseDown={(event) => { if ((event.target as HTMLElement).closest("button")) return; void getCurrentWindow().startDragging(); }}>
       <div className="overlay-icon">{cycle.phase === "active" ? <Zap size={23} /> : <Box size={23} />}</div>
       <div className="overlay-copy"><span>{cycle.phase === "active" ? `${selectedVision?.name ?? "Rueda"} activa` : `Próxima ${selectedVision?.name ?? "Rueda"}`}</span><strong>{formatDuration(cycle.remainingMs)}</strong></div>
       <Sparkles className="overlay-spark" size={15} />

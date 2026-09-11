@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
-import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Activity as ActivityIcon,
@@ -45,8 +44,8 @@ import {
 } from "lucide-react";
 import CatalogEditor from "./CatalogEditor";
 import AppUpdater from "./Updater";
-import { PHANTOM_CRATE_IMAGE } from "./assets";
-import type { Activity, Catalog, PersistedState, PointAction, ShinyModRecord, Vision } from "./model";
+import { PHANTOM_CRATE_IMAGE, RIFTWALKER_WHALE_IMAGE } from "./assets";
+import type { Activity, Catalog, PersistedState, PointAction, Settings, ShinyModRecord, Vision } from "./model";
 import {
   APP_VERSION,
   AUTHOR,
@@ -60,6 +59,7 @@ import {
   createId,
   formatDuration,
   parseManualBaseline,
+  shouldShowGravityWhale,
   splitPlatformCarryover,
   validateCatalog,
 } from "./model";
@@ -68,6 +68,7 @@ import {
   SHINY_MOD_CATALOG,
   SHINY_MOD_CATALOG_META,
   SHINY_MOD_GROUPS,
+  catalogOriginLabel,
   catalogStatusLabel,
   matchesModSearch,
   normalizeModSearch,
@@ -87,6 +88,23 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.6.0",
+    date: "10 de septiembre de 2026",
+    title: "Módulos organizados por equipo y nivel",
+    items: [
+      "Las armas aparecen agrupadas por estilo y las armaduras por casco, máscara, parte superior, guantes, pantalones y zapatos.",
+      "Cada grupo tiene su propio encabezado y el selector separa claramente ARMAS de ARMADURA.",
+      "Los módulos normales muestran Nivel 1–17 y las versiones Shiny muestran Nivel 17 brillante.",
+      "El nivel antiguo de la fuente dejó de mostrarse como si fuera el nivel actual del módulo.",
+      "El objetivo global cambió a 1.000 puntos y el Desafío de Manibus de Endless Dream ahora suma 1 punto.",
+      "El propietario puede publicar el tiempo exacto de la rueda para que todos los equipos adopten el mismo ciclo absoluto, incluso tras apagar el PC.",
+      "Se desactivaron por completo las notificaciones de escritorio; el aviso hablado de Gravedad permanece disponible.",
+      "La ventana flotante recuerda su última posición y la barra cambia de ambiente para Lunar y Gravedad, incluida la aparición temporal de la Ballena.",
+      "La actualización limpia una sola vez los registros personales anteriores y corrige la validación de GitHub para aceptar valores editados por el propietario.",
+      "La apertura usa la caja completa: el emblema se desplaza hasta la ranura de una esquina antes de revelar el programa.",
+    ],
+  },
   {
     version: "1.5.0",
     date: "10 de septiembre de 2026",
@@ -240,6 +258,7 @@ export default function App() {
   const baselineStats = useMemo(() => boxStatistics([], 0, referencePoints), [referencePoints]);
   const selectedVision = state.catalog.visions.find((vision) => vision.id === state.settings.selectedVisionId) ?? state.catalog.visions[0];
   const cycle = computeCycle(state.settings, now);
+  const showGravityWhale = shouldShowGravityWhale(state.settings, now);
   const target = clampNumber(state.catalog.boxTargetPoints, 1, 10_000);
   const targetProgress = Math.min(100, Math.round((currentPoints / target) * 100));
   const selectedShinyMod = SHINY_MOD_CATALOG.find((item) => item.id === selectedShinyModId) ?? defaultShinyMod;
@@ -251,7 +270,12 @@ export default function App() {
     if (shinySystemFilter === "shiny" && (item.system !== "new" || !item.isCatalogShiny)) return false;
     return matchesModSearch(item, normalizedShinySearch);
   }), [normalizedShinySearch, shinyGroupFilter, shinySystemFilter]);
-  const visibleShinyCatalog = filteredShinyCatalog.slice(0, 150);
+  const visibleItemsPerGroup = shinyGroupFilter !== "all" || normalizedShinySearch ? 150 : 12;
+  const groupedVisibleShinyCatalog = useMemo(() => SHINY_MOD_GROUPS.map((group) => ({
+    ...group,
+    items: filteredShinyCatalog.filter((item) => item.groupId === group.id).slice(0, visibleItemsPerGroup),
+  })).filter((group) => group.items.length > 0), [filteredShinyCatalog, visibleItemsPerGroup]);
+  const visibleShinyCatalogCount = groupedVisibleShinyCatalog.reduce((sum, group) => sum + group.items.length, 0);
   const normalizedRecordSearch = normalizeModSearch(shinyRecordSearch);
   const matchesRecordSearch = (item: ShinyModRecord) => !normalizedRecordSearch || normalizeModSearch(`${item.modName} ${item.englishName ?? ""} ${item.groupName} ${item.variant}`).includes(normalizedRecordSearch);
   const allActiveShinyGoals = state.shinyMods.filter((item) => !item.isShiny);
@@ -296,7 +320,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setIntroVisible(false), 4200);
+    const timer = window.setTimeout(() => setIntroVisible(false), 4600);
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -320,27 +344,6 @@ export default function App() {
   }, [state.settings.overlayEnabled]);
 
   useEffect(() => {
-    if (cycle.phase !== "active" || !state.settings.notificationsEnabled) return;
-    if (state.settings.lastNotificationPhaseStartedAt === state.settings.phaseStartedAt) return;
-
-    const notify = async () => {
-      if (!isTauri()) return;
-      let permitted = await isPermissionGranted();
-      if (!permitted) permitted = (await requestPermission()) === "granted";
-      if (!permitted) return;
-      sendNotification({
-        title: `Rueda Visional activa · ${selectedVision?.name ?? "Visión"}`,
-        body: `El evento acaba de comenzar. Termina en ${formatDuration(cycle.remainingMs)}.`,
-      });
-      commitState((current) => ({
-        ...current,
-        settings: { ...current.settings, lastNotificationPhaseStartedAt: current.settings.phaseStartedAt },
-      }));
-    };
-    void notify();
-  }, [commitState, cycle.phase, cycle.remainingMs, selectedVision?.name, state.settings.lastNotificationPhaseStartedAt, state.settings.notificationsEnabled, state.settings.phaseStartedAt]);
-
-  useEffect(() => {
     const leadMinutes = clampNumber(state.settings.voiceLeadMinutes, 1, 60);
     const phaseKey = state.settings.phaseStartedAt;
     if (cycle.phase !== "waiting" || selectedVision?.id !== "gravity" || !state.settings.voiceNotificationsEnabled) return;
@@ -355,14 +358,7 @@ export default function App() {
       settings: { ...current.settings, lastVoiceAlertPhaseStartedAt: phaseKey },
     }));
 
-    if (isTauri() && state.settings.notificationsEnabled) {
-      void (async () => {
-        let permitted = await isPermissionGranted();
-        if (!permitted) permitted = (await requestPermission()) === "granted";
-        if (permitted) sendNotification({ title: "Gravedad comenzará pronto", body: message });
-      })();
-    }
-  }, [commitState, cycle.phase, cycle.remainingMs, selectedVision?.id, state.settings.lastVoiceAlertPhaseStartedAt, state.settings.notificationsEnabled, state.settings.phaseStartedAt, state.settings.voiceLeadMinutes, state.settings.voiceNotificationsEnabled]);
+  }, [commitState, cycle.phase, cycle.remainingMs, selectedVision?.id, state.settings.lastVoiceAlertPhaseStartedAt, state.settings.phaseStartedAt, state.settings.voiceLeadMinutes, state.settings.voiceNotificationsEnabled]);
 
   const syncCatalog = useCallback(async (silent = false) => {
     if (!silent) setSyncStatus("Buscando catálogo público…");
@@ -373,9 +369,27 @@ export default function App() {
       if (!validateCatalog(catalog)) throw new Error("formato no válido");
       setState((current) => {
         if (catalog.catalogVersion <= current.catalog.catalogVersion) return current;
-        return { ...current, catalog };
+        const timing = catalog.eventTiming;
+        const appliedTiming = Date.parse(current.settings.sharedTimingUpdatedAt ?? "");
+        const remoteTiming = Date.parse(timing?.updatedAt ?? "");
+        if (!timing || !catalog.visions.some((vision) => vision.id === timing.selectedVisionId) || (Number.isFinite(appliedTiming) && remoteTiming <= appliedTiming)) return { ...current, catalog };
+        return {
+          ...current,
+          catalog,
+          settings: {
+            ...current.settings,
+            selectedVisionId: timing.selectedVisionId,
+            waitMinutes: timing.waitMinutes,
+            activeMinutes: timing.activeMinutes,
+            phaseStartedAt: timing.phaseStartedAt,
+            phase: timing.phase,
+            lastNotificationPhaseStartedAt: undefined,
+            lastVoiceAlertPhaseStartedAt: undefined,
+            sharedTimingUpdatedAt: timing.updatedAt,
+          },
+        };
       });
-      setSyncStatus(`Catálogo público v${catalog.catalogVersion} comprobado`);
+      setSyncStatus("Catálogo público comprobado");
     } catch (error) {
       setSyncStatus(`Sin conexión · usando catálogo local`);
       if (!silent) console.info("No se pudo sincronizar el catálogo", error);
@@ -582,6 +596,67 @@ export default function App() {
     return message;
   }, []);
 
+  const buildCountdownSettings = (): { settings: Settings; timestamp: number } | undefined => {
+    const minutes = Math.max(0, Math.floor(Number(counterMinutes) || 0));
+    const seconds = clampNumber(Math.floor(Number(counterSeconds) || 0), 0, 59);
+    const durationMinutes = counterPhase === "active" ? state.settings.activeMinutes : state.settings.waitMinutes;
+    const durationMs = durationMinutes * 60_000;
+    const requestedMs = (minutes * 60 + seconds) * 1000;
+    if (requestedMs < 1000 || requestedMs > durationMs) {
+      setToast(`El tiempo debe estar entre 00:01 y ${formatDuration(durationMs)}`);
+      window.setTimeout(() => setToast(""), 3000);
+      return undefined;
+    }
+    const timestamp = Date.now();
+    return {
+      timestamp,
+      settings: {
+        ...state.settings,
+        phase: counterPhase,
+        phaseStartedAt: new Date(timestamp - (durationMs - requestedMs)).toISOString(),
+        lastNotificationPhaseStartedAt: undefined,
+        lastVoiceAlertPhaseStartedAt: undefined,
+      },
+    };
+  };
+
+  const publishSharedCountdown = async () => {
+    if (creatorAccess !== "granted") {
+      setToast("Solo la cuenta propietaria puede sincronizar el contador para todos");
+      window.setTimeout(() => setToast(""), 3000);
+      return;
+    }
+    const synchronized = buildCountdownSettings();
+    if (!synchronized) return;
+    const updatedAt = new Date(synchronized.timestamp).toISOString();
+    const sharedSettings = { ...synchronized.settings, sharedTimingUpdatedAt: updatedAt };
+    const catalog: Catalog = {
+      ...state.catalog,
+      catalogVersion: state.catalog.catalogVersion + 1,
+      updatedAt,
+      updatedBy: AUTHOR,
+      eventTiming: {
+        selectedVisionId: sharedSettings.selectedVisionId,
+        waitMinutes: sharedSettings.waitMinutes,
+        activeMinutes: sharedSettings.activeMinutes,
+        phaseStartedAt: sharedSettings.phaseStartedAt,
+        phase: sharedSettings.phase,
+        updatedAt,
+        updatedBy: AUTHOR,
+      },
+    };
+    try {
+      setToast("Publicando contador para todos…");
+      const message = await publishCatalog(catalog);
+      commitState((current) => ({ ...current, catalog, settings: sharedSettings }));
+      setNow(synchronized.timestamp);
+      setToast(message);
+    } catch (error) {
+      setToast(error instanceof Error ? error.message : String(error));
+    }
+    window.setTimeout(() => setToast(""), 3600);
+  };
+
   const toggleAutostart = async (enabled: boolean) => {
     if (!isTauri()) return;
     if (enabled) await enable();
@@ -642,8 +717,9 @@ export default function App() {
       </aside>
 
       <main>
-        <header className="topbar">
-          <div>
+        <header className={`topbar vision-${selectedVision?.id ?? "none"} ${cycle.phase}`}>
+          <VisionAtmosphere visionId={selectedVision?.id} active={cycle.phase === "active"} showWhale={showGravityWhale} />
+          <div className="topbar-copy">
             <span className="eyebrow">{tab === "progress" ? "SEGUIMIENTO ACTUAL" : tab === "vision" ? "RUEDA VISIONAL" : tab === "history" ? "REGISTRO PERSONAL" : tab === "shiny" ? "COLECCIÓN DE MÓDULOS" : tab === "changes" ? "NOVEDADES" : "PREFERENCIAS"}</span>
             <h1>{TABS.find((item) => item.id === tab)?.label}</h1>
           </div>
@@ -743,7 +819,8 @@ export default function App() {
                   <span>:</span>
                   <label>Segundos<input type="number" min={0} max={59} value={counterSeconds} onChange={(event) => setCounterSeconds(event.target.value)} /></label>
                 </div>
-                <button type="button" className="primary" onClick={synchronizeCountdown}><Save size={17} /> Aplicar tiempo</button>
+                <button type="button" className="primary" onClick={synchronizeCountdown}><Save size={17} /> Aplicar en este PC</button>
+                <button type="button" className="secondary shared-counter-button" disabled={creatorAccess !== "granted"} onClick={() => void publishSharedCountdown()}><Upload size={17} /> Sincronizar con todos</button>
               </div>
               <small className="counter-anchor-note">Sincronización inicial: Gravedad terminó a las 4:52:30 p. m. de Colombia el 10 de septiembre de 2026.</small>
             </article>
@@ -817,28 +894,28 @@ export default function App() {
 
             <article className="shiny-rule panel">
               <div className="shiny-rule-icon"><Gem /></div>
-              <div><span className="eyebrow">CÓMO FUNCIONA</span><h2>Cada fallo suma un intento</h2><p>Cuando ya tienes un módulo nivel 17, obtener otro nivel 17 del mismo módulo puede convertirlo aleatoriamente en Shiny. Los 1.825 registros del catálogo se pueden añadir al seguimiento. Pulsa “Otro +17 no se convirtió” después de cada fallo; cuando salga, márcalo como conseguido.</p></div>
+              <div><span className="eyebrow">CÓMO FUNCIONA</span><h2>Del nivel 1 al 17, después brillante</h2><p>Todos los módulos progresan del nivel 1 al 17. Cuando ya tienes uno en nivel 17, otro igual puede convertirse en su versión Shiny, mostrada como “Nivel 17 brillante”. Pulsa “Otro +17 no se convirtió” después de cada fallo; cuando salga, márcalo como conseguido.</p></div>
             </article>
 
             <article className="shiny-catalog-panel panel">
               <div className="panel-title"><div><span className="eyebrow"><Search size={15} /> CATÁLOGO DE MÓDULOS</span><h2>Buscar y agregar un objetivo exacto</h2></div><span className="catalog-count">{SHINY_MOD_CATALOG.length.toLocaleString("es-CO")} registros</span></div>
               <div className="shiny-search-controls">
                 <label className="shiny-search-field">Buscar nombre, variante, estilo o ID<div><Search size={16} /><input value={shinySearch} onChange={(event) => setShinySearch(event.target.value)} placeholder="Ejemplo: Hora punta, Downstar o 19500542" /></div></label>
-                <label>Estilo o pieza<select value={shinyGroupFilter} onChange={(event) => setShinyGroupFilter(event.target.value)}><option value="all">Todos los estilos y piezas</option>{SHINY_MOD_GROUPS.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} ({entry.count})</option>)}</select></label>
-                <label>Sistema de origen<select value={shinySystemFilter} onChange={(event) => setShinySystemFilter(event.target.value)}><option value="all">Todos ({SHINY_MOD_CATALOG_META.total.toLocaleString("es-CO")})</option><option value="legacy">Sistema anterior ({SHINY_MOD_CATALOG_META.legacy})</option><option value="normal">Normal 2.0 ({SHINY_MOD_CATALOG_META.normal})</option><option value="shiny">Shiny 2.0 ({SHINY_MOD_CATALOG_META.shiny})</option></select></label>
+                <label>Estilo o pieza<select value={shinyGroupFilter} onChange={(event) => setShinyGroupFilter(event.target.value)}><option value="all">Todas las armas y armaduras</option><optgroup label="ARMAS">{SHINY_MOD_GROUPS.filter((entry) => entry.category === "weapon").map((entry) => <option key={entry.id} value={entry.id}>{entry.name.replace("Arma · ", "")} ({entry.count})</option>)}</optgroup><optgroup label="ARMADURA">{SHINY_MOD_GROUPS.filter((entry) => entry.category === "armor").map((entry) => <option key={entry.id} value={entry.id}>{entry.name.replace("Armadura · ", "")} ({entry.count})</option>)}</optgroup></select></label>
+                <label>Nivel y sistema<select value={shinySystemFilter} onChange={(event) => setShinySystemFilter(event.target.value)}><option value="all">Todos ({SHINY_MOD_CATALOG_META.total.toLocaleString("es-CO")})</option><option value="legacy">Nivel 1–17 · anterior ({SHINY_MOD_CATALOG_META.legacy})</option><option value="normal">Nivel 1–17 · sistema 2.0 ({SHINY_MOD_CATALOG_META.normal})</option><option value="shiny">Nivel 17 brillante ({SHINY_MOD_CATALOG_META.shiny})</option></select></label>
               </div>
-              <div className="shiny-result-summary"><span>{filteredShinyCatalog.length.toLocaleString("es-CO")} coincidencias</span>{filteredShinyCatalog.length > visibleShinyCatalog.length && <small>Se muestran las primeras {visibleShinyCatalog.length}. Escribe más datos para precisar la búsqueda.</small>}</div>
+              <div className="shiny-result-summary"><span>{filteredShinyCatalog.length.toLocaleString("es-CO")} coincidencias en {groupedVisibleShinyCatalog.length} grupos</span>{filteredShinyCatalog.length > visibleShinyCatalogCount && <small>Se muestran {visibleShinyCatalogCount}. Elige una pieza, estilo o escribe una búsqueda para ver más.</small>}</div>
               <div className="shiny-catalog-results">
-                {visibleShinyCatalog.map((item) => <button type="button" key={item.id} className={selectedShinyMod.id === item.id ? "selected" : ""} onClick={() => chooseShinyMod(item)}><span>{item.groupName} · {catalogStatusLabel(item)}</span><strong>{item.name}</strong><small>{item.englishName} · ID {item.itemId}</small>{selectedShinyMod.id === item.id && <Check size={16} />}</button>)}
+                {groupedVisibleShinyCatalog.map((group) => <section className="shiny-result-group" key={group.id}><header><strong>{group.name}</strong><small>{group.items.length} mostrados de {filteredShinyCatalog.filter((item) => item.groupId === group.id).length}</small></header><div className="shiny-result-group-grid">{group.items.map((item) => <button type="button" key={item.id} className={selectedShinyMod.id === item.id ? "selected" : ""} onClick={() => chooseShinyMod(item)}><span>{catalogStatusLabel(item)}</span><strong>{item.name}</strong><small>{catalogOriginLabel(item)} · ID {item.itemId}</small>{selectedShinyMod.id === item.id && <Check size={16} />}</button>)}</div></section>)}
                 {filteredShinyCatalog.length === 0 && <div className="shiny-no-results"><Search size={23} /><span>No aparece en el catálogo. Puedes agregar el nombre escrito como personalizado.</span></div>}
               </div>
               <div className="shiny-selection">
-                <div><span>MÓDULO SELECCIONADO</span><strong>{selectedShinyMod.name}</strong><small>{selectedShinyMod.groupName} · {catalogStatusLabel(selectedShinyMod)} · ID {selectedShinyMod.itemId}</small></div>
-                <div className="shiny-selected-variant"><span>VARIANTE EXACTA</span><strong>{selectedShinyMod.variant}</strong><small>{selectedShinyMod.englishName}</small></div>
+                <div><span>MÓDULO SELECCIONADO</span><strong>{selectedShinyMod.name}</strong><small>{selectedShinyMod.groupName} · {catalogOriginLabel(selectedShinyMod)} · ID {selectedShinyMod.itemId}</small></div>
+                <div className={`shiny-selected-variant ${selectedShinyMod.isCatalogShiny ? "bright" : ""}`}><span>{catalogStatusLabel(selectedShinyMod)}</span><strong>{selectedShinyMod.variant}</strong><small>{selectedShinyMod.englishName}</small></div>
                 <button type="button" className="primary" onClick={() => addShinyTracker()}><Plus size={17} /> Empezar en 0</button>
                 <button type="button" className="secondary" disabled={!shinySearch.trim()} onClick={() => addShinyTracker(shinySearch)}><Plus size={17} /> Agregar nombre escrito</button>
               </div>
-              <p className="catalog-source-note">Cobertura exacta verificada: {SHINY_MOD_CATALOG_META.legacy} registros del sistema anterior, {SHINY_MOD_CATALOG_META.normal} normales 2.0 y {SHINY_MOD_CATALOG_META.shiny} Shiny 2.0. La clasificación de origen solo ayuda a buscar: cualquiera se puede registrar y marcar como conseguido.</p>
+              <p className="catalog-source-note">Los {SHINY_MOD_CATALOG_META.total.toLocaleString("es-CO")} registros están ordenados por tipo de arma o pieza de armadura. Los normales cubren niveles 1–17; los {SHINY_MOD_CATALOG_META.shiny} registros brillantes representan el estado Shiny de nivel 17.</p>
             </article>
 
             <label className="shiny-search-field shiny-record-search">Buscar en mi registro<div><Search size={16} /><input value={shinyRecordSearch} onChange={(event) => setShinyRecordSearch(event.target.value)} placeholder="Buscar entre objetivos e historial Shiny" /></div></label>
@@ -866,7 +943,7 @@ export default function App() {
               <article className="settings-card panel">
                 <div className="settings-icon"><Clock3 /></div><div><h3>Duración del ciclo</h3><p>Define cuánto espera la rueda para empezar y cuánto permanece activa.</p><div className="field-row"><label>Espera (minutos)<input type="number" min={1} max={525600} value={state.settings.waitMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, waitMinutes: clampNumber(Number(event.target.value), 1, 525600), phaseStartedAt: new Date().toISOString() } }))} /></label><label>Activa (minutos)<input type="number" min={1} max={525600} value={state.settings.activeMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, activeMinutes: clampNumber(Number(event.target.value), 1, 525600), phaseStartedAt: new Date().toISOString() } }))} /></label></div></div>
               </article>
-              <SettingToggle icon={Bell} title="Recordatorios" description="Muestra un aviso de Windows cada vez que comienza la fase activa." enabled={state.settings.notificationsEnabled} onToggle={() => commitState((current) => ({ ...current, settings: { ...current.settings, notificationsEnabled: !current.settings.notificationsEnabled } }))} />
+              <article className="settings-card panel setting-disabled"><div className="settings-icon"><Bell /></div><div><h3>Notificaciones de escritorio</h3><p>Desactivadas en esta versión. Gravedad puede seguir avisando mediante voz.</p><span className="disabled-setting-badge">DESACTIVADAS</span></div></article>
               <article className="settings-card voice-settings panel">
                 <div className="settings-icon"><Volume2 /></div><div><h3>Aviso por voz · Gravedad</h3><p>Habla antes de que empiece el evento aunque la aplicación esté minimizada.</p><div className="voice-controls"><label>Anticipación (minutos)<input type="number" min={1} max={60} value={state.settings.voiceLeadMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, voiceLeadMinutes: clampNumber(Number(event.target.value), 1, 60), lastVoiceAlertPhaseStartedAt: undefined } }))} /></label><button type="button" className="secondary compact" onClick={() => { speakMessage("Prueba de voz. El aviso de Gravedad está funcionando."); setToast("Prueba de voz reproducida"); window.setTimeout(() => setToast(""), 1800); }}><Volume2 size={15} /> Probar voz</button></div></div><button type="button" className={`switch ${state.settings.voiceNotificationsEnabled ? "on" : ""}`} aria-pressed={state.settings.voiceNotificationsEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, voiceNotificationsEnabled: !current.settings.voiceNotificationsEnabled } }))}><span /></button>
               </article>
@@ -906,14 +983,23 @@ function StartupIntro({ onSkip }: { onSkip: () => void }) {
   return <button type="button" className="startup-intro" onClick={onSkip} aria-label="Omitir animación de apertura">
     <span className="intro-aura" />
     <span className="intro-crate" aria-hidden="true">
-      <img className="intro-card-bottom" src={PHANTOM_CRATE_IMAGE} alt="" />
-      <span className="intro-card-top"><img src={PHANTOM_CRATE_IMAGE} alt="" /></span>
-      <span className="intro-lock"><GameLogoMark /></span>
+      <img className="intro-crate-image" src={PHANTOM_CRATE_IMAGE} alt="" />
+      <span className="intro-corner-slot" />
+      <span className="intro-key-logo"><GameLogoMark /></span>
       <span className="intro-light" />
     </span>
     <span className="intro-title"><strong>CAJA FANTASMA</strong><small>ONCE HUMAN</small></span>
     <span className="intro-hint">Pulsa para continuar</span>
   </button>;
+}
+
+function VisionAtmosphere({ visionId, active, showWhale }: { visionId?: string; active: boolean; showWhale: boolean }) {
+  return <div className="vision-atmosphere" aria-hidden="true">
+    <span className="vision-moon" />
+    {visionId === "lunar" && active && <span className="lunar-players"><i /><i /><i /></span>}
+    {visionId === "gravity" && active && <span className="gravity-floaters"><i /><i /><i /><i /></span>}
+    {showWhale && <img className="topbar-whale" src={RIFTWALKER_WHALE_IMAGE} alt="" />}
+  </div>;
 }
 
 function ActivityCard({ activity, count, disabled = false, onAdd, onRemove }: { activity: Activity; count: number; disabled?: boolean; onAdd: () => void; onRemove: () => void }) {

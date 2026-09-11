@@ -1,9 +1,18 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": 6,
-  "updatedAt": "2026-09-10T23:45:46.607Z",
+  "catalogVersion": 7,
+  "updatedAt": "2026-09-11T02:50:30.174Z",
   "updatedBy": "OscarD0823",
-  "boxTargetPoints": 956,
+  "boxTargetPoints": 1000,
+  "eventTiming": {
+    "selectedVisionId": "gravity",
+    "waitMinutes": 30,
+    "activeMinutes": 30,
+    "phaseStartedAt": "2026-09-10T21:52:30.000Z",
+    "phase": "waiting",
+    "updatedAt": "2026-09-11T02:50:30.174Z",
+    "updatedBy": "OscarD0823"
+  },
   "proActivities": [
     {
       "id": "pro-monolith-boss",
@@ -22,7 +31,7 @@
     {
       "id": "dream-manibus-challenge",
       "name": "Desafío de Manibus · Endless Dream",
-      "points": 2,
+      "points": 1,
       "enabled": true,
       "note": "Recompensa completa del desafío."
     },
@@ -103,7 +112,7 @@
       "id": "symbiosis",
       "name": "Simbiosis",
       "enabled": false,
-      "description": "Evento desactivado. Sus opciones se conservan sin puntos.",
+      "description": "Evento desactivado. Sus opciones quedan disponibles para futuras configuraciones.",
       "activities": [
         {
           "id": "symbiosis-spider",

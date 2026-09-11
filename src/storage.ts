@@ -3,6 +3,10 @@ import type { Catalog, PersistedState, ShinyModRecord } from "./model";
 import { VISION_CYCLE_WAIT_STARTED_AT, validateCatalog } from "./model";
 
 const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
+const OVERLAY_POSITION_KEY = "caja-fantasma.once-human.overlay-position.v1";
+const CURRENT_DATA_RESET_VERSION = 1;
+
+export type OverlayPosition = { x: number; y: number };
 
 function sanitizeShinyMods(value: unknown): ShinyModRecord[] {
   if (!Array.isArray(value)) return [];
@@ -40,11 +44,13 @@ export function initialState(): PersistedState {
       phaseStartedAt: VISION_CYCLE_WAIT_STARTED_AT,
       phase: "waiting",
       overlayEnabled: false,
-      notificationsEnabled: true,
+      notificationsEnabled: false,
       voiceNotificationsEnabled: true,
       voiceLeadMinutes: 5,
-      timingPresetVersion: 3,
+      timingPresetVersion: 4,
       autoStartEnabled: true,
+      sharedTimingUpdatedAt: (defaultCatalog as Catalog).eventTiming?.updatedAt,
+      dataResetVersion: CURRENT_DATA_RESET_VERSION,
     },
   };
 }
@@ -54,25 +60,32 @@ export function loadState(): PersistedState {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as Partial<PersistedState> | null;
     if (!parsed || parsed.schemaVersion !== 1 || !validateCatalog(parsed.catalog)) return initialState();
     const fresh = initialState();
-    const settings = { ...fresh.settings, ...(parsed.settings ?? {}) };
-    if ((parsed.settings?.timingPresetVersion ?? 0) < 3) {
-      settings.waitMinutes = 30;
-      settings.activeMinutes = 30;
-      settings.phase = "waiting";
-      settings.phaseStartedAt = VISION_CYCLE_WAIT_STARTED_AT;
+    const settings = { ...fresh.settings, ...(parsed.settings ?? {}), notificationsEnabled: false };
+    if ((parsed.settings?.timingPresetVersion ?? 0) < 4) {
+      const timing = fresh.catalog.eventTiming;
+      settings.selectedVisionId = timing?.selectedVisionId ?? "gravity";
+      settings.waitMinutes = timing?.waitMinutes ?? 30;
+      settings.activeMinutes = timing?.activeMinutes ?? 30;
+      settings.phase = timing?.phase ?? "waiting";
+      settings.phaseStartedAt = timing?.phaseStartedAt ?? VISION_CYCLE_WAIT_STARTED_AT;
       settings.lastNotificationPhaseStartedAt = undefined;
       settings.lastVoiceAlertPhaseStartedAt = undefined;
-      settings.timingPresetVersion = 3;
+      settings.sharedTimingUpdatedAt = timing?.updatedAt;
+      settings.timingPresetVersion = 4;
     }
+    const mustClearPreviousRecords = (parsed.settings?.dataResetVersion ?? 0) < CURRENT_DATA_RESET_VERSION;
+    settings.dataResetVersion = CURRENT_DATA_RESET_VERSION;
+    const catalog = parsed.catalog.catalogVersion >= fresh.catalog.catalogVersion ? parsed.catalog : fresh.catalog;
     return {
       ...fresh,
       ...parsed,
-      actions: Array.isArray(parsed.actions) ? parsed.actions : [],
-      boxes: Array.isArray(parsed.boxes) ? parsed.boxes : [],
-      manualBaselinePoints: Array.isArray(parsed.manualBaselinePoints)
+      catalog,
+      actions: mustClearPreviousRecords ? [] : Array.isArray(parsed.actions) ? parsed.actions : [],
+      boxes: mustClearPreviousRecords ? [] : Array.isArray(parsed.boxes) ? parsed.boxes : [],
+      manualBaselinePoints: mustClearPreviousRecords ? [] : Array.isArray(parsed.manualBaselinePoints)
         ? parsed.manualBaselinePoints.filter((value) => Number.isFinite(value) && value > 0 && value <= 10_000).map(Math.round).slice(0, 500)
         : [],
-      shinyMods: sanitizeShinyMods(parsed.shinyMods),
+      shinyMods: mustClearPreviousRecords ? [] : sanitizeShinyMods(parsed.shinyMods),
       settings,
     };
   } catch {
@@ -83,6 +96,22 @@ export function loadState(): PersistedState {
 export function saveState(state: PersistedState) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   window.dispatchEvent(new CustomEvent("caja-fantasma-state", { detail: state }));
+}
+
+export function loadOverlayPosition(): OverlayPosition | undefined {
+  try {
+    const value = JSON.parse(localStorage.getItem(OVERLAY_POSITION_KEY) ?? "null") as Partial<OverlayPosition> | null;
+    if (!value || !Number.isFinite(value.x) || !Number.isFinite(value.y)) return undefined;
+    if (Math.abs(value.x!) > 100_000 || Math.abs(value.y!) > 100_000) return undefined;
+    return { x: Math.round(value.x!), y: Math.round(value.y!) };
+  } catch {
+    return undefined;
+  }
+}
+
+export function saveOverlayPosition(position: OverlayPosition) {
+  if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return;
+  localStorage.setItem(OVERLAY_POSITION_KEY, JSON.stringify({ x: Math.round(position.x), y: Math.round(position.y) }));
 }
 
 export function exportState(state: PersistedState) {
@@ -109,6 +138,6 @@ export function importState(text: string) {
       ? parsed.manualBaselinePoints.filter((value) => Number.isFinite(value) && value > 0 && value <= 10_000).map(Math.round).slice(0, 500)
       : [],
     shinyMods: sanitizeShinyMods(parsed.shinyMods),
-    settings: { ...fresh.settings, ...(parsed.settings ?? {}) },
+    settings: { ...fresh.settings, ...(parsed.settings ?? {}), notificationsEnabled: false, dataResetVersion: CURRENT_DATA_RESET_VERSION },
   };
 }
