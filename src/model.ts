@@ -86,6 +86,7 @@ export type Settings = {
   phaseStartedAt: string;
   phase: "waiting" | "active";
   overlayEnabled: boolean;
+  overlayScale: number;
   notificationsEnabled: boolean;
   voiceNotificationsEnabled: boolean;
   voiceLeadMinutes: number;
@@ -126,7 +127,7 @@ export type GravityWhaleSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.8.0";
+export const APP_VERSION = "1.9.0";
 export const AUTHOR = "OscarD0823";
 export const DEFAULT_CHARACTER_ID = "character-main";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
@@ -217,6 +218,12 @@ export function shouldShowGravityWhale(settings: Settings, now = Date.now()) {
   }
   const elapsedWaitingMs = clampNumber(settings.waitMinutes, 1, 525_600) * 60_000 - cycle.remainingMs;
   return elapsedWaitingMs <= 5 * 60_000;
+}
+
+export function sharedVisionId(catalog: Catalog, fallback = "gravity") {
+  const selectedId = catalog.eventTiming?.selectedVisionId;
+  if (selectedId && catalog.visions.some((vision) => vision.id === selectedId && vision.enabled)) return selectedId;
+  return catalog.visions.find((vision) => vision.enabled)?.id ?? fallback;
 }
 
 export function computeGravityWhale(settings: Settings, now = Date.now()): GravityWhaleSnapshot {
@@ -339,5 +346,6 @@ export function validateCatalog(value: unknown): value is Catalog {
     && catalog.proActivities.every(validActivity)
     && Array.isArray(catalog.visions)
     && catalog.visions.every((vision) => vision && typeof vision.id === "string" && typeof vision.name === "string" && typeof vision.enabled === "boolean" && Array.isArray(vision.activities) && vision.activities.every(validActivity))
+    && (timing === undefined || catalog.visions.some((vision) => vision.id === timing.selectedVisionId && vision.enabled))
     && validTiming;
 }

@@ -1,6 +1,6 @@
 import defaultCatalog from "../catalog/visions.json";
 import type { Catalog, CharacterProfile, PersistedState, ShinyModRecord } from "./model";
-import { VISION_CYCLE_WAIT_STARTED_AT, createInitialCharacterTracking, validateCatalog } from "./model";
+import { VISION_CYCLE_WAIT_STARTED_AT, clampNumber, createInitialCharacterTracking, sharedVisionId, validateCatalog } from "./model";
 
 const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
 const OVERLAY_POSITION_KEY = "caja-fantasma.once-human.overlay-position.v1";
@@ -70,12 +70,13 @@ export function initialState(): PersistedState {
     shinyMods: [],
     ...createInitialCharacterTracking(),
     settings: {
-      selectedVisionId: "gravity",
+      selectedVisionId: sharedVisionId(defaultCatalog as Catalog),
       waitMinutes: 30,
       activeMinutes: 30,
       phaseStartedAt: VISION_CYCLE_WAIT_STARTED_AT,
       phase: "waiting",
       overlayEnabled: false,
+      overlayScale: 1,
       notificationsEnabled: false,
       voiceNotificationsEnabled: true,
       voiceLeadMinutes: 5,
@@ -108,6 +109,8 @@ export function loadState(): PersistedState {
     const mustClearPreviousRecords = (parsed.settings?.dataResetVersion ?? 0) < CURRENT_DATA_RESET_VERSION;
     settings.dataResetVersion = CURRENT_DATA_RESET_VERSION;
     const catalog = parsed.catalog.catalogVersion >= fresh.catalog.catalogVersion ? parsed.catalog : fresh.catalog;
+    settings.selectedVisionId = sharedVisionId(catalog, settings.selectedVisionId);
+    settings.overlayScale = clampNumber(Number(settings.overlayScale) || 1, .7, 1.5);
     const characters = characterState(parsed, fresh);
     return {
       ...fresh,
@@ -164,6 +167,7 @@ export function importState(text: string) {
   }
   const fresh = initialState();
   const characters = characterState(parsed, fresh);
+  const catalog = parsed.catalog as Catalog;
   return {
     ...fresh,
     ...parsed,
@@ -174,6 +178,6 @@ export function importState(text: string) {
       : [],
     shinyMods: sanitizeShinyMods(parsed.shinyMods),
     ...characters,
-    settings: { ...fresh.settings, ...(parsed.settings ?? {}), notificationsEnabled: false, dataResetVersion: CURRENT_DATA_RESET_VERSION },
+    settings: { ...fresh.settings, ...(parsed.settings ?? {}), selectedVisionId: sharedVisionId(catalog), overlayScale: clampNumber(Number(parsed.settings?.overlayScale) || 1, .7, 1.5), notificationsEnabled: false, dataResetVersion: CURRENT_DATA_RESET_VERSION },
   };
 }

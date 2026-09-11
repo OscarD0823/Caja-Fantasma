@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Github, Plus, Save, Trash2, UploadCloud } from "lucide-react";
+import { Check, Github, Plus, RadioTower, Save, Trash2, UploadCloud } from "lucide-react";
 import type { Activity, Catalog, Vision } from "./model";
 import { AUTHOR, clampNumber, createId } from "./model";
 
@@ -57,6 +57,23 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
 
   const removeVision = (visionId: string) => change((current) => ({ ...current, visions: current.visions.filter((vision) => vision.id !== visionId) }));
 
+  const selectPublicVision = (visionId: string) => change((current) => {
+    const updatedAt = new Date().toISOString();
+    const timing = current.eventTiming;
+    return {
+      ...current,
+      eventTiming: {
+        selectedVisionId: visionId,
+        waitMinutes: timing?.waitMinutes ?? 30,
+        activeMinutes: timing?.activeMinutes ?? 30,
+        phaseStartedAt: timing?.phaseStartedAt ?? updatedAt,
+        phase: timing?.phase ?? "waiting",
+        updatedAt,
+        updatedBy: AUTHOR,
+      },
+    };
+  });
+
   const prepareVersion = useCallback(() => ({
     ...draft,
     catalogVersion: Math.max(catalog.catalogVersion + 1, draft.catalogVersion),
@@ -112,16 +129,26 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
       </div>
       {status && <div className={`catalog-status ${status.toLowerCase().includes("error") || status.toLowerCase().includes("no ") ? "error" : ""}`}><Github size={16} />{status}</div>}
 
+      <section className="admin-vision-picker">
+        <div><span className="eyebrow"><RadioTower size={15} /> CONTROL PÚBLICO</span><h3>Rueda seleccionada para todos</h3><p>Solo la cuenta propietaria puede cambiarla. Al publicarse, reemplaza la selección local de los demás equipos.</p></div>
+        <div className="admin-vision-options">
+          {draft.visions.map((vision) => {
+            const selected = draft.eventTiming?.selectedVisionId === vision.id;
+            return <button key={vision.id} type="button" disabled={!vision.enabled} className={selected ? "selected" : ""} onClick={() => selectPublicVision(vision.id)}><span>{vision.enabled ? "Disponible" : "Desactivada"}</span><strong>{vision.name}</strong>{selected && <Check size={16} />}</button>;
+          })}
+        </div>
+      </section>
+
       <EditorGroup title="Recompensas Pro" subtitle={`${draft.proActivities.length} opciones`} onAdd={() => addActivity("pro")}>
         {draft.proActivities.map((activity) => <ActivityEditor key={activity.id} activity={activity} onChange={(patch) => updateActivity("pro", activity.id, patch)} onRemove={() => removeActivity("pro", activity.id)} />)}
       </EditorGroup>
 
       {draft.visions.map((vision) => (
-        <EditorGroup key={vision.id} title={vision.name} subtitle={vision.enabled ? "Activa" : "Desactivada"} onAdd={() => addActivity(vision.id)} onRemove={() => removeVision(vision.id)}>
+        <EditorGroup key={vision.id} title={vision.name} subtitle={vision.enabled ? "Activa" : "Desactivada"} onAdd={() => addActivity(vision.id)} onRemove={draft.eventTiming?.selectedVisionId === vision.id ? undefined : () => removeVision(vision.id)}>
           <div className="vision-edit-fields">
             <label>Nombre<input value={vision.name} onChange={(event) => change((current) => ({ ...current, visions: current.visions.map((item) => item.id === vision.id ? { ...item, name: event.target.value } : item) }))} /></label>
             <label>Descripción<input value={vision.description} onChange={(event) => change((current) => ({ ...current, visions: current.visions.map((item) => item.id === vision.id ? { ...item, description: event.target.value } : item) }))} /></label>
-            <label className="check-field"><input type="checkbox" checked={vision.enabled} onChange={(event) => change((current) => ({ ...current, visions: current.visions.map((item) => item.id === vision.id ? { ...item, enabled: event.target.checked } : item) }))} /> <span>{vision.enabled ? <Check size={15} /> : null}Evento habilitado</span></label>
+            <label className="check-field" title={draft.eventTiming?.selectedVisionId === vision.id ? "Selecciona otra rueda pública antes de desactivar esta." : undefined}><input type="checkbox" disabled={draft.eventTiming?.selectedVisionId === vision.id} checked={vision.enabled} onChange={(event) => change((current) => ({ ...current, visions: current.visions.map((item) => item.id === vision.id ? { ...item, enabled: event.target.checked } : item) }))} /> <span>{vision.enabled ? <Check size={15} /> : null}Evento habilitado</span></label>
           </div>
           {vision.activities.map((activity) => <ActivityEditor key={activity.id} activity={activity} onChange={(patch) => updateActivity(vision.id, activity.id, patch)} onRemove={() => removeActivity(vision.id, activity.id)} />)}
           {vision.activities.length === 0 && <div className="editor-empty">Sin recompensas. Usa “Añadir opción”.</div>}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -46,6 +47,7 @@ import {
   Zap,
 } from "lucide-react";
 import CatalogEditor from "./CatalogEditor";
+import OverlayPreviewLab from "./OverlayPreviewLab";
 import AppUpdater from "./Updater";
 import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, SYMBIOSIS_EVENT_IMAGE } from "./assets";
 import type { Activity, Catalog, CharacterProfile, PersistedState, PointAction, Settings, ShinyModRecord, Vision } from "./model";
@@ -67,6 +69,7 @@ import {
   detachCharacterFromActions,
   formatDuration,
   parseManualBaseline,
+  sharedVisionId,
   splitPlatformCarryover,
   validateCatalog,
 } from "./model";
@@ -95,6 +98,18 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.9.0",
+    date: "11 de septiembre de 2026",
+    title: "Rueda pública y laboratorio de interfaz",
+    items: [
+      "OscarD0823 selecciona la única rueda pública desde el editor protegido y el cambio se sincroniza con todos.",
+      "Los demás usuarios ya no pueden cambiar la rueda ni ven las ruedas desactivadas.",
+      "El modo desarrollador incluye un laboratorio para probar cada evento, fase, Ballena y tamaño sin modificar el contador público.",
+      "La ventana flotante se ajusta entre 70 % y 150 %; su X la desactiva y el inicio incluye un botón para volver a agregarla.",
+      "La apertura de la caja incorpora partículas, escaneo, órbitas, energía, chispas y una reacción más marcada de la cerradura.",
+    ],
+  },
   {
     version: "1.8.0",
     date: "11 de septiembre de 2026",
@@ -344,7 +359,8 @@ export default function App() {
     : stats.currentChancePercent;
   const teamReady = !isTeamMode || state.teamMemberIds.length >= 2;
   const baselineStats = useMemo(() => boxStatistics([], 0, referencePoints), [referencePoints]);
-  const selectedVision = state.catalog.visions.find((vision) => vision.id === state.settings.selectedVisionId) ?? state.catalog.visions[0];
+  const publicVisionId = sharedVisionId(state.catalog, state.settings.selectedVisionId);
+  const selectedVision = state.catalog.visions.find((vision) => vision.id === publicVisionId) ?? state.catalog.visions.find((vision) => vision.enabled) ?? state.catalog.visions[0];
   const cycle = computeCycle(state.settings, now);
   const targetProgress = Math.min(100, Math.round((currentPoints / target) * 100));
   const selectedShinyMod = SHINY_MOD_CATALOG.find((item) => item.id === selectedShinyModId) ?? defaultShinyMod;
@@ -406,7 +422,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setIntroVisible(false), 4600);
+    const timer = window.setTimeout(() => setIntroVisible(false), 5600);
     return () => window.clearTimeout(timer);
   }, []);
 
@@ -415,6 +431,17 @@ export default function App() {
   }, [checkCreatorAccess]);
 
   useEffect(() => saveState(state), [state]);
+
+  useEffect(() => {
+    const receiveOverlayChange = () => setState(loadState());
+    window.addEventListener("storage", receiveOverlayChange);
+    let stopListening: (() => void) | undefined;
+    if (isTauri()) void listen("caja-fantasma-overlay-disabled", receiveOverlayChange).then((stop) => { stopListening = stop; });
+    return () => {
+      window.removeEventListener("storage", receiveOverlayChange);
+      stopListening?.();
+    };
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -454,24 +481,30 @@ export default function App() {
       const catalog = await response.json() as unknown;
       if (!validateCatalog(catalog)) throw new Error("formato no válido");
       setState((current) => {
-        if (catalog.catalogVersion <= current.catalog.catalogVersion) return current;
+        if (catalog.catalogVersion < current.catalog.catalogVersion) return current;
+        const hasNewCatalog = catalog.catalogVersion > current.catalog.catalogVersion;
         const timing = catalog.eventTiming;
         const appliedTiming = Date.parse(current.settings.sharedTimingUpdatedAt ?? "");
         const remoteTiming = Date.parse(timing?.updatedAt ?? "");
-        if (!timing || !catalog.visions.some((vision) => vision.id === timing.selectedVisionId) || (Number.isFinite(appliedTiming) && remoteTiming <= appliedTiming)) return { ...current, catalog };
+        if (!timing) return hasNewCatalog ? { ...current, catalog } : current;
+        const selectedVisionId = sharedVisionId(catalog, current.settings.selectedVisionId);
+        const hasNewTiming = !Number.isFinite(appliedTiming) || remoteTiming > appliedTiming;
+        if (!hasNewCatalog && !hasNewTiming && current.settings.selectedVisionId === selectedVisionId) return current;
         return {
           ...current,
-          catalog,
+          catalog: hasNewCatalog ? catalog : current.catalog,
           settings: {
             ...current.settings,
-            selectedVisionId: timing.selectedVisionId,
-            waitMinutes: timing.waitMinutes,
-            activeMinutes: timing.activeMinutes,
-            phaseStartedAt: timing.phaseStartedAt,
-            phase: timing.phase,
-            lastNotificationPhaseStartedAt: undefined,
-            lastVoiceAlertPhaseStartedAt: undefined,
-            sharedTimingUpdatedAt: timing.updatedAt,
+            selectedVisionId,
+            ...(hasNewTiming ? {
+              waitMinutes: timing.waitMinutes,
+              activeMinutes: timing.activeMinutes,
+              phaseStartedAt: timing.phaseStartedAt,
+              phase: timing.phase,
+              lastNotificationPhaseStartedAt: undefined,
+              lastVoiceAlertPhaseStartedAt: undefined,
+              sharedTimingUpdatedAt: timing.updatedAt,
+            } : {}),
           },
         };
       });
@@ -773,7 +806,7 @@ export default function App() {
   };
 
   const saveCatalog = useCallback((catalog: Catalog) => {
-    commitState((current) => ({ ...current, catalog }));
+    commitState((current) => ({ ...current, catalog, settings: { ...current.settings, selectedVisionId: sharedVisionId(catalog, current.settings.selectedVisionId) } }));
     setSyncStatus(`Cambios locales v${catalog.catalogVersion} listos para publicar`);
   }, [commitState]);
 
@@ -954,6 +987,7 @@ export default function App() {
                     {!isTeamMode && <button type="button" className="secondary platform-mail-button" disabled={currentActions.length === 0} onClick={() => markBox("platform-mail")}><Mail size={18} /> Llegó por Plataformas</button>}
                     {isTeamMode && <button type="button" className="primary" onClick={startNewTeamCount}><Users size={18} /> Nuevo conteo de Equipo</button>}
                     <button type="button" className="secondary" disabled={currentActions.length === 0} onClick={undoLastAction}><Undo2 size={18} /> Deshacer último</button>
+                    <button type="button" className={`secondary overlay-home-button ${state.settings.overlayEnabled ? "enabled" : ""}`} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><Eye size={18} /> {state.settings.overlayEnabled ? "Quitar ventana flotante" : "Agregar ventana flotante"}</button>
                   </div>
                 </div>
                 <div className="ghost-orbit" aria-hidden="true"><div className="orbital-ring" /><img className="ghost-crate-image" src={PHANTOM_CRATE_IMAGE} alt="" /><div className="once-human-wordmark"><span>ONCE</span><strong>HUMAN</strong></div><Sparkles className="spark-one" /><Sparkles className="spark-two" /></div>
@@ -974,8 +1008,7 @@ export default function App() {
               ))}
             </div>
 
-            <div className="section-heading"><div><span className="eyebrow">VISIÓN SELECCIONADA</span><h2>{selectedVision?.name ?? "Sin visión"}</h2></div><button type="button" className="link-button" onClick={() => setTab("vision")}>Configurar rueda <ChevronRight size={15} /></button></div>
-            {!selectedVision?.enabled && <div className="notice warning"><ActivityIcon size={18} /><span><strong>Evento desactivado.</strong> Sus opciones se muestran como referencia y no suman puntos.</span></div>}
+            <div className="section-heading"><div><span className="eyebrow">VISIÓN SELECCIONADA POR EL ADMINISTRADOR</span><h2>{selectedVision?.name ?? "Sin visión"}</h2></div><button type="button" className="link-button" onClick={() => setTab("vision")}>Ver contador <ChevronRight size={15} /></button></div>
             <div className="activity-grid">
               {selectedVision?.activities.length ? selectedVision.activities.map((activity) => (
                 <ActivityCard key={activity.id} activity={activity} disabled={!selectedVision.enabled || !teamReady} count={currentActions.filter((action) => action.visionId === selectedVision.id && action.activityId === activity.id).length} onAdd={() => addActivity(activity, selectedVision)} onRemove={() => removeLastActivity(activity.id, selectedVision.id)} />
@@ -1009,6 +1042,7 @@ export default function App() {
               <article className="overlay-preview panel">
                 <div className="panel-title"><div><span className="eyebrow">VENTANA FLOTANTE</span><h3>Siempre visible</h3></div><button type="button" className={`switch ${state.settings.overlayEnabled ? "on" : ""}`} aria-pressed={state.settings.overlayEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><span /></button></div>
                 <div className={`mock-overlay ${cycle.phase}`}><span>{cycle.phase === "active" ? `${selectedVision?.name} activa` : `Próxima ${selectedVision?.name}`}</span><strong>{formatDuration(cycle.remainingMs)}</strong></div>
+                <label className="overlay-size-control"><span>Tamaño <strong>{Math.round(state.settings.overlayScale * 100)}%</strong></span><input type="range" min={70} max={150} step={5} value={Math.round(state.settings.overlayScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(Number(event.target.value) / 100, .7, 1.5) } }))} /></label>
                 <p>Arrástrala a cualquier zona de la pantalla. Se mantiene encima en juegos con pantalla completa sin bordes.</p>
               </article>
             </div>
@@ -1035,16 +1069,11 @@ export default function App() {
               <small className="counter-anchor-note">Sincronización inicial: Gravedad terminó a las 4:52:30 p. m. de Colombia el 10 de septiembre de 2026.</small>
             </article>
 
-            <div className="section-heading"><div><span className="eyebrow">RUEDA ACTUAL</span><h2>Elige la visión</h2></div><span>La selección se conserva al reiniciar</span></div>
-            <div className="vision-cards">
-              {state.catalog.visions.map((vision) => (
-                <button key={vision.id} type="button" className={`${state.settings.selectedVisionId === vision.id ? "selected" : ""} ${!vision.enabled ? "disabled" : ""}`} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, selectedVisionId: vision.id } }))}>
-                  <span className="vision-icon">{vision.id === "gravity" ? <Zap /> : vision.id === "lunar" ? <Sparkles /> : <ActivityIcon />}</span>
-                  <span><small>{vision.enabled ? "DISPONIBLE" : "DESACTIVADA"}</small><strong>{vision.name}</strong><em>{vision.description}</em></span>
-                  {state.settings.selectedVisionId === vision.id && <Check size={20} />}
-                </button>
-              ))}
-            </div>
+            <article className="public-vision-card panel">
+              <span className="vision-icon">{selectedVision?.id === "gravity" ? <Zap /> : selectedVision?.id === "lunar" ? <Sparkles /> : <ActivityIcon />}</span>
+              <div><span className="eyebrow">RUEDA PÚBLICA</span><h2>{selectedVision?.name ?? "Sin rueda activa"}</h2><p>{selectedVision?.description}</p><small>La selecciona OscarD0823 y se sincroniza automáticamente en todos los equipos.</small></div>
+              <UserCheck size={22} />
+            </article>
           </section>
         )}
 
@@ -1187,7 +1216,7 @@ export default function App() {
             <article className="owner-panel panel">
               <div className="panel-title"><div><span className="eyebrow">MODO DESARROLLADOR</span><h2>Editor de OscarD0823</h2></div><span className={`creator-access-badge ${creatorAccess}`}>{creatorAccess === "granted" ? <UserCheck size={15} /> : <LockKeyhole size={15} />}{creatorAccess === "granted" ? "Propietario verificado" : creatorAccess === "checking" ? "Comprobando" : "Bloqueado"}</span></div>
               <p>Cada cambio se publica automáticamente. El servidor vuelve a comprobar la cuenta de GitHub antes de aceptar cada actualización.</p>
-              {creatorAccess === "granted" ? <CatalogEditor catalog={state.catalog} onSave={saveCatalog} onPublish={publishCatalog} /> : <div className="creator-login-card"><div className="creator-lock"><LockKeyhole size={25} /></div><div><strong>Inicia sesión con la cuenta propietaria</strong><span>{creatorMessage}</span><div className="creator-login-actions"><button type="button" className="primary compact" onClick={() => void startCreatorLogin()}><LogIn size={15} /> Iniciar sesión con GitHub</button><button type="button" className="secondary compact" disabled={creatorAccess === "checking"} onClick={() => void checkCreatorAccess()}><RefreshCw size={15} /> Comprobar cuenta</button></div></div></div>}
+              {creatorAccess === "granted" ? <><OverlayPreviewLab catalog={state.catalog} scale={state.settings.overlayScale} onScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(scale, .7, 1.5) } }))} onOpenRealOverlay={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: true } }))} /><CatalogEditor catalog={state.catalog} onSave={saveCatalog} onPublish={publishCatalog} /></> : <div className="creator-login-card"><div className="creator-lock"><LockKeyhole size={25} /></div><div><strong>Inicia sesión con la cuenta propietaria</strong><span>{creatorMessage}</span><div className="creator-login-actions"><button type="button" className="primary compact" onClick={() => void startCreatorLogin()}><LogIn size={15} /> Iniciar sesión con GitHub</button><button type="button" className="secondary compact" disabled={creatorAccess === "checking"} onClick={() => void checkCreatorAccess()}><RefreshCw size={15} /> Comprobar cuenta</button></div></div></div>}
             </article>
           </section>
         )}
@@ -1212,14 +1241,21 @@ function ShinyTrackerCard({ record, onDecrease, onIncrease, onToggle, onDelete }
 
 function StartupIntro({ onSkip }: { onSkip: () => void }) {
   return <button type="button" className="startup-intro" onClick={onSkip} aria-label="Omitir animación de apertura">
-    <span className="intro-aura" />
-    <span className="intro-crate" aria-hidden="true">
-      <img className="intro-crate-image" src={PHANTOM_CRATE_IMAGE} alt="" />
-      <span className="intro-corner-slot" />
-      <span className="intro-key-logo"><GameLogoMark /></span>
-      <span className="intro-light" />
+    <span className="intro-world" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /><i /></span>
+    <span className="intro-scan" aria-hidden="true" />
+    <span className="intro-aura" aria-hidden="true"><i /><i /></span>
+    <span className="intro-crate-arrival" aria-hidden="true">
+      <span className="intro-crate">
+        <img className="intro-crate-image" src={PHANTOM_CRATE_IMAGE} alt="" />
+        <span className="intro-corner-slot" />
+        <span className="intro-lock-ring" />
+        <span className="intro-key-logo"><GameLogoMark /></span>
+        <span className="intro-light" />
+        <span className="intro-sparks"><i /><i /><i /><i /><i /><i /></span>
+      </span>
     </span>
     <span className="intro-title"><strong>CAJA FANTASMA</strong><small>ONCE HUMAN</small></span>
+    <span className="intro-progress" aria-hidden="true"><i /></span>
     <span className="intro-hint">Pulsa para continuar</span>
   </button>;
 }

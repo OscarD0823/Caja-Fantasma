@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import catalog from "../catalog/visions.json" with { type: "json" };
-import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, boxStatistics, buildBreakdown, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, parseManualBaseline, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type PointAction, type Settings } from "../src/model.ts";
+import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, boxStatistics, buildBreakdown, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, parseManualBaseline, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type PointAction, type Settings } from "../src/model.ts";
 import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesModSearch, normalizeModSearch } from "../src/shinyModsCatalog.ts";
 
 const freshState = { ...createInitialCharacterTracking(Date.parse("2026-09-11T00:00:00Z")), actions: [] as PointAction[] };
@@ -9,6 +9,12 @@ assert.equal(freshState.characters.length, 1);
 assert.equal(actionsForTeamSession(freshState.actions, freshState.activeTeamSessionId).length, 0, "El conteo inicial de Equipo debe empezar en cero.");
 
 assert.equal(validateCatalog(catalog), true, "El catálogo incluido debe ser válido.");
+assert.equal(sharedVisionId(catalog), catalog.eventTiming.selectedVisionId, "La rueda pública debe ser la que eligió el administrador.");
+assert.equal(catalog.visions.find((vision) => vision.id === sharedVisionId(catalog))?.enabled, true, "La rueda pública no puede estar desactivada.");
+const invalidDisabledSelection = structuredClone(catalog);
+invalidDisabledSelection.visions.find((vision) => vision.id === invalidDisabledSelection.eventTiming.selectedVisionId)!.enabled = false;
+assert.equal(validateCatalog(invalidDisabledSelection), false, "El administrador no puede publicar como actual una rueda desactivada.");
+assert.equal(sharedVisionId(invalidDisabledSelection), "lunar", "Si una copia antigua apunta a una rueda desactivada debe usar la primera habilitada.");
 for (const id of ["pro-monolith-boss", "pro-silo", "dream-manibus-challenge", "pro-war", "manibus-manibus", "dream-zone-invasion", "dreamer-light", "dreamer-deep", "dreamer-eternal"]) {
   assert.ok(catalog.proActivities.some((item) => item.id === id), `Falta la recompensa editable ${id}.`);
 }
@@ -26,6 +32,7 @@ const settings: Settings = {
   phase: "waiting",
   phaseStartedAt: "2026-09-10T10:00:00.000Z",
   overlayEnabled: true,
+  overlayScale: 1,
   notificationsEnabled: false,
   voiceNotificationsEnabled: true,
   voiceLeadMinutes: 5,

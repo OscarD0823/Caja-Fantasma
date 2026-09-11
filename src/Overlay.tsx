@@ -1,14 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { LogicalSize, PhysicalPosition } from "@tauri-apps/api/dpi";
+import { emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Box, GripHorizontal, X, Zap } from "lucide-react";
-import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, GRAVITY_WHALE_BEAM_IMAGE, GRAVITY_WHALE_PASS_IMAGE, LUNAR_EVENT_IMAGE, SYMBIOSIS_EVENT_IMAGE } from "./assets";
 import type { PersistedState } from "./model";
-import { computeCycle, computeGravityWhale, formatDuration } from "./model";
+import { clampNumber, computeCycle, computeGravityWhale } from "./model";
+import OverlayVisual, { overlayDesignSize } from "./OverlayVisual";
 import { loadOverlayPosition, loadState, saveOverlayPosition, saveState } from "./storage";
-
-const BASE_OVERLAY_SIZE = { width: 430, height: 108 };
-const WHALE_OVERLAY_SIZE = { width: 520, height: 258 };
 
 export default function Overlay() {
   const [state, setState] = useState<PersistedState>(() => loadState());
@@ -16,12 +13,14 @@ export default function Overlay() {
   const cycle = computeCycle(state.settings, now);
   const whale = computeGravityWhale(state.settings, now);
   const selectedVision = useMemo(() => state.catalog.visions.find((vision) => vision.id === state.settings.selectedVisionId), [state.catalog.visions, state.settings.selectedVisionId]);
-  const remainingWhalePercent = Math.max(0, Math.min(100, Math.round((1 - whale.progress) * 100)));
+  const overlayScale = clampNumber(state.settings.overlayScale, .7, 1.5);
+  const designSize = overlayDesignSize(whale.visible);
 
   const hideOverlay = () => {
     const next = { ...state, settings: { ...state.settings, overlayEnabled: false } };
     saveState(next);
     setState(next);
+    void emit("caja-fantasma-overlay-disabled");
     void getCurrentWindow().hide();
   };
 
@@ -50,9 +49,8 @@ export default function Overlay() {
 
   useEffect(() => {
     const overlayWindow = getCurrentWindow();
-    const size = whale.visible ? WHALE_OVERLAY_SIZE : BASE_OVERLAY_SIZE;
-    void overlayWindow.setSize(new LogicalSize(size.width, size.height));
-  }, [whale.visible]);
+    void overlayWindow.setSize(new LogicalSize(Math.round(designSize.width * overlayScale), Math.round(designSize.height * overlayScale)));
+  }, [designSize.height, designSize.width, overlayScale]);
 
   useEffect(() => {
     const overlayWindow = getCurrentWindow();
@@ -71,32 +69,10 @@ export default function Overlay() {
   }, []);
 
   return (
-    <div className={`floating-overlay ${cycle.phase} vision-${selectedVision?.id ?? "none"} ${whale.visible ? "with-whale" : ""}`} onMouseDown={(event) => { if ((event.target as HTMLElement).closest("button")) return; void getCurrentWindow().startDragging(); }}>
-      <section className="overlay-main-shell" aria-label="Contador de Rueda Visional">
-        <div className="overlay-event-scene" aria-hidden="true">
-          {selectedVision?.id === "lunar" && <img className="overlay-scene-image lunar" src={LUNAR_EVENT_IMAGE} alt="" />}
-          {selectedVision?.id === "symbiosis" && <img className="overlay-scene-image symbiosis" src={SYMBIOSIS_EVENT_IMAGE} alt="" />}
-          {selectedVision?.id === "gravity" && <><img className="overlay-scene-image gravity scene-a" src={GRAVITY_EVENT_IMAGE_A} alt="" /><img className="overlay-scene-image gravity scene-b" src={GRAVITY_EVENT_IMAGE_B} alt="" /></>}
-        </div>
-        <span className="overlay-event-vignette" aria-hidden="true" />
-        <div className="overlay-content">
-          <div className="overlay-icon">{cycle.phase === "active" ? <Zap size={23} /> : <Box size={23} />}</div>
-          <div className="overlay-copy"><span>{cycle.phase === "active" ? `${selectedVision?.name ?? "Rueda"} activa` : `Próxima ${selectedVision?.name ?? "Rueda"}`}</span><strong>{formatDuration(cycle.remainingMs)}</strong></div>
-          <GripHorizontal className="overlay-grip" size={18} />
-          <button type="button" aria-label="Ocultar contador" onClick={hideOverlay}><X size={15} /></button>
-        </div>
-      </section>
-
-      {whale.visible && <section className={`overlay-whale-stage ${whale.departing ? "departing" : "engaged"}`} aria-label={whale.departing ? "La Ballena se retira" : `Ballena activa durante ${formatDuration(whale.remainingMs)}`}>
-        <div className="overlay-whale-motion">
-          <img className="overlay-whale-image pass" src={GRAVITY_WHALE_PASS_IMAGE} alt="" />
-          <img className="overlay-whale-image firing" src={GRAVITY_WHALE_BEAM_IMAGE} alt="" />
-          <div className="overlay-whale-beam">
-            <span style={{ width: `${remainingWhalePercent}%` }} />
-            {!whale.departing && <strong>{formatDuration(whale.remainingMs)}</strong>}
-          </div>
-        </div>
-      </section>}
+    <div className="floating-overlay" onMouseDown={(event) => { if ((event.target as HTMLElement).closest("button")) return; void getCurrentWindow().startDragging(); }}>
+      <div className="overlay-scale-stage" style={{ width: designSize.width, height: designSize.height, transform: `scale(${overlayScale})` }}>
+        <OverlayVisual vision={selectedVision} phase={cycle.phase} remainingMs={cycle.remainingMs} whale={whale} onClose={hideOverlay} />
+      </div>
     </div>
   );
 }
