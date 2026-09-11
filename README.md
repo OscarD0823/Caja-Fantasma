@@ -21,7 +21,7 @@ Repositorio oficial: <https://github.com/OscarD0823/Caja-Fantasma>
 - Espera y duración de la Rueda Visional configurables; el valor inicial es 30 minutos de espera y 30 minutos activa.
 - Ajuste directo del contador por fase, minutos y segundos. La sincronización inicial de Gravedad parte de su cierre a las 4:52:30 p. m. de Colombia del 10 de septiembre de 2026.
 - Gravedad emite un aviso de voz anticipado configurable. Las notificaciones de escritorio están desactivadas. La app funciona minimizada en la bandeja e inicia con Windows.
-- Contador flotante movible, siempre visible y con posición recordada. Funciona sobre juegos en ventana o pantalla completa sin bordes; Windows no permite garantizar superposición sobre pantalla completa exclusiva.
+- Contador flotante movible, siempre visible y con posición recordada. Muestra la imagen de la rueda seleccionada y cambia de silueta: Lunar es redondeada, Gravedad angular y Simbiosis orgánica. Funciona sobre juegos en ventana o pantalla completa sin bordes; Windows no permite garantizar superposición sobre pantalla completa exclusiva.
 - Historial de cambios incluido dentro del programa.
 - Apartado Mods Shiny con búsqueda bilingüe por nombre, variante, estilo, ranura o ID; contador individual de duplicados nivel 17 fallidos y colección de Shiny conseguidos.
 - Catálogo local completo de 1.825 registros exactos: 207 del sistema anterior, 809 normales 2.0 y 809 Shiny 2.0. Todos se pueden añadir al seguimiento y localizar después dentro del historial personal.
@@ -30,7 +30,7 @@ Repositorio oficial: <https://github.com/OscarD0823/Caja-Fantasma>
 - Animación de apertura al iniciar: se conserva la imagen completa y el emblema de Once Human viaja hasta la ranura de una esquina antes de revelar el programa.
 - La imagen de la recompensa conserva la caja y muestra una cantidad de 17.
 - Barra ambiental: Lunar activa usa la referencia de la luna roja con figuras de ojos rojos; Simbiosis activa usa la referencia de criaturas transformadas; Gravedad activa alterna sus dos escenas de ciudad y objetos suspendidos.
-- Secuencia especial de la Ballena, exclusiva de Gravedad: desde el minuto 15 cruza el contador principal, se coloca debajo y dispara. El rayo azul funciona como barra y contador del tiempo restante; al terminar el evento se apaga y la Ballena sale antes de desaparecer.
+- Secuencia especial de la Ballena, exclusiva de la ventana flotante de Gravedad: desde el minuto 15 llega por la izquierda, cruza el contador y se coloca debajo. El rayo azul funciona como barra y reloj propio durante los 15 minutos restantes del evento más 5 minutos adicionales; al llegar a cero se apaga y la Ballena sale por la derecha.
 
 ## Catálogo compartido
 
@@ -45,6 +45,10 @@ El botón de acceso abre el inicio de sesión web de GitHub CLI. La aplicación 
 El actualizador sigue el patrón de [Fortuna Real](https://github.com/OscarD0823/Fortuna-Real): consulta `latest.json` en GitHub Releases al abrir, cada 15 minutos, al volver Internet y al recuperar el foco; descarga el instalador, verifica su firma antes de instalarlo y vuelve a abrir la aplicación. Sin Internet, el programa inicia normalmente con los datos locales.
 
 La clave privada y su contraseña DPAPI permanecen fuera del repositorio, en el perfil local de Windows. El repositorio contiene únicamente la clave pública necesaria para verificar instalaciones.
+
+## Auditoría del instalador
+
+El paquete NSIS instala el ejecutable de Caja Fantasma y genera su desinstalador. No incorpora otros programas, servicios, controladores, extensiones ni telemetría. Las imágenes y el código de la interfaz están empacados dentro del ejecutable. Si Windows no dispone de Microsoft Edge WebView2, el instalador descarga únicamente el bootstrapper oficial de Microsoft, necesario para mostrar la aplicación. La revisión detallada está en [`AUDITORIA-INSTALADOR.md`](AUDITORIA-INSTALADOR.md).
 
 ## Desarrollo
 

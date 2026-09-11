@@ -119,7 +119,14 @@ export type CycleSnapshot = {
   phaseEndsAt: string;
 };
 
-export const APP_VERSION = "1.7.0";
+export type GravityWhaleSnapshot = {
+  visible: boolean;
+  departing: boolean;
+  remainingMs: number;
+  progress: number;
+};
+
+export const APP_VERSION = "1.8.0";
 export const AUTHOR = "OscarD0823";
 export const DEFAULT_CHARACTER_ID = "character-main";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
@@ -210,6 +217,30 @@ export function shouldShowGravityWhale(settings: Settings, now = Date.now()) {
   }
   const elapsedWaitingMs = clampNumber(settings.waitMinutes, 1, 525_600) * 60_000 - cycle.remainingMs;
   return elapsedWaitingMs <= 5 * 60_000;
+}
+
+export function computeGravityWhale(settings: Settings, now = Date.now()): GravityWhaleSnapshot {
+  const hidden = { visible: false, departing: false, remainingMs: 0, progress: 0 };
+  if (settings.selectedVisionId !== "gravity") return hidden;
+  const activeMinutes = clampNumber(settings.activeMinutes, 1, 525_600);
+  if (activeMinutes <= 15) return hidden;
+  const cycle = computeCycle(settings, now);
+  const afterEventMs = 5 * 60_000;
+  const departureMs = 4_000;
+  const totalMs = (activeMinutes - 15) * 60_000 + afterEventMs;
+
+  if (cycle.phase === "active") {
+    const elapsedActiveMs = activeMinutes * 60_000 - cycle.remainingMs;
+    if (elapsedActiveMs < 15 * 60_000) return hidden;
+    const remainingMs = cycle.remainingMs + afterEventMs;
+    return { visible: true, departing: false, remainingMs, progress: Math.min(1, Math.max(0, 1 - remainingMs / totalMs)) };
+  }
+
+  const waitMs = clampNumber(settings.waitMinutes, 1, 525_600) * 60_000;
+  const elapsedWaitingMs = waitMs - cycle.remainingMs;
+  if (elapsedWaitingMs > afterEventMs + departureMs) return hidden;
+  const remainingMs = Math.max(0, afterEventMs - elapsedWaitingMs);
+  return { visible: true, departing: remainingMs <= 0, remainingMs, progress: Math.min(1, Math.max(0, 1 - remainingMs / totalMs)) };
 }
 
 export function formatDuration(milliseconds: number) {

@@ -47,7 +47,7 @@ import {
 } from "lucide-react";
 import CatalogEditor from "./CatalogEditor";
 import AppUpdater from "./Updater";
-import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, GRAVITY_WHALE_BEAM_IMAGE, GRAVITY_WHALE_PASS_IMAGE, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, RIFTWALKER_WHALE_IMAGE, SYMBIOSIS_EVENT_IMAGE } from "./assets";
+import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, SYMBIOSIS_EVENT_IMAGE } from "./assets";
 import type { Activity, Catalog, CharacterProfile, PersistedState, PointAction, Settings, ShinyModRecord, Vision } from "./model";
 import {
   APP_VERSION,
@@ -67,7 +67,6 @@ import {
   detachCharacterFromActions,
   formatDuration,
   parseManualBaseline,
-  shouldShowGravityWhale,
   splitPlatformCarryover,
   validateCatalog,
 } from "./model";
@@ -96,6 +95,17 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.8.0",
+    date: "11 de septiembre de 2026",
+    title: "Ventana flotante viva para cada evento",
+    items: [
+      "La ventana flotante muestra la imagen del evento seleccionado y adopta una silueta propia para Lunar, Gravedad y Simbiosis.",
+      "La Ballena ahora vive únicamente en la ventana flotante: llega desde la izquierda en el minuto 15 de Gravedad y se coloca debajo del contador.",
+      "Su rayo funciona como barra y reloj independiente durante los 15 minutos restantes más 5 minutos adicionales; luego se apaga y la Ballena sale por la derecha.",
+      "El instalador fue auditado para incluir solo Caja Fantasma, su desinstalador y la dependencia oficial WebView2 cuando haga falta.",
+    ],
+  },
   {
     version: "1.7.0",
     date: "11 de septiembre de 2026",
@@ -336,7 +346,6 @@ export default function App() {
   const baselineStats = useMemo(() => boxStatistics([], 0, referencePoints), [referencePoints]);
   const selectedVision = state.catalog.visions.find((vision) => vision.id === state.settings.selectedVisionId) ?? state.catalog.visions[0];
   const cycle = computeCycle(state.settings, now);
-  const showGravityWhale = shouldShowGravityWhale(state.settings, now);
   const targetProgress = Math.min(100, Math.round((currentPoints / target) * 100));
   const selectedShinyMod = SHINY_MOD_CATALOG.find((item) => item.id === selectedShinyModId) ?? defaultShinyMod;
   const normalizedShinySearch = normalizeModSearch(shinySearch);
@@ -897,7 +906,7 @@ export default function App() {
 
       <main>
         <header className={`topbar vision-${selectedVision?.id ?? "none"} ${cycle.phase}`}>
-          <VisionAtmosphere visionId={selectedVision?.id} active={cycle.phase === "active"} showWhale={showGravityWhale} />
+          <VisionAtmosphere visionId={selectedVision?.id} active={cycle.phase === "active"} />
           <div className="topbar-copy">
             <span className="eyebrow">{tab === "progress" ? "SEGUIMIENTO ACTUAL" : tab === "vision" ? "RUEDA VISIONAL" : tab === "history" ? "REGISTRO PERSONAL" : tab === "shiny" ? "COLECCIÓN DE MÓDULOS" : tab === "changes" ? "NOVEDADES" : "PREFERENCIAS"}</span>
             <h1>{TABS.find((item) => item.id === tab)?.label}</h1>
@@ -987,9 +996,7 @@ export default function App() {
                 <div className="timer-top"><span className="eyebrow"><Clock3 size={15} /> CICLO AUTOMÁTICO</span><span className="live-dot">{cycle.phase === "active" ? "EN CURSO" : "EN ESPERA"}</span></div>
                 <h2>{cycle.phase === "active" ? "La Rueda está activa" : "La Rueda comenzará en"}</h2>
                 <strong className="timer-value">{formatDuration(cycle.remainingMs)}</strong>
-                {selectedVision?.id === "gravity" && showGravityWhale
-                  ? <GravityWhaleTimer active={cycle.phase === "active"} remainingMs={cycle.remainingMs} progress={cycle.progress} />
-                  : <div className="cycle-track"><span style={{ width: `${Math.round(cycle.progress * 100)}%` }} /></div>}
+                <div className="cycle-track"><span style={{ width: `${Math.round(cycle.progress * 100)}%` }} /></div>
                 <p>{cycle.phase === "active" ? `Termina el ${formatDate(cycle.phaseEndsAt)}.` : `Comienza el ${formatDate(cycle.phaseEndsAt)}.`}</p>
                 <div className="hero-actions">
                   <button type="button" className="primary" onClick={() => setCyclePhase(cycle.phase === "active" ? "waiting" : "active")}>
@@ -1217,29 +1224,13 @@ function StartupIntro({ onSkip }: { onSkip: () => void }) {
   </button>;
 }
 
-function VisionAtmosphere({ visionId, active, showWhale }: { visionId?: string; active: boolean; showWhale: boolean }) {
+function VisionAtmosphere({ visionId, active }: { visionId?: string; active: boolean }) {
   return <div className="vision-atmosphere" aria-hidden="true">
     <span className="vision-moon" />
     {visionId === "lunar" && active && <img className="lunar-scene-image" src={LUNAR_EVENT_IMAGE} alt="" />}
     {visionId === "symbiosis" && active && <img className="symbiosis-scene-image" src={SYMBIOSIS_EVENT_IMAGE} alt="" />}
     {visionId === "gravity" && active && <span className="gravity-scenes"><img className="gravity-scene-image scene-a" src={GRAVITY_EVENT_IMAGE_A} alt="" /><img className="gravity-scene-image scene-b" src={GRAVITY_EVENT_IMAGE_B} alt="" /></span>}
     {visionId === "gravity" && active && <span className="gravity-floaters"><i /><i /><i /><i /></span>}
-    {showWhale && <img className={`topbar-whale ${active ? "engaged" : "departing"}`} src={RIFTWALKER_WHALE_IMAGE} alt="" />}
-  </div>;
-}
-
-function GravityWhaleTimer({ active, remainingMs, progress }: { active: boolean; remainingMs: number; progress: number }) {
-  const remainingPercent = active ? Math.max(0, Math.min(100, Math.round((1 - progress) * 100))) : 0;
-
-  return <div className={`gravity-whale-timer ${active ? "engaged" : "departing"}`} aria-label={active ? `Ballena de Gravedad activa: ${formatDuration(remainingMs)} restantes` : "La Ballena de Gravedad se retira"}>
-    <div className="gravity-whale-motion">
-      <img className="gravity-whale-stage gravity-whale-pass" src={GRAVITY_WHALE_PASS_IMAGE} alt="" />
-      <img className="gravity-whale-stage gravity-whale-firing" src={GRAVITY_WHALE_BEAM_IMAGE} alt="" />
-      <div className="gravity-beam-counter">
-        <span className="gravity-beam-fill" style={{ width: `${remainingPercent}%` }} />
-        {active && <strong>{formatDuration(remainingMs)}</strong>}
-      </div>
-    </div>
   </div>;
 }
 
