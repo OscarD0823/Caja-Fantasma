@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": 16,
-  "updatedAt": "2026-09-11T14:38:24.748Z",
+  "catalogVersion": 17,
+  "updatedAt": "2026-09-11T14:38:44.392Z",
   "updatedBy": "OscarD0823",
   "boxTargetPoints": 1000,
   "eventTiming": {
@@ -82,7 +82,7 @@
     {
       "id": "lunar",
       "name": "Lunar",
-      "enabled": true,
+      "enabled": false,
       "description": "Rueda Visional Lunar. Lista preparada para añadir recompensas futuras.",
       "activities": []
     },
