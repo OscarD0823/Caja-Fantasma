@@ -9,10 +9,15 @@ export type Activity = {
 export type Vision = {
   id: string;
   name: string;
+  englishName?: string;
   enabled: boolean;
   description: string;
   activities: Activity[];
 };
+
+export type OverlayShape = "event" | "rectangle" | "square" | "vertical" | "round";
+export type OverlayCounterStyle = "digital" | "compact" | "ring";
+export type OverlayNameMode = "spanish" | "english" | "custom";
 
 export type SharedEventTiming = {
   selectedVisionId: string;
@@ -87,6 +92,10 @@ export type Settings = {
   phase: "waiting" | "active";
   overlayEnabled: boolean;
   overlayScale: number;
+  overlayShape: OverlayShape;
+  overlayCounterStyle: OverlayCounterStyle;
+  overlayNameMode: OverlayNameMode;
+  overlayCustomName: string;
   notificationsEnabled: boolean;
   voiceNotificationsEnabled: boolean;
   voiceLeadMinutes: number;
@@ -127,7 +136,7 @@ export type GravityWhaleSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.9.0";
+export const APP_VERSION = "1.10.0";
 export const AUTHOR = "OscarD0823";
 export const DEFAULT_CHARACTER_ID = "character-main";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
@@ -260,6 +269,24 @@ export function formatDuration(milliseconds: number) {
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${rest.toString().padStart(2, "0")}`;
 }
 
+export function formatCompactDuration(milliseconds: number) {
+  const seconds = Math.max(0, Math.ceil(milliseconds / 1000));
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+  const rest = seconds % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes.toString().padStart(2, "0")}m`;
+  return `${minutes}m ${rest.toString().padStart(2, "0")}s`;
+}
+
+export function overlayVisionName(vision: Vision | undefined, mode: OverlayNameMode, customName = "") {
+  const fallback = vision?.name?.trim() || "Rueda Visional";
+  if (mode === "custom" && customName.trim()) return customName.trim().slice(0, 40);
+  if (mode === "english") return vision?.englishName?.trim() || fallback;
+  return fallback;
+}
+
 export function boxStatistics(boxes: BoxRecord[], currentPoints: number, baseline: readonly number[] = BASELINE_BOX_POINTS) {
   const referenceSamples = baseline.filter((value) => Number.isFinite(value) && value > 0);
   const personalSamples = boxes.map((box) => box.points).filter((value) => value > 0);
@@ -345,7 +372,7 @@ export function validateCatalog(value: unknown): value is Catalog {
     && Array.isArray(catalog.proActivities)
     && catalog.proActivities.every(validActivity)
     && Array.isArray(catalog.visions)
-    && catalog.visions.every((vision) => vision && typeof vision.id === "string" && typeof vision.name === "string" && typeof vision.enabled === "boolean" && Array.isArray(vision.activities) && vision.activities.every(validActivity))
+    && catalog.visions.every((vision) => vision && typeof vision.id === "string" && typeof vision.name === "string" && (vision.englishName === undefined || typeof vision.englishName === "string") && typeof vision.enabled === "boolean" && Array.isArray(vision.activities) && vision.activities.every(validActivity))
     && (timing === undefined || catalog.visions.some((vision) => vision.id === timing.selectedVisionId && vision.enabled))
     && validTiming;
 }

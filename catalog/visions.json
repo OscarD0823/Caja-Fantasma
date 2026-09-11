@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": 17,
-  "updatedAt": "2026-09-11T14:38:44.392Z",
+  "catalogVersion": 18,
+  "updatedAt": "2026-09-11T14:55:00.000Z",
   "updatedBy": "OscarD0823",
   "boxTargetPoints": 1000,
   "eventTiming": {
@@ -82,6 +82,7 @@
     {
       "id": "lunar",
       "name": "Lunar",
+      "englishName": "Lunar",
       "enabled": false,
       "description": "Rueda Visional Lunar. Lista preparada para añadir recompensas futuras.",
       "activities": []
@@ -89,6 +90,7 @@
     {
       "id": "gravity",
       "name": "Gravedad",
+      "englishName": "Gravity",
       "enabled": true,
       "description": "Abismo de Gravedad.",
       "activities": [
@@ -111,6 +113,7 @@
     {
       "id": "symbiosis",
       "name": "Simbiosis",
+      "englishName": "Symbiosis",
       "enabled": false,
       "description": "Evento desactivado. Sus opciones quedan disponibles para futuras configuraciones.",
       "activities": [

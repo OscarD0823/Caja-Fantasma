@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import catalog from "../catalog/visions.json" with { type: "json" };
-import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, boxStatistics, buildBreakdown, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, parseManualBaseline, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type PointAction, type Settings } from "../src/model.ts";
+import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, boxStatistics, buildBreakdown, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, overlayVisionName, parseManualBaseline, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type PointAction, type Settings } from "../src/model.ts";
 import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesModSearch, normalizeModSearch } from "../src/shinyModsCatalog.ts";
 
 const freshState = { ...createInitialCharacterTracking(Date.parse("2026-09-11T00:00:00Z")), actions: [] as PointAction[] };
@@ -12,6 +12,7 @@ assert.equal(validateCatalog(catalog), true, "El catálogo incluido debe ser vá
 assert.equal(sharedVisionId(catalog), catalog.eventTiming.selectedVisionId, "La rueda pública debe ser la que eligió el administrador.");
 assert.equal(catalog.visions.find((vision) => vision.id === sharedVisionId(catalog))?.enabled, true, "La rueda pública no puede estar desactivada.");
 const invalidDisabledSelection = structuredClone(catalog);
+invalidDisabledSelection.visions.find((vision) => vision.id === "lunar")!.enabled = true;
 invalidDisabledSelection.visions.find((vision) => vision.id === invalidDisabledSelection.eventTiming.selectedVisionId)!.enabled = false;
 assert.equal(validateCatalog(invalidDisabledSelection), false, "El administrador no puede publicar como actual una rueda desactivada.");
 assert.equal(sharedVisionId(invalidDisabledSelection), "lunar", "Si una copia antigua apunta a una rueda desactivada debe usar la primera habilitada.");
@@ -33,6 +34,10 @@ const settings: Settings = {
   phaseStartedAt: "2026-09-10T10:00:00.000Z",
   overlayEnabled: true,
   overlayScale: 1,
+  overlayShape: "event",
+  overlayCounterStyle: "digital",
+  overlayNameMode: "spanish",
+  overlayCustomName: "",
   notificationsEnabled: false,
   voiceNotificationsEnabled: true,
   voiceLeadMinutes: 5,
@@ -65,6 +70,12 @@ assert.equal(computeGravityWhale(synchronizedSettings, Date.parse(VISION_CYCLE_W
 const whaleDeparture = computeGravityWhale(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 65 * 60_000);
 assert.equal(whaleDeparture.departing, true);
 assert.equal(computeGravityWhale(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 65 * 60_000 + 4_001).visible, false);
+const gravityVision = catalog.visions.find((vision) => vision.id === "gravity");
+assert.equal(overlayVisionName(gravityVision, "spanish"), "Gravedad");
+assert.equal(overlayVisionName(gravityVision, "english"), "Gravity");
+assert.equal(overlayVisionName(gravityVision, "custom", "Mi rueda azul"), "Mi rueda azul");
+assert.equal(overlayVisionName(gravityVision, "custom", "  "), "Gravedad");
+assert.equal(formatCompactDuration(17 * 60_000 + 8_000), "17m 08s");
 
 const actions: PointAction[] = [
   { id: "1", activityId: "gravity-whale", activityName: "Ballena", visionId: "gravity", visionName: "Gravedad", points: 1, occurredAt: "2026-09-10T10:00:00Z" },

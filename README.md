@@ -21,7 +21,7 @@ Repositorio oficial: <https://github.com/OscarD0823/Caja-Fantasma>
 - Espera y duración de la Rueda Visional configurables; el valor inicial es 30 minutos de espera y 30 minutos activa.
 - Ajuste directo del contador por fase, minutos y segundos. La sincronización inicial de Gravedad parte de su cierre a las 4:52:30 p. m. de Colombia del 10 de septiembre de 2026.
 - Gravedad emite un aviso de voz anticipado configurable. Las notificaciones de escritorio están desactivadas. La app funciona minimizada en la bandeja e inicia con Windows.
-- Contador flotante movible, siempre visible, escalable entre 70 % y 150 % y con posición recordada. Muestra la imagen de la rueda seleccionada y cambia de silueta: Lunar es redondeada, Gravedad angular y Simbiosis orgánica. La X lo desactiva y el botón “Agregar ventana flotante” del inicio permite recuperarlo. Funciona sobre juegos en ventana o pantalla completa sin bordes; Windows no permite garantizar superposición sobre pantalla completa exclusiva.
+- Contador flotante movible, siempre visible, escalable entre 70 % y 150 % y con posición recordada. Puede usar la forma automática propia de cada evento o un diseño rectangular, cuadrado, vertical o redondo. El reloj admite lectura digital, compacta o mediante anillo de progreso, y el nombre se puede mostrar en español, inglés o con un texto personalizado local. La X lo desactiva y el botón “Agregar ventana flotante” del inicio permite recuperarlo. Funciona sobre juegos en ventana o pantalla completa sin bordes; Windows no permite garantizar superposición sobre pantalla completa exclusiva.
 - Historial de cambios incluido dentro del programa.
 - Apartado Mods Shiny con búsqueda bilingüe por nombre, variante, estilo, ranura o ID; contador individual de duplicados nivel 17 fallidos y colección de Shiny conseguidos.
 - Catálogo local completo de 1.825 registros exactos: 207 del sistema anterior, 809 normales 2.0 y 809 Shiny 2.0. Todos se pueden añadir al seguimiento y localizar después dentro del historial personal.
@@ -40,7 +40,7 @@ Existe un único instalador para todos. En `Configuración > Editor de OscarD082
 
 El botón de acceso abre el inicio de sesión web de GitHub CLI. La aplicación no recibe ni guarda la contraseña o el token. Una vez verificada la cuenta propietaria, el editor permite añadir ruedas u opciones y publica cada cambio automáticamente después de 1,8 segundos sin escribir; también existe un botón para publicar de inmediato. Las pruebas validan la estructura del catálogo sin bloquear valores que el propietario haya editado legítimamente.
 
-El modo desarrollador incluye un laboratorio visual que reutiliza la misma interfaz del contador flotante. Permite simular espera, evento activo, disparo o salida de la Ballena y probar el tamaño sin publicar esos estados de prueba.
+El modo desarrollador incluye un laboratorio visual que reutiliza la misma interfaz del contador flotante. Permite simular espera, evento activo, disparo o salida de la Ballena y probar forma, reloj, idioma, nombre personalizado y tamaño sin publicar esos estados de prueba. El editor del catálogo también conserva el nombre en español e inglés de cada rueda futura.
 
 ## Actualizaciones
 

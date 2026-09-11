@@ -14,7 +14,7 @@ export default function Overlay() {
   const whale = computeGravityWhale(state.settings, now);
   const selectedVision = useMemo(() => state.catalog.visions.find((vision) => vision.id === state.settings.selectedVisionId), [state.catalog.visions, state.settings.selectedVisionId]);
   const overlayScale = clampNumber(state.settings.overlayScale, .7, 1.5);
-  const designSize = overlayDesignSize(whale.visible);
+  const designSize = overlayDesignSize(whale.visible, state.settings.overlayShape);
 
   const hideOverlay = () => {
     const next = { ...state, settings: { ...state.settings, overlayEnabled: false } };
@@ -71,7 +71,7 @@ export default function Overlay() {
   return (
     <div className="floating-overlay" onMouseDown={(event) => { if ((event.target as HTMLElement).closest("button")) return; void getCurrentWindow().startDragging(); }}>
       <div className="overlay-scale-stage" style={{ width: designSize.width, height: designSize.height, transform: `scale(${overlayScale})` }}>
-        <OverlayVisual vision={selectedVision} phase={cycle.phase} remainingMs={cycle.remainingMs} whale={whale} onClose={hideOverlay} />
+        <OverlayVisual vision={selectedVision} phase={cycle.phase} remainingMs={cycle.remainingMs} progress={cycle.progress} whale={whale} shape={state.settings.overlayShape} counterStyle={state.settings.overlayCounterStyle} nameMode={state.settings.overlayNameMode} customName={state.settings.overlayCustomName} onClose={hideOverlay} />
       </div>
     </div>
   );

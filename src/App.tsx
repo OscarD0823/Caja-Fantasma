@@ -50,7 +50,7 @@ import CatalogEditor from "./CatalogEditor";
 import OverlayPreviewLab from "./OverlayPreviewLab";
 import AppUpdater from "./Updater";
 import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, SYMBIOSIS_EVENT_IMAGE } from "./assets";
-import type { Activity, Catalog, CharacterProfile, PersistedState, PointAction, Settings, ShinyModRecord, Vision } from "./model";
+import type { Activity, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, Settings, ShinyModRecord, Vision } from "./model";
 import {
   APP_VERSION,
   AUTHOR,
@@ -67,7 +67,9 @@ import {
   computeCycle,
   createId,
   detachCharacterFromActions,
+  formatCompactDuration,
   formatDuration,
+  overlayVisionName,
   parseManualBaseline,
   sharedVisionId,
   splitPlatformCarryover,
@@ -98,6 +100,17 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.10.0",
+    date: "11 de septiembre de 2026",
+    title: "Contador flotante a tu estilo",
+    items: [
+      "La ventana flotante puede conservar la forma automática del evento o usar un diseño rectangular, cuadrado, vertical o redondo.",
+      "El reloj ofrece estilos digital, compacto y circular con anillo de progreso.",
+      "El nombre de la rueda puede mostrarse en español, inglés o con un texto personalizado guardado únicamente en este PC.",
+      "El laboratorio visual del desarrollador usa la misma combinación elegida y permite comprobarla antes de abrir la ventana real.",
+    ],
+  },
   {
     version: "1.9.0",
     date: "11 de septiembre de 2026",
@@ -362,6 +375,8 @@ export default function App() {
   const publicVisionId = sharedVisionId(state.catalog, state.settings.selectedVisionId);
   const selectedVision = state.catalog.visions.find((vision) => vision.id === publicVisionId) ?? state.catalog.visions.find((vision) => vision.enabled) ?? state.catalog.visions[0];
   const cycle = computeCycle(state.settings, now);
+  const overlayDisplayName = overlayVisionName(selectedVision, state.settings.overlayNameMode, state.settings.overlayCustomName);
+  const overlayDisplayTimer = state.settings.overlayCounterStyle === "compact" ? formatCompactDuration(cycle.remainingMs) : formatDuration(cycle.remainingMs);
   const targetProgress = Math.min(100, Math.round((currentPoints / target) * 100));
   const selectedShinyMod = SHINY_MOD_CATALOG.find((item) => item.id === selectedShinyModId) ?? defaultShinyMod;
   const normalizedShinySearch = normalizeModSearch(shinySearch);
@@ -1041,7 +1056,13 @@ export default function App() {
 
               <article className="overlay-preview panel">
                 <div className="panel-title"><div><span className="eyebrow">VENTANA FLOTANTE</span><h3>Siempre visible</h3></div><button type="button" className={`switch ${state.settings.overlayEnabled ? "on" : ""}`} aria-pressed={state.settings.overlayEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><span /></button></div>
-                <div className={`mock-overlay ${cycle.phase}`}><span>{cycle.phase === "active" ? `${selectedVision?.name} activa` : `Próxima ${selectedVision?.name}`}</span><strong>{formatDuration(cycle.remainingMs)}</strong></div>
+                <div className={`mock-overlay ${cycle.phase} vision-${selectedVision?.id ?? "none"} shape-${state.settings.overlayShape} counter-${state.settings.overlayCounterStyle}`}><span>{cycle.phase === "active" ? `${overlayDisplayName} activa` : `Próxima ${overlayDisplayName}`}</span><strong>{overlayDisplayTimer}</strong></div>
+                <div className="overlay-style-config">
+                  <label>Forma<select value={state.settings.overlayShape} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayShape: event.target.value as OverlayShape } }))}><option value="event">Automática por evento</option><option value="rectangle">Rectangular</option><option value="square">Cuadrada</option><option value="vertical">Vertical</option><option value="round">Redonda</option></select></label>
+                  <label>Estilo del contador<select value={state.settings.overlayCounterStyle} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayCounterStyle: event.target.value as OverlayCounterStyle } }))}><option value="digital">Digital</option><option value="compact">Compacto</option><option value="ring">Anillo de progreso</option></select></label>
+                  <label>Nombre del evento<select value={state.settings.overlayNameMode} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayNameMode: event.target.value as OverlayNameMode } }))}><option value="spanish">Español</option><option value="english">Inglés</option><option value="custom">Personalizado</option></select></label>
+                  {state.settings.overlayNameMode === "custom" && <label>Tu nombre<input maxLength={40} value={state.settings.overlayCustomName} placeholder="Ej. Gravedad azul" onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayCustomName: event.target.value.slice(0, 40) } }))} /></label>}
+                </div>
                 <label className="overlay-size-control"><span>Tamaño <strong>{Math.round(state.settings.overlayScale * 100)}%</strong></span><input type="range" min={70} max={150} step={5} value={Math.round(state.settings.overlayScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(Number(event.target.value) / 100, .7, 1.5) } }))} /></label>
                 <p>Arrástrala a cualquier zona de la pantalla. Se mantiene encima en juegos con pantalla completa sin bordes.</p>
               </article>
@@ -1216,7 +1237,7 @@ export default function App() {
             <article className="owner-panel panel">
               <div className="panel-title"><div><span className="eyebrow">MODO DESARROLLADOR</span><h2>Editor de OscarD0823</h2></div><span className={`creator-access-badge ${creatorAccess}`}>{creatorAccess === "granted" ? <UserCheck size={15} /> : <LockKeyhole size={15} />}{creatorAccess === "granted" ? "Propietario verificado" : creatorAccess === "checking" ? "Comprobando" : "Bloqueado"}</span></div>
               <p>Cada cambio se publica automáticamente. El servidor vuelve a comprobar la cuenta de GitHub antes de aceptar cada actualización.</p>
-              {creatorAccess === "granted" ? <><OverlayPreviewLab catalog={state.catalog} scale={state.settings.overlayScale} onScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(scale, .7, 1.5) } }))} onOpenRealOverlay={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: true } }))} /><CatalogEditor catalog={state.catalog} onSave={saveCatalog} onPublish={publishCatalog} /></> : <div className="creator-login-card"><div className="creator-lock"><LockKeyhole size={25} /></div><div><strong>Inicia sesión con la cuenta propietaria</strong><span>{creatorMessage}</span><div className="creator-login-actions"><button type="button" className="primary compact" onClick={() => void startCreatorLogin()}><LogIn size={15} /> Iniciar sesión con GitHub</button><button type="button" className="secondary compact" disabled={creatorAccess === "checking"} onClick={() => void checkCreatorAccess()}><RefreshCw size={15} /> Comprobar cuenta</button></div></div></div>}
+              {creatorAccess === "granted" ? <><OverlayPreviewLab catalog={state.catalog} scale={state.settings.overlayScale} shape={state.settings.overlayShape} counterStyle={state.settings.overlayCounterStyle} nameMode={state.settings.overlayNameMode} customName={state.settings.overlayCustomName} onScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(scale, .7, 1.5) } }))} onAppearanceChange={(patch) => commitState((current) => ({ ...current, settings: { ...current.settings, ...(patch.shape ? { overlayShape: patch.shape } : {}), ...(patch.counterStyle ? { overlayCounterStyle: patch.counterStyle } : {}), ...(patch.nameMode ? { overlayNameMode: patch.nameMode } : {}), ...(patch.customName !== undefined ? { overlayCustomName: patch.customName.slice(0, 40) } : {}) } }))} onOpenRealOverlay={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: true } }))} /><CatalogEditor catalog={state.catalog} onSave={saveCatalog} onPublish={publishCatalog} /></> : <div className="creator-login-card"><div className="creator-lock"><LockKeyhole size={25} /></div><div><strong>Inicia sesión con la cuenta propietaria</strong><span>{creatorMessage}</span><div className="creator-login-actions"><button type="button" className="primary compact" onClick={() => void startCreatorLogin()}><LogIn size={15} /> Iniciar sesión con GitHub</button><button type="button" className="secondary compact" disabled={creatorAccess === "checking"} onClick={() => void checkCreatorAccess()}><RefreshCw size={15} /> Comprobar cuenta</button></div></div></div>}
             </article>
           </section>
         )}

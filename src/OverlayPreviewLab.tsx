@@ -1,19 +1,24 @@
 import { useMemo, useState } from "react";
 import { Eye, MonitorUp, Radio, Waves } from "lucide-react";
-import type { Catalog, GravityWhaleSnapshot } from "./model";
+import type { Catalog, GravityWhaleSnapshot, OverlayCounterStyle, OverlayNameMode, OverlayShape } from "./model";
 import { clampNumber } from "./model";
 import OverlayVisual, { overlayDesignSize } from "./OverlayVisual";
 
 type Props = {
   catalog: Catalog;
   scale: number;
+  shape: OverlayShape;
+  counterStyle: OverlayCounterStyle;
+  nameMode: OverlayNameMode;
+  customName: string;
   onScaleChange: (scale: number) => void;
+  onAppearanceChange: (patch: Partial<{ shape: OverlayShape; counterStyle: OverlayCounterStyle; nameMode: OverlayNameMode; customName: string }>) => void;
   onOpenRealOverlay: () => void;
 };
 
 type WhaleMode = "hidden" | "active" | "departing";
 
-export default function OverlayPreviewLab({ catalog, scale, onScaleChange, onOpenRealOverlay }: Props) {
+export default function OverlayPreviewLab({ catalog, scale, shape, counterStyle, nameMode, customName, onScaleChange, onAppearanceChange, onOpenRealOverlay }: Props) {
   const publicVisionId = catalog.eventTiming?.selectedVisionId ?? catalog.visions.find((vision) => vision.enabled)?.id ?? catalog.visions[0]?.id;
   const [visionId, setVisionId] = useState(publicVisionId);
   const [phase, setPhase] = useState<"waiting" | "active">("active");
@@ -26,7 +31,7 @@ export default function OverlayPreviewLab({ catalog, scale, onScaleChange, onOpe
     remainingMs: whaleMode === "departing" ? 0 : 12 * 60_000 + 34_000,
     progress: whaleMode === "departing" ? 1 : .38,
   }), [vision?.id, whaleMode]);
-  const designSize = overlayDesignSize(whale.visible);
+  const designSize = overlayDesignSize(whale.visible, shape);
 
   return <section className="overlay-lab">
     <div className="overlay-lab-heading">
@@ -36,6 +41,10 @@ export default function OverlayPreviewLab({ catalog, scale, onScaleChange, onOpe
 
     <div className="overlay-lab-controls">
       <label>Rueda<select value={vision?.id ?? ""} onChange={(event) => { setVisionId(event.target.value); if (event.target.value !== "gravity") setWhaleMode("hidden"); }}>{catalog.visions.map((item) => <option key={item.id} value={item.id}>{item.name}{item.enabled ? "" : " · desactivada"}</option>)}</select></label>
+      <label>Forma<select value={shape} onChange={(event) => onAppearanceChange({ shape: event.target.value as OverlayShape })}><option value="event">Automática por evento</option><option value="rectangle">Rectangular</option><option value="square">Cuadrada</option><option value="vertical">Vertical</option><option value="round">Redonda</option></select></label>
+      <label>Contador<select value={counterStyle} onChange={(event) => onAppearanceChange({ counterStyle: event.target.value as OverlayCounterStyle })}><option value="digital">Digital</option><option value="compact">Compacto</option><option value="ring">Anillo</option></select></label>
+      <label>Nombre<select value={nameMode} onChange={(event) => onAppearanceChange({ nameMode: event.target.value as OverlayNameMode })}><option value="spanish">Español</option><option value="english">Inglés</option><option value="custom">Personalizado</option></select></label>
+      {nameMode === "custom" && <label>Nombre personalizado<input maxLength={40} value={customName} placeholder="Mi evento" onChange={(event) => onAppearanceChange({ customName: event.target.value })} /></label>}
       <div><span>Fase</span><div className="preview-choice"><button type="button" className={phase === "waiting" ? "selected" : ""} onClick={() => setPhase("waiting")}><Radio size={14} /> Espera</button><button type="button" className={phase === "active" ? "selected" : ""} onClick={() => setPhase("active")}><Radio size={14} /> Activa</button></div></div>
       <div><span>Ballena</span><div className="preview-choice"><button type="button" className={whaleMode === "hidden" ? "selected" : ""} onClick={() => setWhaleMode("hidden")}>Oculta</button><button type="button" disabled={vision?.id !== "gravity"} className={whaleMode === "active" ? "selected" : ""} onClick={() => setWhaleMode("active")}><Waves size={14} /> Disparando</button><button type="button" disabled={vision?.id !== "gravity"} className={whaleMode === "departing" ? "selected" : ""} onClick={() => setWhaleMode("departing")}>Salida</button></div></div>
       <label className="overlay-size-control"><span>Tamaño real <strong>{Math.round(normalizedScale * 100)}%</strong></span><input type="range" min={70} max={150} step={5} value={Math.round(normalizedScale * 100)} onChange={(event) => onScaleChange(Number(event.target.value) / 100)} /></label>
@@ -43,7 +52,7 @@ export default function OverlayPreviewLab({ catalog, scale, onScaleChange, onOpe
 
     <div className="overlay-lab-canvas" style={{ minHeight: Math.round(designSize.height * normalizedScale) + 28 }}>
       <div className="overlay-scale-stage" style={{ width: designSize.width, height: designSize.height, transform: `scale(${normalizedScale})` }}>
-        <OverlayVisual vision={vision} phase={phase} remainingMs={phase === "active" ? 12 * 60_000 + 34_000 : 17 * 60_000 + 8_000} whale={whale} preview />
+        <OverlayVisual vision={vision} phase={phase} remainingMs={phase === "active" ? 12 * 60_000 + 34_000 : 17 * 60_000 + 8_000} progress={.58} whale={whale} shape={shape} counterStyle={counterStyle} nameMode={nameMode} customName={customName} preview />
       </div>
     </div>
   </section>;
