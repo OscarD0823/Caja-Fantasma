@@ -78,7 +78,10 @@ main { height: 100vh; overflow-y: auto; scrollbar-color: #26515a transparent; sc
 .topbar.vision-symbiosis.active .vision-moon { display: none; }
 .symbiosis-scene-image { position: absolute; top: 0; right: 0; width: min(78%, 920px); height: 100%; display: block; object-fit: cover; object-position: center 34%; opacity: .82; filter: saturate(1.18) contrast(1.08); -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 24%, #000 100%); mask-image: linear-gradient(90deg, transparent 0, #000 24%, #000 100%); }
 .topbar.vision-gravity.active { border-bottom-color: rgba(76, 181, 255, .38); background: linear-gradient(90deg, rgba(5, 17, 30, .96), rgba(5, 37, 66, .9)); }
-.topbar.vision-gravity.active .vision-moon { background: radial-gradient(circle at 35% 30%, #bde8ff, #258fd1 52%, #082d61 78%); box-shadow: 0 0 58px rgba(45, 170, 255, .5); }
+.topbar.vision-gravity.active .vision-moon { display: none; }
+.gravity-scenes { position: absolute; inset: 0; overflow: hidden; }
+.gravity-scene-image { position: absolute; inset: 0; width: 100%; height: 100%; display: block; object-fit: cover; object-position: center 42%; opacity: 0; filter: saturate(1.08) contrast(1.04); -webkit-mask-image: linear-gradient(90deg, transparent 0, rgba(0,0,0,.52) 20%, #000 48%, rgba(0,0,0,.9) 100%); mask-image: linear-gradient(90deg, transparent 0, rgba(0,0,0,.52) 20%, #000 48%, rgba(0,0,0,.9) 100%); animation: gravity-scene-crossfade 16s ease-in-out infinite; }
+.gravity-scene-image.scene-b { object-position: center 34%; animation-delay: -8s; }
 .gravity-floaters i { position: absolute; width: 15px; height: 10px; border: 1px solid rgba(171, 228, 255, .5); background: #193b54; box-shadow: 0 0 13px rgba(100, 203, 255, .35); animation: gravity-float 3.7s ease-in-out infinite alternate; }
 .gravity-floaters i:nth-child(1) { right: 65px; top: 16px; transform: rotate(19deg); }
 .gravity-floaters i:nth-child(2) { right: 116px; bottom: 13px; animation-delay: -.8s; transform: rotate(-13deg); }
@@ -453,6 +456,7 @@ input { width: 100%; min-height: 34px; margin-top: 5px; padding: 0 10px; border:
 @keyframes intro-aura { from { opacity: 0; transform: scale(.7) rotate(-15deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
 @keyframes intro-exit { 0%, 84% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
 @keyframes gravity-float { to { translate: 0 -14px; rotate: 9deg; } }
+@keyframes gravity-scene-crossfade { 0%, 8% { opacity: 0; transform: scale(1.035); } 18%, 48% { opacity: .72; } 58%, 100% { opacity: 0; transform: scale(1); } }
 @keyframes whale-swim { from { opacity: 0; transform: translateX(90px) scale(.75); } }
 @keyframes whale-float { to { transform: translateY(-4px) rotate(-1deg); } }
 

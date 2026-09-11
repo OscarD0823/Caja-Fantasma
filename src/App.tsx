@@ -44,7 +44,7 @@ import {
 } from "lucide-react";
 import CatalogEditor from "./CatalogEditor";
 import AppUpdater from "./Updater";
-import { LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, RIFTWALKER_WHALE_IMAGE, SYMBIOSIS_EVENT_IMAGE } from "./assets";
+import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, RIFTWALKER_WHALE_IMAGE, SYMBIOSIS_EVENT_IMAGE } from "./assets";
 import type { Activity, Catalog, PersistedState, PointAction, Settings, ShinyModRecord, Vision } from "./model";
 import {
   APP_VERSION,
@@ -88,6 +88,16 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.6.3",
+    date: "10 de septiembre de 2026",
+    title: "Escenas propias para Gravedad",
+    items: [
+      "Las dos nuevas referencias de la ciudad y los objetos suspendidos alternan exclusivamente durante Gravedad activa.",
+      "La transición entre escenas es suave y mantiene legible el contador de la barra.",
+      "La Ballena continúa apareciendo encima desde el minuto 15 del evento hasta cinco minutos después de terminar.",
+    ],
+  },
   {
     version: "1.6.2",
     date: "10 de septiembre de 2026",
@@ -1018,6 +1028,7 @@ function VisionAtmosphere({ visionId, active, showWhale }: { visionId?: string; 
     <span className="vision-moon" />
     {visionId === "lunar" && active && <img className="lunar-scene-image" src={LUNAR_EVENT_IMAGE} alt="" />}
     {visionId === "symbiosis" && active && <img className="symbiosis-scene-image" src={SYMBIOSIS_EVENT_IMAGE} alt="" />}
+    {visionId === "gravity" && active && <span className="gravity-scenes"><img className="gravity-scene-image scene-a" src={GRAVITY_EVENT_IMAGE_A} alt="" /><img className="gravity-scene-image scene-b" src={GRAVITY_EVENT_IMAGE_B} alt="" /></span>}
     {visionId === "gravity" && active && <span className="gravity-floaters"><i /><i /><i /><i /></span>}
     {showWhale && <img className="topbar-whale" src={RIFTWALKER_WHALE_IMAGE} alt="" />}
   </div>;
