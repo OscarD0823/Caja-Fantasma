@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": 11,
-  "updatedAt": "2026-09-11T04:25:48.488Z",
+  "catalogVersion": 12,
+  "updatedAt": "2026-09-11T04:26:05.816Z",
   "updatedBy": "OscarD0823",
   "boxTargetPoints": 1000,
   "eventTiming": {
     "selectedVisionId": "gravity",
     "waitMinutes": 30,
     "activeMinutes": 30,
-    "phaseStartedAt": "2026-09-11T04:22:28.488Z",
+    "phaseStartedAt": "2026-09-11T04:22:25.816Z",
     "phase": "active",
-    "updatedAt": "2026-09-11T04:25:48.488Z",
+    "updatedAt": "2026-09-11T04:26:05.816Z",
     "updatedBy": "OscarD0823"
   },
   "proActivities": [
