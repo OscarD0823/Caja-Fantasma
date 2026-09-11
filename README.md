@@ -26,7 +26,7 @@ Repositorio oficial: <https://github.com/OscarD0823/Caja-Fantasma>
 - Respaldo e importación JSON. Los datos personales solo se guardan en el equipo.
 - Animación de apertura al iniciar: se conserva la imagen completa y el emblema de Once Human viaja hasta la ranura de una esquina antes de revelar el programa.
 - La imagen de la recompensa conserva la caja y muestra una cantidad de 17.
-- Barra ambiental: Lunar activa muestra una luna roja con siluetas; Gravedad activa usa una luna azul y objetos flotantes. La Ballena aparece desde el minuto 15 de Gravedad hasta cinco minutos después de terminar.
+- Barra ambiental: Lunar activa usa la referencia de la luna roja con figuras de ojos rojos; Gravedad activa usa una luna azul y objetos flotantes. La imagen de la Ballena pertenece únicamente a Gravedad y aparece desde el minuto 15 hasta cinco minutos después de terminar.
 
 ## Catálogo compartido
 

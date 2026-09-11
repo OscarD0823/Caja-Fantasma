@@ -72,11 +72,8 @@ main { height: 100vh; overflow-y: auto; scrollbar-color: #26515a transparent; sc
 .topbar.waiting .vision-atmosphere { opacity: .2; }
 .vision-moon { position: absolute; right: 245px; top: -34px; width: 126px; height: 126px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #d4e2df, #617278 58%, #27353c 75%); box-shadow: 0 0 38px rgba(182, 208, 205, .16); }
 .topbar.vision-lunar.active { border-bottom-color: rgba(255, 72, 82, .36); background: linear-gradient(90deg, rgba(13, 11, 20, .95), rgba(51, 7, 14, .9)); }
-.topbar.vision-lunar.active .vision-moon { background: radial-gradient(circle at 35% 30%, #ff8b91, #a81828 58%, #3c080d 78%); box-shadow: 0 0 58px rgba(255, 41, 56, .5); }
-.lunar-players { position: absolute; right: 72px; bottom: -9px; display: flex; align-items: flex-end; gap: 12px; }
-.lunar-players i { position: relative; width: 25px; height: 52px; border-radius: 50% 50% 7px 7px; background: linear-gradient(#050507 25%, #101017); filter: drop-shadow(0 0 8px rgba(0, 0, 0, .8)); }
-.lunar-players i:nth-child(2) { width: 29px; height: 65px; }
-.lunar-players i::after { content: ""; position: absolute; top: 12px; left: 7px; width: 3px; height: 3px; border-radius: 50%; background: #ff2a39; box-shadow: 8px 0 #ff2a39, 0 0 8px 2px rgba(255, 25, 40, .8), 8px 0 8px 2px rgba(255, 25, 40, .8); }
+.topbar.vision-lunar.active .vision-moon { display: none; }
+.lunar-scene-image { position: absolute; inset: 50% 0 auto; width: 100%; height: auto; min-height: 100%; display: block; object-fit: cover; object-position: center 52%; opacity: .78; transform: translateY(-52%); filter: saturate(1.12) contrast(1.08); -webkit-mask-image: linear-gradient(90deg, transparent 0, rgba(0,0,0,.55) 22%, #000 48%, rgba(0,0,0,.78) 100%); mask-image: linear-gradient(90deg, transparent 0, rgba(0,0,0,.55) 22%, #000 48%, rgba(0,0,0,.78) 100%); }
 .topbar.vision-gravity.active { border-bottom-color: rgba(76, 181, 255, .38); background: linear-gradient(90deg, rgba(5, 17, 30, .96), rgba(5, 37, 66, .9)); }
 .topbar.vision-gravity.active .vision-moon { background: radial-gradient(circle at 35% 30%, #bde8ff, #258fd1 52%, #082d61 78%); box-shadow: 0 0 58px rgba(45, 170, 255, .5); }
 .gravity-floaters i { position: absolute; width: 15px; height: 10px; border: 1px solid rgba(171, 228, 255, .5); background: #193b54; box-shadow: 0 0 13px rgba(100, 203, 255, .35); animation: gravity-float 3.7s ease-in-out infinite alternate; }

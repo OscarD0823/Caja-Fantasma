@@ -44,7 +44,7 @@ import {
 } from "lucide-react";
 import CatalogEditor from "./CatalogEditor";
 import AppUpdater from "./Updater";
-import { PHANTOM_CRATE_IMAGE, RIFTWALKER_WHALE_IMAGE } from "./assets";
+import { LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, RIFTWALKER_WHALE_IMAGE } from "./assets";
 import type { Activity, Catalog, PersistedState, PointAction, Settings, ShinyModRecord, Vision } from "./model";
 import {
   APP_VERSION,
@@ -88,6 +88,16 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.6.1",
+    date: "10 de septiembre de 2026",
+    title: "Imagen propia para Lunar",
+    items: [
+      "La referencia de la luna roja, los jugadores con ojos rojos y la iglesia se usa exclusivamente cuando Lunar está activa.",
+      "La imagen de la Ballena continúa reservada únicamente para Gravedad.",
+      "Al terminar Lunar, la barra vuelve a su apariencia neutral.",
+    ],
+  },
   {
     version: "1.6.0",
     date: "10 de septiembre de 2026",
@@ -996,7 +1006,7 @@ function StartupIntro({ onSkip }: { onSkip: () => void }) {
 function VisionAtmosphere({ visionId, active, showWhale }: { visionId?: string; active: boolean; showWhale: boolean }) {
   return <div className="vision-atmosphere" aria-hidden="true">
     <span className="vision-moon" />
-    {visionId === "lunar" && active && <span className="lunar-players"><i /><i /><i /></span>}
+    {visionId === "lunar" && active && <img className="lunar-scene-image" src={LUNAR_EVENT_IMAGE} alt="" />}
     {visionId === "gravity" && active && <span className="gravity-floaters"><i /><i /><i /><i /></span>}
     {showWhale && <img className="topbar-whale" src={RIFTWALKER_WHALE_IMAGE} alt="" />}
   </div>;
