@@ -44,7 +44,7 @@ import {
 } from "lucide-react";
 import CatalogEditor from "./CatalogEditor";
 import AppUpdater from "./Updater";
-import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, RIFTWALKER_WHALE_IMAGE, SYMBIOSIS_EVENT_IMAGE } from "./assets";
+import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, GRAVITY_WHALE_BEAM_IMAGE, GRAVITY_WHALE_PASS_IMAGE, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, RIFTWALKER_WHALE_IMAGE, SYMBIOSIS_EVENT_IMAGE } from "./assets";
 import type { Activity, Catalog, PersistedState, PointAction, Settings, ShinyModRecord, Vision } from "./model";
 import {
   APP_VERSION,
@@ -88,6 +88,16 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.6.4",
+    date: "10 de septiembre de 2026",
+    title: "La Ballena convierte su rayo en contador",
+    items: [
+      "Desde el minuto 15 de Gravedad, la Ballena cruza el contador principal y se coloca debajo.",
+      "Al disparar, el rayo azul muestra el tiempo restante y se acorta hasta el cierre del evento.",
+      "Cuando Gravedad termina, el rayo se apaga y la Ballena abandona el panel antes de desaparecer.",
+    ],
+  },
   {
     version: "1.6.3",
     date: "10 de septiembre de 2026",
@@ -816,7 +826,9 @@ export default function App() {
                 <div className="timer-top"><span className="eyebrow"><Clock3 size={15} /> CICLO AUTOMÁTICO</span><span className="live-dot">{cycle.phase === "active" ? "EN CURSO" : "EN ESPERA"}</span></div>
                 <h2>{cycle.phase === "active" ? "La Rueda está activa" : "La Rueda comenzará en"}</h2>
                 <strong className="timer-value">{formatDuration(cycle.remainingMs)}</strong>
-                <div className="cycle-track"><span style={{ width: `${Math.round(cycle.progress * 100)}%` }} /></div>
+                {selectedVision?.id === "gravity" && showGravityWhale
+                  ? <GravityWhaleTimer active={cycle.phase === "active"} remainingMs={cycle.remainingMs} progress={cycle.progress} />
+                  : <div className="cycle-track"><span style={{ width: `${Math.round(cycle.progress * 100)}%` }} /></div>}
                 <p>{cycle.phase === "active" ? `Termina el ${formatDate(cycle.phaseEndsAt)}.` : `Comienza el ${formatDate(cycle.phaseEndsAt)}.`}</p>
                 <div className="hero-actions">
                   <button type="button" className="primary" onClick={() => setCyclePhase(cycle.phase === "active" ? "waiting" : "active")}>
@@ -1030,7 +1042,22 @@ function VisionAtmosphere({ visionId, active, showWhale }: { visionId?: string; 
     {visionId === "symbiosis" && active && <img className="symbiosis-scene-image" src={SYMBIOSIS_EVENT_IMAGE} alt="" />}
     {visionId === "gravity" && active && <span className="gravity-scenes"><img className="gravity-scene-image scene-a" src={GRAVITY_EVENT_IMAGE_A} alt="" /><img className="gravity-scene-image scene-b" src={GRAVITY_EVENT_IMAGE_B} alt="" /></span>}
     {visionId === "gravity" && active && <span className="gravity-floaters"><i /><i /><i /><i /></span>}
-    {showWhale && <img className="topbar-whale" src={RIFTWALKER_WHALE_IMAGE} alt="" />}
+    {showWhale && <img className={`topbar-whale ${active ? "engaged" : "departing"}`} src={RIFTWALKER_WHALE_IMAGE} alt="" />}
+  </div>;
+}
+
+function GravityWhaleTimer({ active, remainingMs, progress }: { active: boolean; remainingMs: number; progress: number }) {
+  const remainingPercent = active ? Math.max(0, Math.min(100, Math.round((1 - progress) * 100))) : 0;
+
+  return <div className={`gravity-whale-timer ${active ? "engaged" : "departing"}`} aria-label={active ? `Ballena de Gravedad activa: ${formatDuration(remainingMs)} restantes` : "La Ballena de Gravedad se retira"}>
+    <div className="gravity-whale-motion">
+      <img className="gravity-whale-stage gravity-whale-pass" src={GRAVITY_WHALE_PASS_IMAGE} alt="" />
+      <img className="gravity-whale-stage gravity-whale-firing" src={GRAVITY_WHALE_BEAM_IMAGE} alt="" />
+      <div className="gravity-beam-counter">
+        <span className="gravity-beam-fill" style={{ width: `${remainingPercent}%` }} />
+        {active && <strong>{formatDuration(remainingMs)}</strong>}
+      </div>
+    </div>
   </div>;
 }
 

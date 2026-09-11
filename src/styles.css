@@ -87,7 +87,9 @@ main { height: 100vh; overflow-y: auto; scrollbar-color: #26515a transparent; sc
 .gravity-floaters i:nth-child(2) { right: 116px; bottom: 13px; animation-delay: -.8s; transform: rotate(-13deg); }
 .gravity-floaters i:nth-child(3) { right: 405px; top: 18px; width: 10px; height: 16px; animation-delay: -1.9s; }
 .gravity-floaters i:nth-child(4) { right: 455px; bottom: 15px; animation-delay: -2.6s; transform: rotate(38deg); }
-.topbar-whale { position: absolute; z-index: 2; right: 390px; top: 4px; width: 168px; height: 88px; border-radius: 44% 56% 43% 57%; object-fit: cover; object-position: center 43%; opacity: .72; mix-blend-mode: screen; filter: saturate(1.2) contrast(1.12) drop-shadow(0 0 13px rgba(84, 196, 255, .55)); animation: whale-swim .9s ease-out both, whale-float 4s .9s ease-in-out infinite alternate; }
+.topbar-whale { position: absolute; z-index: 2; right: 390px; top: 4px; width: 168px; height: 88px; border-radius: 44% 56% 43% 57%; object-fit: cover; object-position: center 43%; opacity: .72; mix-blend-mode: screen; filter: saturate(1.2) contrast(1.12) drop-shadow(0 0 13px rgba(84, 196, 255, .55)); }
+.topbar-whale.engaged { animation: whale-swim .9s ease-out both, whale-float 4s .9s ease-in-out infinite alternate; }
+.topbar-whale.departing { animation: whale-leave 4s cubic-bezier(.3, .05, .55, 1) forwards; }
 .topbar h1 { margin: 2px 0 0; font: 700 27px/1 "Space Grotesk", sans-serif; }
 .eyebrow { color: var(--cyan); font-size: 10px; font-weight: 800; letter-spacing: .16em; text-transform: uppercase; display: inline-flex; align-items: center; gap: 6px; }
 .phase-chip { min-width: 178px; padding: 10px 13px; border: 1px solid rgba(89, 225, 211, .18); border-radius: 12px; display: flex; align-items: center; gap: 10px; background: rgba(56, 203, 193, .07); }
@@ -183,6 +185,22 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .timer-panel .cycle-track { width: min(510px, 92%); margin: 23px 0 10px; }
 .timer-panel.active .cycle-track span { background: linear-gradient(90deg, #df9d47, var(--yellow)); }
 .timer-panel p { margin: 0 0 24px; color: #77919a; font-size: 10px; }
+.gravity-whale-timer { position: relative; z-index: 2; width: min(540px, 100%); height: 148px; margin: 8px 0 5px; isolation: isolate; }
+.gravity-whale-motion { position: absolute; inset: 0; overflow: hidden; border: 1px solid rgba(102, 207, 255, .3); border-radius: 18px 18px 25px 14px; background: #071c2b; box-shadow: 0 13px 34px rgba(0, 8, 19, .42), inset 0 0 32px rgba(83, 190, 255, .1); }
+.gravity-whale-timer.engaged .gravity-whale-motion { animation: gravity-whale-arrive 2.35s cubic-bezier(.18, .74, .22, 1) both; }
+.gravity-whale-timer.departing .gravity-whale-motion { animation: gravity-whale-depart 4s cubic-bezier(.4, 0, .55, 1) forwards; }
+.gravity-whale-stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; object-fit: cover; pointer-events: none; filter: saturate(1.13) contrast(1.08); -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%); }
+.gravity-whale-pass { object-position: center 42%; }
+.gravity-whale-firing { object-position: center 47%; opacity: 0; }
+.gravity-whale-timer.engaged .gravity-whale-pass { animation: gravity-whale-pass-swap 2.5s ease both; }
+.gravity-whale-timer.engaged .gravity-whale-firing { animation: gravity-whale-fire-in .65s 1.78s ease both; }
+.gravity-whale-timer.departing .gravity-whale-pass { opacity: 0; }
+.gravity-whale-timer.departing .gravity-whale-firing { opacity: .82; }
+.gravity-beam-counter { position: absolute; z-index: 3; left: 54%; right: 4%; bottom: 23px; height: 16px; overflow: visible; border: 1px solid rgba(142, 231, 255, .3); border-radius: 2px 14px 14px 2px; color: #e9fbff; background: rgba(7, 28, 48, .62); box-shadow: 0 0 18px rgba(49, 180, 255, .25), inset 0 0 9px rgba(115, 221, 255, .18); transform: rotate(8deg); transform-origin: left center; opacity: 0; }
+.gravity-whale-timer.engaged .gravity-beam-counter { animation: gravity-beam-ignite .42s 2s ease both, gravity-beam-pulse 1.1s 2.42s ease-in-out infinite alternate; }
+.gravity-beam-fill { position: absolute; inset: 0 auto 0 0; min-width: 2px; border-radius: inherit; background: linear-gradient(90deg, #ecfdff, #8ce7ff 34%, #238dff 72%, rgba(22, 92, 255, .12)); box-shadow: 0 0 6px #e7fcff, 0 0 17px #50c7ff, 0 0 30px rgba(26, 102, 255, .72); transition: width .35s linear; }
+.gravity-beam-counter strong { position: absolute; z-index: 2; left: 50%; top: 50%; padding: 3px 7px; border-radius: 8px; color: #f4fdff; background: rgba(1, 17, 32, .72); text-shadow: 0 0 9px #65d7ff; font: 800 11px/1 "Space Grotesk", sans-serif; letter-spacing: .04em; transform: translate(-50%, -50%) rotate(-8deg); }
+.gravity-whale-timer.departing .gravity-beam-counter { opacity: 0; animation: none; }
 .overlay-preview { padding: 25px; }
 .switch { flex: none; width: 43px; height: 24px; padding: 3px; border: 1px solid rgba(137, 178, 184, .18); border-radius: 20px; background: rgba(113, 154, 160, .12); cursor: pointer; transition: .2s ease; }
 .switch span { display: block; width: 16px; height: 16px; border-radius: 50%; background: #7c949a; transition: .2s ease; }
@@ -459,6 +477,13 @@ input { width: 100%; min-height: 34px; margin-top: 5px; padding: 0 10px; border:
 @keyframes gravity-scene-crossfade { 0%, 8% { opacity: 0; transform: scale(1.035); } 18%, 48% { opacity: .72; } 58%, 100% { opacity: 0; transform: scale(1); } }
 @keyframes whale-swim { from { opacity: 0; transform: translateX(90px) scale(.75); } }
 @keyframes whale-float { to { transform: translateY(-4px) rotate(-1deg); } }
+@keyframes whale-leave { 0% { opacity: .72; transform: translate(0, 0) scale(1); } 22% { opacity: .62; transform: translate(-35px, 4px) scale(.96); } 100% { opacity: 0; transform: translate(250px, -50px) scale(.62); } }
+@keyframes gravity-whale-arrive { 0% { opacity: 0; transform: translate(-125%, -92px) scale(.66) rotate(-3deg); } 16% { opacity: .88; } 52% { opacity: 1; transform: translate(33%, -78px) scale(.82) rotate(2deg); } 76% { transform: translate(5%, -9px) scale(1.025) rotate(-.5deg); } 100% { opacity: 1; transform: translate(0, 0) scale(1) rotate(0); } }
+@keyframes gravity-whale-pass-swap { 0%, 68% { opacity: 1; transform: scale(1.035); } 100% { opacity: 0; transform: scale(1); } }
+@keyframes gravity-whale-fire-in { from { opacity: 0; transform: scale(1.025); } to { opacity: .88; transform: scale(1); } }
+@keyframes gravity-beam-ignite { from { opacity: 0; transform: rotate(8deg) scaleX(.08); } to { opacity: 1; transform: rotate(8deg) scaleX(1); } }
+@keyframes gravity-beam-pulse { to { filter: brightness(1.34); box-shadow: 0 0 27px rgba(91, 213, 255, .5), inset 0 0 12px rgba(189, 242, 255, .34); } }
+@keyframes gravity-whale-depart { 0% { opacity: 1; transform: translate(0, 0) scale(1); } 14% { transform: translate(-5%, 0) scale(.98); } 100% { opacity: 0; transform: translate(128%, -86px) scale(.68) rotate(3deg); } }
 
 @media (max-width: 1050px) {
   .app-shell { grid-template-columns: 80px minmax(0, 1fr); }
@@ -495,6 +520,8 @@ input { width: 100%; min-height: 34px; margin-top: 5px; padding: 0 10px; border:
   .catalog-toolbar label { width: 100%; }
   .catalog-toolbar > div { flex-wrap: wrap; }
   .voice-controls { align-items: stretch; flex-direction: column; }
+  .gravity-whale-timer { height: 128px; }
+  .gravity-beam-counter { left: 50%; right: 3%; bottom: 20px; }
   .voice-controls label { width: 100%; }
   .vision-edit-fields, .activity-editor { grid-template-columns: 1fr 80px; }
   .vision-edit-fields > label:nth-child(2), .activity-editor > label:nth-child(3) { grid-column: 1/-1; }
@@ -503,6 +530,8 @@ input { width: 100%; min-height: 34px; margin-top: 5px; padding: 0 10px; border:
 @media (prefers-reduced-motion: reduce) {
   .startup-intro { animation-duration: 1.2s; }
   .intro-crate, .intro-crate-image, .intro-key-logo, .intro-corner-slot, .intro-light, .intro-aura { animation: none; }
+  .gravity-whale-pass { opacity: 0; }
+  .gravity-whale-firing { opacity: .88; }
 }
 
 @media (prefers-reduced-motion: reduce) {
