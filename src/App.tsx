@@ -36,6 +36,9 @@ import {
   Undo2,
   Upload,
   UserCheck,
+  UserPlus,
+  UserRound,
+  Users,
   Volume2,
   Wifi,
   WifiOff,
@@ -45,18 +48,23 @@ import {
 import CatalogEditor from "./CatalogEditor";
 import AppUpdater from "./Updater";
 import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, GRAVITY_WHALE_BEAM_IMAGE, GRAVITY_WHALE_PASS_IMAGE, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, RIFTWALKER_WHALE_IMAGE, SYMBIOSIS_EVENT_IMAGE } from "./assets";
-import type { Activity, Catalog, PersistedState, PointAction, Settings, ShinyModRecord, Vision } from "./model";
+import type { Activity, Catalog, CharacterProfile, PersistedState, PointAction, Settings, ShinyModRecord, Vision } from "./model";
 import {
   APP_VERSION,
   AUTHOR,
   BASELINE_BOX_POINTS,
+  DEFAULT_CHARACTER_ID,
   REMOTE_CATALOG_URL,
   REPOSITORY_URL,
+  actionCharacterIds,
+  actionsForCharacter,
+  actionsForTeamSession,
   boxStatistics,
   buildBreakdown,
   clampNumber,
   computeCycle,
   createId,
+  detachCharacterFromActions,
   formatDuration,
   parseManualBaseline,
   shouldShowGravityWhale,
@@ -88,6 +96,16 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.7.0",
+    date: "11 de septiembre de 2026",
+    title: "Conteo por personaje y modo Equipo",
+    items: [
+      "Cada personaje conserva por separado sus puntos, porcentaje estimado e historial de cajas.",
+      "El modo Equipo comienza en cero y suma cada recompensa a todos los personajes seleccionados.",
+      "Al tener dos o más personajes aparece una barra comparativa para revisar su progreso individual.",
+    ],
+  },
   {
     version: "1.6.4",
     date: "10 de septiembre de 2026",
@@ -281,6 +299,7 @@ export default function App() {
   const [counterMinutes, setCounterMinutes] = useState(() => String(Math.floor(initialCycleSeconds / 60)));
   const [counterSeconds, setCounterSeconds] = useState(() => String(initialCycleSeconds % 60));
   const [manualHistoryText, setManualHistoryText] = useState("");
+  const [newCharacterName, setNewCharacterName] = useState("");
   const defaultShinyMod = SHINY_MOD_CATALOG.find((item) => item.englishName === "Rush Hour <Downstar>" && !item.isCatalogShiny) ?? SHINY_MOD_CATALOG[0];
   const [shinySearch, setShinySearch] = useState("");
   const [shinyGroupFilter, setShinyGroupFilter] = useState("all");
@@ -290,16 +309,34 @@ export default function App() {
   const importRef = useRef<HTMLInputElement>(null);
   const voiceAlertRef = useRef("");
 
-  const currentPoints = useMemo(() => state.actions.reduce((sum, action) => sum + action.points, 0), [state.actions]);
-  const currentClaims = state.actions.length;
-  const breakdown = useMemo(() => buildBreakdown(state.actions), [state.actions]);
   const referencePoints = useMemo(() => [...BASELINE_BOX_POINTS, ...state.manualBaselinePoints], [state.manualBaselinePoints]);
-  const stats = useMemo(() => boxStatistics(state.boxes, currentPoints, referencePoints), [state.boxes, currentPoints, referencePoints]);
+  const target = clampNumber(state.catalog.boxTargetPoints, 1, 10_000);
+  const activeCharacter = state.characters.find((character) => character.id === state.activeCharacterId) ?? state.characters[0];
+  const isTeamMode = state.trackingMode === "team" && state.characters.length > 1;
+  const activeCharacterActions = useMemo(() => actionsForCharacter(state.actions, activeCharacter.id), [state.actions, activeCharacter.id]);
+  const activeTeamActions = useMemo(() => actionsForTeamSession(state.actions, state.activeTeamSessionId), [state.actions, state.activeTeamSessionId]);
+  const currentActions = isTeamMode ? activeTeamActions : activeCharacterActions;
+  const currentPoints = useMemo(() => currentActions.reduce((sum, action) => sum + action.points, 0), [currentActions]);
+  const currentClaims = currentActions.length;
+  const breakdown = useMemo(() => buildBreakdown(currentActions), [currentActions]);
+  const activeCharacterBoxes = useMemo(() => state.boxes.filter((box) => (box.characterId ?? DEFAULT_CHARACTER_ID) === activeCharacter.id), [state.boxes, activeCharacter.id]);
+  const activeCharacterPoints = useMemo(() => activeCharacterActions.reduce((sum, action) => sum + action.points, 0), [activeCharacterActions]);
+  const stats = useMemo(() => boxStatistics(activeCharacterBoxes, activeCharacterPoints, referencePoints), [activeCharacterBoxes, activeCharacterPoints, referencePoints]);
+  const characterSummaries = useMemo(() => state.characters.map((character) => {
+    const actions = actionsForCharacter(state.actions, character.id);
+    const points = actions.reduce((sum, action) => sum + action.points, 0);
+    const boxes = state.boxes.filter((box) => (box.characterId ?? DEFAULT_CHARACTER_ID) === character.id);
+    return { character, points, chance: boxStatistics(boxes, points, referencePoints).currentChancePercent };
+  }), [state.characters, state.actions, state.boxes, referencePoints]);
+  const selectedTeamSummaries = characterSummaries.filter((summary) => state.teamMemberIds.includes(summary.character.id));
+  const displayedChance = isTeamMode && selectedTeamSummaries.length > 0
+    ? selectedTeamSummaries.reduce((sum, summary) => sum + summary.chance, 0) / selectedTeamSummaries.length
+    : stats.currentChancePercent;
+  const teamReady = !isTeamMode || state.teamMemberIds.length >= 2;
   const baselineStats = useMemo(() => boxStatistics([], 0, referencePoints), [referencePoints]);
   const selectedVision = state.catalog.visions.find((vision) => vision.id === state.settings.selectedVisionId) ?? state.catalog.visions[0];
   const cycle = computeCycle(state.settings, now);
   const showGravityWhale = shouldShowGravityWhale(state.settings, now);
-  const target = clampNumber(state.catalog.boxTargetPoints, 1, 10_000);
   const targetProgress = Math.min(100, Math.round((currentPoints / target) * 100));
   const selectedShinyMod = SHINY_MOD_CATALOG.find((item) => item.id === selectedShinyModId) ?? defaultShinyMod;
   const normalizedShinySearch = normalizeModSearch(shinySearch);
@@ -462,6 +499,11 @@ export default function App() {
 
   const addActivity = (activity: Activity, vision?: Vision) => {
     if (!activity.enabled || activity.points <= 0 || (vision && !vision.enabled)) return;
+    if (isTeamMode && !teamReady) {
+      setToast("Selecciona al menos dos personajes para registrar en Equipo");
+      window.setTimeout(() => setToast(""), 2600);
+      return;
+    }
     const action: PointAction = {
       id: createId("claim"),
       activityId: activity.id,
@@ -470,23 +512,40 @@ export default function App() {
       visionName: vision?.name,
       points: activity.points,
       occurredAt: new Date().toISOString(),
+      characterIds: isTeamMode ? [...state.teamMemberIds] : [activeCharacter.id],
+      trackingMode: isTeamMode ? "team" : "solo",
+      teamSessionId: isTeamMode ? state.activeTeamSessionId : undefined,
     };
     commitState((current) => ({ ...current, actions: [...current.actions, action] }));
-    setToast(`+${activity.points} · ${activity.name}`);
+    setToast(isTeamMode ? `+${activity.points} para ${state.teamMemberIds.length} personajes · ${activity.name}` : `+${activity.points} · ${activity.name}`);
     window.setTimeout(() => setToast(""), 1800);
   };
 
-  const removeLastActivity = (activityId: string, visionId?: string) => {
+  const removeActionFromCurrentTracking = (actionId: string) => {
     commitState((current) => {
-      const index = current.actions.map((action) => `${action.visionId ?? "pro"}:${action.activityId}`).lastIndexOf(`${visionId ?? "pro"}:${activityId}`);
-      if (index < 0) return current;
-      return { ...current, actions: current.actions.filter((_, actionIndex) => actionIndex !== index) };
+      if (isTeamMode) return { ...current, actions: current.actions.filter((action) => action.id !== actionId) };
+      return { ...current, actions: detachCharacterFromActions(current.actions, activeCharacter.id, new Set([actionId])) };
     });
   };
 
+  const removeLastActivity = (activityId: string, visionId?: string) => {
+    const action = [...currentActions].reverse().find((item) => `${item.visionId ?? "pro"}:${item.activityId}` === `${visionId ?? "pro"}:${activityId}`);
+    if (action) removeActionFromCurrentTracking(action.id);
+  };
+
+  const undoLastAction = () => {
+    const action = currentActions.at(-1);
+    if (action) removeActionFromCurrentTracking(action.id);
+  };
+
   const markBox = (source: "normal" | "platform-mail" = "normal") => {
-    if (state.actions.length === 0) return;
-    const split = source === "platform-mail" ? splitPlatformCarryover(state.actions) : { completedAttempt: state.actions, carryOver: [] as PointAction[] };
+    if (isTeamMode) {
+      setToast("Cambia a Solitario para indicar a qué personaje le salió la caja");
+      window.setTimeout(() => setToast(""), 2800);
+      return;
+    }
+    if (activeCharacterActions.length === 0) return;
+    const split = source === "platform-mail" ? splitPlatformCarryover(activeCharacterActions) : { completedAttempt: activeCharacterActions, carryOver: [] as PointAction[] };
     if (split.completedAttempt.length === 0) {
       setToast("Todavía no hay recompensas con una hora de antigüedad para cerrar esta caja");
       window.setTimeout(() => setToast(""), 3200);
@@ -501,16 +560,96 @@ export default function App() {
       claims: split.completedAttempt.length,
       source,
       carriedPoints,
+      characterId: activeCharacter.id,
+      characterName: activeCharacter.name,
       breakdown: buildBreakdown(split.completedAttempt),
     };
-    commitState((current) => ({ ...current, actions: split.carryOver, boxes: [record, ...current.boxes] }));
-    setToast(source === "platform-mail" ? `Caja de Plataformas registrada; ${carriedPoints} puntos pasan al nuevo intento` : `Caja registrada con ${recordedPoints} puntos`);
+    const completedIds = new Set(split.completedAttempt.map((action) => action.id));
+    commitState((current) => ({ ...current, actions: detachCharacterFromActions(current.actions, activeCharacter.id, completedIds), boxes: [record, ...current.boxes] }));
+    setToast(source === "platform-mail" ? `Caja de ${activeCharacter.name} registrada; ${carriedPoints} puntos pasan al nuevo intento` : `Caja de ${activeCharacter.name} registrada con ${recordedPoints} puntos`);
     window.setTimeout(() => setToast(""), 2400);
   };
 
   const resetAttempt = () => {
-    if (state.actions.length === 0) return;
-    commitState((current) => ({ ...current, actions: [] }));
+    if (currentActions.length === 0) return;
+    if (isTeamMode) {
+      commitState((current) => ({
+        ...current,
+        actions: current.actions.filter((action) => !(action.trackingMode === "team" && action.teamSessionId === current.activeTeamSessionId && actionCharacterIds(action).length === 0)),
+        activeTeamSessionId: createId("team"),
+      }));
+      return;
+    }
+    commitState((current) => ({ ...current, actions: detachCharacterFromActions(current.actions, activeCharacter.id) }));
+  };
+
+  const setTrackingMode = (mode: "solo" | "team") => {
+    if (mode === "team" && state.characters.length < 2) return;
+    commitState((current) => ({ ...current, trackingMode: mode }));
+  };
+
+  const selectCharacter = (characterId: string) => {
+    commitState((current) => ({ ...current, activeCharacterId: characterId, trackingMode: "solo" }));
+  };
+
+  const toggleTeamMember = (characterId: string) => {
+    commitState((current) => ({
+      ...current,
+      teamMemberIds: current.teamMemberIds.includes(characterId)
+        ? current.teamMemberIds.filter((id) => id !== characterId)
+        : [...current.teamMemberIds, characterId],
+    }));
+  };
+
+  const startNewTeamCount = () => {
+    commitState((current) => ({
+      ...current,
+      actions: current.actions.filter((action) => !(action.trackingMode === "team" && action.teamSessionId === current.activeTeamSessionId && actionCharacterIds(action).length === 0)),
+      activeTeamSessionId: createId("team"),
+      trackingMode: "team",
+    }));
+    setToast("Nuevo conteo de Equipo iniciado en 0; los puntos personales se conservan");
+    window.setTimeout(() => setToast(""), 3000);
+  };
+
+  const addCharacter = () => {
+    const name = newCharacterName.trim().slice(0, 40);
+    if (!name || state.characters.length >= 12) {
+      setToast(state.characters.length >= 12 ? "Puedes registrar hasta 12 personajes" : "Escribe el nombre del personaje");
+      window.setTimeout(() => setToast(""), 2400);
+      return;
+    }
+    const character: CharacterProfile = { id: createId("character"), name, createdAt: new Date().toISOString() };
+    commitState((current) => ({ ...current, characters: [...current.characters, character], teamMemberIds: [...current.teamMemberIds, character.id] }));
+    setNewCharacterName("");
+    setToast(`${name} agregado`);
+    window.setTimeout(() => setToast(""), 1800);
+  };
+
+  const renameCharacter = (characterId: string, name: string) => {
+    const cleanName = name.trim().slice(0, 40);
+    if (!cleanName) return;
+    commitState((current) => ({
+      ...current,
+      characters: current.characters.map((character) => character.id === characterId ? { ...character, name: cleanName } : character),
+      boxes: current.boxes.map((box) => box.characterId === characterId ? { ...box, characterName: cleanName.trim() || box.characterName } : box),
+    }));
+  };
+
+  const removeCharacter = (characterId: string) => {
+    const character = state.characters.find((item) => item.id === characterId);
+    if (!character || state.characters.length <= 1 || !window.confirm(`¿Eliminar a ${character.name}? Su historial de cajas se conservará, pero se quitará su intento actual.`)) return;
+    commitState((current) => {
+      const characters = current.characters.filter((item) => item.id !== characterId);
+      return {
+        ...current,
+        characters,
+        actions: detachCharacterFromActions(current.actions, characterId),
+        activeCharacterId: current.activeCharacterId === characterId ? characters[0].id : current.activeCharacterId,
+        teamMemberIds: current.teamMemberIds.filter((id) => id !== characterId),
+        trackingMode: characters.length > 1 ? current.trackingMode : "solo",
+      };
+    });
   };
 
   const setCyclePhase = (phase: "waiting" | "active") => {
@@ -771,19 +910,41 @@ export default function App() {
 
         {tab === "progress" && (
           <section className="page progress-page">
+            {state.characters.length > 1 && <article className="character-dashboard panel">
+              <div className="character-dashboard-top">
+                <div><span className="eyebrow"><Users size={15} /> PERSONAJES</span><h2>{isTeamMode ? "Registro compartido del equipo" : `Jugando con ${activeCharacter.name}`}</h2></div>
+                <div className="tracking-mode-switch" aria-label="Modo de registro">
+                  <button type="button" className={!isTeamMode ? "selected" : ""} onClick={() => setTrackingMode("solo")}><UserRound size={16} /> Solitario</button>
+                  <button type="button" className={isTeamMode ? "selected team" : ""} onClick={() => setTrackingMode("team")}><Users size={16} /> Equipo</button>
+                </div>
+              </div>
+              <div className="character-progress-list">
+                {characterSummaries.map((summary) => {
+                  const selected = isTeamMode ? state.teamMemberIds.includes(summary.character.id) : summary.character.id === activeCharacter.id;
+                  return <button type="button" key={summary.character.id} className={selected ? "selected" : ""} onClick={() => isTeamMode ? toggleTeamMember(summary.character.id) : selectCharacter(summary.character.id)}>
+                    <span className="character-avatar"><UserRound size={17} /></span>
+                    <span className="character-progress-copy"><strong>{summary.character.name}</strong><small>{summary.points} puntos · {summary.chance.toFixed(1)}% estimado</small><span className="character-progress-track"><i style={{ width: `${Math.min(100, Math.round((summary.points / target) * 100))}%` }} /></span></span>
+                    {isTeamMode && <span className={`team-member-check ${selected ? "selected" : ""}`}>{selected ? <Check size={14} /> : <Plus size={14} />}</span>}
+                  </button>;
+                })}
+              </div>
+              {isTeamMode && <div className={`team-guidance ${teamReady ? "ready" : "warning"}`}><Users size={17} /><span><strong>{state.teamMemberIds.length} personajes en este equipo.</strong>{teamReady ? " Cada recompensa se suma una vez a todos los seleccionados." : " Selecciona al menos dos para comenzar."}</span><button type="button" className="secondary compact" onClick={startNewTeamCount}><RotateCcw size={15} /> Nuevo conteo en 0</button></div>}
+            </article>}
+
             <div className="hero-grid">
               <article className="progress-hero panel">
                 <div className="hero-copy">
-                  <span className="eyebrow"><Sparkles size={14} /> INTENTO EN CURSO</span>
+                  <span className="eyebrow"><Sparkles size={14} /> {isTeamMode ? "CONTEO DE EQUIPO" : `INTENTO · ${activeCharacter.name}`}</span>
                   <h2>{currentPoints}<small> / {target} puntos</small></h2>
-                  <p>{currentClaims} {currentClaims === 1 ? "recompensa reclamada" : "recompensas reclamadas"}. La caja puede salir antes: regístrala cuando aparezca.</p>
+                  <p>{isTeamMode ? `${currentClaims} ${currentClaims === 1 ? "recompensa compartida" : "recompensas compartidas"}. Se suman al intento individual de cada integrante.` : `${currentClaims} ${currentClaims === 1 ? "recompensa reclamada" : "recompensas reclamadas"}. La caja puede salir antes: regístrala cuando aparezca.`}</p>
                   <div className="progress-track" role="progressbar" aria-label="Progreso del intento" aria-valuemin={0} aria-valuemax={target} aria-valuenow={Math.min(currentPoints, target)}>
                     <span style={{ width: `${targetProgress}%` }} />
                   </div>
                   <div className="hero-actions">
-                    <button type="button" className="primary" disabled={state.actions.length === 0} onClick={() => markBox("normal")}><Box size={19} /> ¡Salió la caja!</button>
-                    <button type="button" className="secondary platform-mail-button" disabled={state.actions.length === 0} onClick={() => markBox("platform-mail")}><Mail size={18} /> Llegó por Plataformas</button>
-                    <button type="button" className="secondary" disabled={state.actions.length === 0} onClick={() => commitState((current) => ({ ...current, actions: current.actions.slice(0, -1) }))}><Undo2 size={18} /> Deshacer último</button>
+                    {!isTeamMode && <button type="button" className="primary" disabled={currentActions.length === 0} onClick={() => markBox("normal")}><Box size={19} /> ¡Salió la caja!</button>}
+                    {!isTeamMode && <button type="button" className="secondary platform-mail-button" disabled={currentActions.length === 0} onClick={() => markBox("platform-mail")}><Mail size={18} /> Llegó por Plataformas</button>}
+                    {isTeamMode && <button type="button" className="primary" onClick={startNewTeamCount}><Users size={18} /> Nuevo conteo de Equipo</button>}
+                    <button type="button" className="secondary" disabled={currentActions.length === 0} onClick={undoLastAction}><Undo2 size={18} /> Deshacer último</button>
                   </div>
                 </div>
                 <div className="ghost-orbit" aria-hidden="true"><div className="orbital-ring" /><img className="ghost-crate-image" src={PHANTOM_CRATE_IMAGE} alt="" /><div className="once-human-wordmark"><span>ONCE</span><strong>HUMAN</strong></div><Sparkles className="spark-one" /><Sparkles className="spark-two" /></div>
@@ -791,8 +952,8 @@ export default function App() {
 
               <article className="chance-card panel">
                 <span className="eyebrow"><BarChart3 size={14} /> ESTIMACIÓN OBSERVADA</span>
-                <strong className="chance-value">{stats.currentChancePercent.toFixed(1)}%</strong>
-                <p>Probabilidad acumulada estimada con la hoja base, valores manuales y tus cajas confirmadas.</p>
+                <strong className="chance-value">{displayedChance.toFixed(1)}%</strong>
+                <p>{isTeamMode ? "Promedio del porcentaje individual de los personajes seleccionados. Cada uno conserva su propio intento." : "Probabilidad acumulada estimada con la hoja base, valores manuales y las cajas de este personaje."}</p>
                 <div className="mini-stats"><span><small>Promedio</small><strong>{stats.count ? stats.average.toFixed(1) : "—"}</strong></span><span><small>Muestras</small><strong>{stats.count}</strong></span></div>
               </article>
             </div>
@@ -800,7 +961,7 @@ export default function App() {
             <div className="section-heading"><div><span className="eyebrow">RECOMPENSAS PRO</span><h2>Suma lo que reclames</h2></div><span>Solo las recompensas completadas cuentan</span></div>
             <div className="activity-grid">
               {state.catalog.proActivities.map((activity) => (
-                <ActivityCard key={activity.id} activity={activity} count={state.actions.filter((action) => !action.visionId && action.activityId === activity.id).length} onAdd={() => addActivity(activity)} onRemove={() => removeLastActivity(activity.id)} />
+                <ActivityCard key={activity.id} activity={activity} disabled={!teamReady} count={currentActions.filter((action) => !action.visionId && action.activityId === activity.id).length} onAdd={() => addActivity(activity)} onRemove={() => removeLastActivity(activity.id)} />
               ))}
             </div>
 
@@ -808,12 +969,12 @@ export default function App() {
             {!selectedVision?.enabled && <div className="notice warning"><ActivityIcon size={18} /><span><strong>Evento desactivado.</strong> Sus opciones se muestran como referencia y no suman puntos.</span></div>}
             <div className="activity-grid">
               {selectedVision?.activities.length ? selectedVision.activities.map((activity) => (
-                <ActivityCard key={activity.id} activity={activity} disabled={!selectedVision.enabled} count={state.actions.filter((action) => action.visionId === selectedVision.id && action.activityId === activity.id).length} onAdd={() => addActivity(activity, selectedVision)} onRemove={() => removeLastActivity(activity.id, selectedVision.id)} />
+                <ActivityCard key={activity.id} activity={activity} disabled={!selectedVision.enabled || !teamReady} count={currentActions.filter((action) => action.visionId === selectedVision.id && action.activityId === activity.id).length} onAdd={() => addActivity(activity, selectedVision)} onRemove={() => removeLastActivity(activity.id, selectedVision.id)} />
               )) : <div className="empty-card"><Sparkles size={28} /><strong>Aún no hay recompensas para {selectedVision?.name}</strong><span>Puedes añadirlas en Configuración y publicarlas para todos.</span></div>}
             </div>
 
             {breakdown.length > 0 && <article className="attempt-log panel">
-              <div className="panel-title"><div><span className="eyebrow">DESGLOSE</span><h3>Intento actual</h3></div><button type="button" className="danger-quiet" onClick={resetAttempt}><RotateCcw size={16} /> Reiniciar</button></div>
+              <div className="panel-title"><div><span className="eyebrow">DESGLOSE</span><h3>{isTeamMode ? "Conteo actual del equipo" : `Intento de ${activeCharacter.name}`}</h3></div><button type="button" className="danger-quiet" onClick={resetAttempt}><RotateCcw size={16} /> {isTeamMode ? "Nuevo conteo" : "Reiniciar"}</button></div>
               {breakdown.map((item) => <div className="log-row" key={item.name}><span>{item.name}<small>{item.count}× reclamado</small></span><strong>{pointsLabel(item.points)}</strong></div>)}
             </article>}
           </section>
@@ -883,7 +1044,7 @@ export default function App() {
         {tab === "history" && (
           <section className="page history-page">
             <div className="stats-grid">
-              <StatCard icon={Box} label="Muestras totales" value={String(stats.count)} />
+              <StatCard icon={Box} label={`Muestras · ${activeCharacter.name}`} value={String(stats.count)} />
               <StatCard icon={Minus} label="Más baja" value={stats.count ? pointsLabel(stats.minimum) : "—"} />
               <StatCard icon={MonitorUp} label="Más alta" value={stats.count ? pointsLabel(stats.maximum) : "—"} />
               <StatCard icon={BarChart3} label="Promedio" value={stats.count ? pointsLabel(Number(stats.average.toFixed(1))) : "—"} />
@@ -916,7 +1077,7 @@ export default function App() {
                 {state.boxes.map((box, index) => (
                   <article className="history-record panel" key={box.id}>
                     <div className="record-number">#{state.boxes.length - index}</div>
-                    <div className="record-main"><span>{formatDate(box.occurredAt)}</span><strong>{pointsLabel(box.points)}</strong><small>{box.claims} recompensas reclamadas{box.source === "platform-mail" ? ` · correo de Plataformas · ${box.carriedPoints ?? 0} pts transferidos` : ""}</small></div>
+                    <div className="record-main"><span>{box.characterName ?? state.characters.find((character) => character.id === (box.characterId ?? DEFAULT_CHARACTER_ID))?.name ?? "Personaje principal"} · {formatDate(box.occurredAt)}</span><strong>{pointsLabel(box.points)}</strong><small>{box.claims} recompensas reclamadas{box.source === "platform-mail" ? ` · correo de Plataformas · ${box.carriedPoints ?? 0} pts transferidos` : ""}</small></div>
                     <details><summary>Ver desglose</summary>{box.breakdown.map((item) => <div key={item.name}><span>{item.name} · {item.count}×</span><strong>{item.points}</strong></div>)}</details>
                   </article>
                 ))}
@@ -992,6 +1153,27 @@ export default function App() {
               <SettingToggle icon={MonitorUp} title="Iniciar con Windows" description="Arranca en segundo plano; la ventana principal no interrumpe al encender el PC." enabled={state.settings.autoStartEnabled} onToggle={(enabled) => { commitState((current) => ({ ...current, settings: { ...current.settings, autoStartEnabled: enabled } })); void toggleAutostart(enabled); }} />
               <SettingToggle icon={Eye} title="Ventana flotante" description="Contador pequeño, movible y siempre encima del juego." enabled={state.settings.overlayEnabled} onToggle={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))} />
             </div>
+
+            <article className="character-manager panel">
+              <div className="panel-title"><div><span className="eyebrow"><Users size={15} /> PERSONAJES</span><h2>Perfiles de juego</h2></div><span className="character-limit">{state.characters.length} / 12</span></div>
+              <p>La aplicación siempre abre en Solitario. Cada personaje guarda su intento y sus cajas; en Equipo, una recompensa se reparte a todos los integrantes seleccionados.</p>
+              <form className="character-add" onSubmit={(event) => { event.preventDefault(); addCharacter(); }}>
+                <label>Nuevo personaje<input value={newCharacterName} maxLength={40} placeholder="Nombre dentro del juego" onChange={(event) => setNewCharacterName(event.target.value)} /></label>
+                <button type="submit" className="primary" disabled={state.characters.length >= 12}><UserPlus size={17} /> Agregar personaje</button>
+              </form>
+              <div className="character-manager-list">
+                {state.characters.map((character, index) => {
+                  const summary = characterSummaries.find((item) => item.character.id === character.id);
+                  return <div className="character-manager-row" key={character.id}>
+                    <span className="character-avatar"><UserRound size={18} /></span>
+                    <label>Nombre<input defaultValue={character.name} maxLength={40} onBlur={(event) => renameCharacter(character.id, event.target.value.trim() || character.name)} /></label>
+                    <span className="character-manager-stats"><strong>{summary?.points ?? 0} puntos</strong><small>{(summary?.chance ?? 0).toFixed(1)}% estimado</small></span>
+                    {index === 0 && <span className="main-character-badge">PRINCIPAL</span>}
+                    <button type="button" className="character-delete" disabled={state.characters.length <= 1} aria-label={`Eliminar ${character.name}`} onClick={() => removeCharacter(character.id)}><Trash2 size={16} /></button>
+                  </div>;
+                })}
+              </div>
+            </article>
 
             <article className="backup-panel panel"><div><span className="eyebrow">DATOS PERSONALES</span><h2>Respaldo local</h2><p>El historial permanece en este equipo y no se sube al repositorio público.</p></div><div><button type="button" className="secondary" onClick={() => exportState(state)}><Download size={17} /> Exportar</button><button type="button" className="secondary" onClick={() => importRef.current?.click()}><Upload size={17} /> Importar</button><input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(event) => void onImport(event.target.files?.[0])} /></div></article>
 

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import catalog from "../catalog/visions.json" with { type: "json" };
-import { BASELINE_BOX_POINTS, VISION_CYCLE_WAIT_STARTED_AT, boxStatistics, buildBreakdown, computeCycle, parseManualBaseline, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type PointAction, type Settings } from "../src/model.ts";
+import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, boxStatistics, buildBreakdown, computeCycle, createInitialCharacterTracking, detachCharacterFromActions, parseManualBaseline, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type PointAction, type Settings } from "../src/model.ts";
 import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesModSearch, normalizeModSearch } from "../src/shinyModsCatalog.ts";
+
+const freshState = { ...createInitialCharacterTracking(Date.parse("2026-09-11T00:00:00Z")), actions: [] as PointAction[] };
+assert.equal(freshState.trackingMode, "solo", "La aplicación debe iniciar en Solitario.");
+assert.equal(freshState.characters.length, 1);
+assert.equal(actionsForTeamSession(freshState.actions, freshState.activeTeamSessionId).length, 0, "El conteo inicial de Equipo debe empezar en cero.");
 
 assert.equal(validateCatalog(catalog), true, "El catálogo incluido debe ser válido.");
 for (const id of ["pro-monolith-boss", "pro-silo", "dream-manibus-challenge", "pro-war", "manibus-manibus", "dream-zone-invasion", "dreamer-light", "dreamer-deep", "dreamer-eternal"]) {
@@ -56,6 +61,19 @@ assert.deepEqual(buildBreakdown(actions), [
   { name: "Gravedad · Plataformas", count: 2, points: 8 },
   { name: "Gravedad · Ballena", count: 1, points: 1 },
 ]);
+assert.equal(actionsForCharacter(actions, DEFAULT_CHARACTER_ID).length, 3, "Los registros anteriores deben migrar al personaje principal.");
+
+const teamActions: PointAction[] = [
+  { id: "team-1", activityId: "pro-silo", activityName: "Silo", points: 1, occurredAt: "2026-09-10T12:00:00Z", characterIds: ["alpha", "beta"], trackingMode: "team", teamSessionId: "session-a" },
+  { id: "solo-alpha", activityId: "pro-war", activityName: "Guerra Pro", points: 2, occurredAt: "2026-09-10T12:05:00Z", characterIds: ["alpha"], trackingMode: "solo" },
+];
+assert.equal(actionsForCharacter(teamActions, "alpha").reduce((sum, action) => sum + action.points, 0), 3);
+assert.equal(actionsForCharacter(teamActions, "beta").reduce((sum, action) => sum + action.points, 0), 1);
+assert.equal(actionsForTeamSession(teamActions, "session-a").length, 1);
+const afterAlphaBox = detachCharacterFromActions(teamActions, "alpha", new Set(["team-1", "solo-alpha"]));
+assert.equal(actionsForCharacter(afterAlphaBox, "alpha").length, 0);
+assert.equal(actionsForCharacter(afterAlphaBox, "beta").length, 1, "Cerrar la caja de un personaje no debe quitar puntos a sus compañeros.");
+assert.equal(actionsForTeamSession(afterAlphaBox, "session-a").length, 1, "El conteo del equipo debe conservarse aunque un integrante cierre su caja.");
 
 const boxes: BoxRecord[] = [8, 12, 20].map((points, index) => ({ id: String(index), occurredAt: new Date().toISOString(), points, claims: points, breakdown: [] }));
 const statistics = boxStatistics(boxes, 5, []);

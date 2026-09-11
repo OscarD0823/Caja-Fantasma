@@ -1,6 +1,6 @@
 import defaultCatalog from "../catalog/visions.json";
-import type { Catalog, PersistedState, ShinyModRecord } from "./model";
-import { VISION_CYCLE_WAIT_STARTED_AT, validateCatalog } from "./model";
+import type { Catalog, CharacterProfile, PersistedState, ShinyModRecord } from "./model";
+import { VISION_CYCLE_WAIT_STARTED_AT, createInitialCharacterTracking, validateCatalog } from "./model";
 
 const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
 const OVERLAY_POSITION_KEY = "caja-fantasma.once-human.overlay-position.v1";
@@ -29,6 +29,37 @@ function sanitizeShinyMods(value: unknown): ShinyModRecord[] {
   }).slice(0, 5_000);
 }
 
+function sanitizeCharacters(value: unknown, fallback: CharacterProfile[]) {
+  if (!Array.isArray(value)) return fallback;
+  const usedIds = new Set<string>();
+  const characters = value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const candidate = entry as Partial<CharacterProfile>;
+    const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
+    const name = typeof candidate.name === "string" ? candidate.name.trim().slice(0, 40) : "";
+    if (!id || !name || usedIds.has(id)) return [];
+    usedIds.add(id);
+    return [{ id, name, createdAt: typeof candidate.createdAt === "string" ? candidate.createdAt : new Date().toISOString() }];
+  }).slice(0, 12);
+  return characters.length > 0 ? characters : fallback;
+}
+
+function characterState(parsed: Partial<PersistedState>, fallback: PersistedState) {
+  const characters = sanitizeCharacters(parsed.characters, fallback.characters);
+  const characterIds = new Set(characters.map((character) => character.id));
+  const activeCharacterId = typeof parsed.activeCharacterId === "string" && characterIds.has(parsed.activeCharacterId) ? parsed.activeCharacterId : characters[0].id;
+  const teamMemberIds = Array.isArray(parsed.teamMemberIds)
+    ? [...new Set(parsed.teamMemberIds.filter((id): id is string => typeof id === "string" && characterIds.has(id)))]
+    : characters.map((character) => character.id);
+  return {
+    characters,
+    activeCharacterId,
+    teamMemberIds,
+    trackingMode: "solo" as const,
+    activeTeamSessionId: typeof parsed.activeTeamSessionId === "string" && parsed.activeTeamSessionId ? parsed.activeTeamSessionId : `team-${Date.now().toString(36)}`,
+  };
+}
+
 export function initialState(): PersistedState {
   return {
     schemaVersion: 1,
@@ -37,6 +68,7 @@ export function initialState(): PersistedState {
     boxes: [],
     manualBaselinePoints: [],
     shinyMods: [],
+    ...createInitialCharacterTracking(),
     settings: {
       selectedVisionId: "gravity",
       waitMinutes: 30,
@@ -76,6 +108,7 @@ export function loadState(): PersistedState {
     const mustClearPreviousRecords = (parsed.settings?.dataResetVersion ?? 0) < CURRENT_DATA_RESET_VERSION;
     settings.dataResetVersion = CURRENT_DATA_RESET_VERSION;
     const catalog = parsed.catalog.catalogVersion >= fresh.catalog.catalogVersion ? parsed.catalog : fresh.catalog;
+    const characters = characterState(parsed, fresh);
     return {
       ...fresh,
       ...parsed,
@@ -86,6 +119,7 @@ export function loadState(): PersistedState {
         ? parsed.manualBaselinePoints.filter((value) => Number.isFinite(value) && value > 0 && value <= 10_000).map(Math.round).slice(0, 500)
         : [],
       shinyMods: mustClearPreviousRecords ? [] : sanitizeShinyMods(parsed.shinyMods),
+      ...characters,
       settings,
     };
   } catch {
@@ -129,6 +163,7 @@ export function importState(text: string) {
     throw new Error("El archivo no es un respaldo válido de Caja Fantasma.");
   }
   const fresh = initialState();
+  const characters = characterState(parsed, fresh);
   return {
     ...fresh,
     ...parsed,
@@ -138,6 +173,7 @@ export function importState(text: string) {
       ? parsed.manualBaselinePoints.filter((value) => Number.isFinite(value) && value > 0 && value <= 10_000).map(Math.round).slice(0, 500)
       : [],
     shinyMods: sanitizeShinyMods(parsed.shinyMods),
+    ...characters,
     settings: { ...fresh.settings, ...(parsed.settings ?? {}), notificationsEnabled: false, dataResetVersion: CURRENT_DATA_RESET_VERSION },
   };
 }

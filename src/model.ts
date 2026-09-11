@@ -43,6 +43,9 @@ export type PointAction = {
   visionName?: string;
   points: number;
   occurredAt: string;
+  characterIds?: string[];
+  trackingMode?: "solo" | "team";
+  teamSessionId?: string;
 };
 
 export type BoxRecord = {
@@ -52,7 +55,15 @@ export type BoxRecord = {
   claims: number;
   source?: "normal" | "platform-mail";
   carriedPoints?: number;
+  characterId?: string;
+  characterName?: string;
   breakdown: Array<{ name: string; count: number; points: number }>;
+};
+
+export type CharacterProfile = {
+  id: string;
+  name: string;
+  createdAt: string;
 };
 
 export type ShinyModRecord = {
@@ -93,6 +104,11 @@ export type PersistedState = {
   boxes: BoxRecord[];
   manualBaselinePoints: number[];
   shinyMods: ShinyModRecord[];
+  characters: CharacterProfile[];
+  activeCharacterId: string;
+  trackingMode: "solo" | "team";
+  teamMemberIds: string[];
+  activeTeamSessionId: string;
   settings: Settings;
 };
 
@@ -103,8 +119,9 @@ export type CycleSnapshot = {
   phaseEndsAt: string;
 };
 
-export const APP_VERSION = "1.6.4";
+export const APP_VERSION = "1.7.0";
 export const AUTHOR = "OscarD0823";
+export const DEFAULT_CHARACTER_ID = "character-main";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
 export const REMOTE_CATALOG_URL = "https://raw.githubusercontent.com/OscarD0823/Caja-Fantasma/main/catalog/visions.json";
 // Gravedad terminó y comenzó su espera a las 16:52:30 de Colombia del 10/09/2026.
@@ -118,6 +135,42 @@ export function createId(prefix: string) {
 export function clampNumber(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));
+}
+
+export function actionCharacterIds(action: PointAction) {
+  return Array.isArray(action.characterIds) ? action.characterIds : [DEFAULT_CHARACTER_ID];
+}
+
+export function actionBelongsToCharacter(action: PointAction, characterId: string) {
+  return actionCharacterIds(action).includes(characterId);
+}
+
+export function actionsForCharacter(actions: PointAction[], characterId: string) {
+  return actions.filter((action) => actionBelongsToCharacter(action, characterId));
+}
+
+export function actionsForTeamSession(actions: PointAction[], teamSessionId: string) {
+  return actions.filter((action) => action.trackingMode === "team" && action.teamSessionId === teamSessionId);
+}
+
+export function detachCharacterFromActions(actions: PointAction[], characterId: string, actionIds?: ReadonlySet<string>) {
+  return actions.flatMap((action) => {
+    if ((actionIds && !actionIds.has(action.id)) || !actionBelongsToCharacter(action, characterId)) return [action];
+    const characterIds = actionCharacterIds(action).filter((id) => id !== characterId);
+    if (characterIds.length === 0 && action.trackingMode !== "team") return [];
+    return [{ ...action, characterIds }];
+  });
+}
+
+export function createInitialCharacterTracking(now = Date.now()) {
+  const createdAt = new Date(now).toISOString();
+  return {
+    characters: [{ id: DEFAULT_CHARACTER_ID, name: "Personaje principal", createdAt }] as CharacterProfile[],
+    activeCharacterId: DEFAULT_CHARACTER_ID,
+    trackingMode: "solo" as const,
+    teamMemberIds: [DEFAULT_CHARACTER_ID],
+    activeTeamSessionId: `team-${now.toString(36)}`,
+  };
 }
 
 export function computeCycle(settings: Settings, now = Date.now()): CycleSnapshot {

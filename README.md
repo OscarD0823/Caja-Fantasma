@@ -12,6 +12,9 @@ Repositorio oficial: <https://github.com/OscarD0823/Caja-Fantasma>
 - Gravedad incluye Ballena (1) y Plataformas (4).
 - Simbiosis permanece desactivada con Araña, Antena y Grandulón; sus opciones no suman mientras el evento esté desactivado.
 - La caja puede marcarse en cualquier momento. Se guarda automáticamente fecha, hora, puntos, número de recompensas, origen y desglose.
+- Perfiles para hasta 12 personajes: cada uno conserva por separado su intento, porcentaje estimado e historial de cajas. Los datos existentes se mantienen en “Personaje principal” y la aplicación siempre abre en modo Solitario.
+- Modo Equipo para seleccionar dos o más personajes. Su contador propio comienza en cero y cada recompensa registrada suma simultáneamente al intento individual de todos los integrantes; cambiar o reiniciar el conteo del equipo no borra esos puntos personales.
+- Barra comparativa visible al tener más de un personaje, con los puntos, porcentaje estimado y progreso de cada uno.
 - Cuando una caja llega por correo de Plataformas, las actividades hechas durante la última hora no se atribuyen a la caja anterior: permanecen contadas en el intento nuevo.
 - Historial con una base inicial de 16 cajas tomada de la columna A: mínimo 320, máximo 1.447, promedio 955,5, mediana 997, zona baja 704,875 y zona alta 1.206,125.
 - Carga manual de valores históricos aproximados. Se combinan con la base estadística, pero permanecen separados de las cajas confirmadas y no inventan fechas.
