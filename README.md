@@ -8,21 +8,21 @@ Repositorio oficial: <https://github.com/OscarD0823/Caja-Fantasma>
 
 - Recompensas Pro con valores configurables: jefes de monolito, silos y Desafío de Manibus de Endless Dream valen 1; Guerra Pro y Manibus de Manibus valen 2.
 - Endless Dream incluye Invasión de Zona Onírica y Soñador de Luz, Soñador Profundo y Soñador Eterno; cada uno vale 1.
-- División Visión con Lunar, Gravedad y Simbiosis, además de un editor para ruedas futuras. OscarD0823 selecciona la rueda pública desde el modo desarrollador; los demás usuarios reciben esa selección y no ven las ruedas desactivadas.
-- Gravedad incluye Ballena (1) y Plataformas (4).
-- Simbiosis permanece desactivada con Araña, Antena y Grandulón; sus opciones no suman mientras el evento esté desactivado.
+- División Visión con Jolgorio Lunar / Lunar Revelry, Abismo de Gravedad / Gravity Abyss y Progenie Aberrante / Aberrant Progeny, además de un editor para ruedas futuras. OscarD0823 selecciona la rueda pública desde el modo desarrollador; los demás usuarios reciben esa selección y no ven las ruedas desactivadas.
+- Abismo de Gravedad incluye Ballena (1) y Plataformas (4).
+- Progenie Aberrante permanece desactivada con Araña, Antena y Grandulón; sus opciones no suman mientras el evento esté desactivado.
 - La caja puede marcarse en cualquier momento. Se guarda automáticamente fecha, hora, puntos, número de recompensas, origen y desglose.
-- Perfiles para hasta 12 personajes: cada uno conserva por separado su intento, porcentaje estimado e historial de cajas. Los datos existentes se mantienen en “Personaje principal” y la aplicación siempre abre en modo Solitario.
+- Menú principal Personajes para hasta 12 perfiles: cada uno conserva por separado su intento, porcentaje estimado e historial de cajas. Los datos existentes se mantienen en “Personaje principal” y la aplicación siempre abre en modo Solitario.
 - Modo Equipo para seleccionar dos o más personajes. Su contador propio comienza en cero y cada recompensa registrada suma simultáneamente al intento individual de todos los integrantes; cambiar o reiniciar el conteo del equipo no borra esos puntos personales.
 - Barra comparativa visible al tener más de un personaje, con los puntos, porcentaje estimado y progreso de cada uno.
 - Cuando una caja llega por correo de Plataformas, las actividades hechas durante la última hora no se atribuyen a la caja anterior: permanecen contadas en el intento nuevo.
 - Historial con una base inicial de 16 cajas tomada de la columna A: mínimo 320, máximo 1.447, promedio 955,5, mediana 997, zona baja 704,875 y zona alta 1.206,125.
 - Carga manual de valores históricos aproximados. Se combinan con la base estadística, pero permanecen separados de las cajas confirmadas y no inventan fechas.
-- Espera y duración de la Rueda Visional configurables; el valor inicial es 30 minutos de espera y 30 minutos activa.
+- Espera y duración de la Rueda Visional configurables; el valor inicial es 30 minutos de espera y 30 minutos activa. También puede establecerse un retraso visual de 0 a 300 segundos entre el cierre del evento y la presentación del contador siguiente sin modificar el horario real.
 - Ajuste directo del contador por fase, minutos y segundos. La sincronización inicial de Gravedad parte de su cierre a las 4:52:30 p. m. de Colombia del 10 de septiembre de 2026.
 - Gravedad emite un aviso de voz anticipado configurable. Las notificaciones de escritorio están desactivadas. La app funciona minimizada en la bandeja e inicia con Windows.
-- Contador flotante movible, siempre visible, escalable entre 70 % y 150 % y con posición recordada. Puede usar la forma automática propia de cada evento o un diseño rectangular, cuadrado, vertical o redondo. El reloj admite lectura digital, compacta o mediante anillo de progreso, y el nombre se puede mostrar en español, inglés o con un texto personalizado local. La X lo desactiva y el botón “Agregar ventana flotante” del inicio permite recuperarlo. Funciona sobre juegos en ventana o pantalla completa sin bordes; Windows no permite garantizar superposición sobre pantalla completa exclusiva.
-- Historial de cambios incluido dentro del programa.
+- Contador flotante movible, siempre visible, escalable entre 20 % y 150 % y con posición recordada. La Ballena y los futuros adicionales usan una escala independiente de 20 % a 100 %, cuyo máximo nunca supera su ventana. Puede usar la forma automática propia de cada evento o un diseño rectangular, cuadrado, vertical o redondo. El reloj admite lectura digital, compacta o mediante anillo de progreso, y el nombre se puede mostrar en español, inglés o con un texto personalizado local. La X lo desactiva y los controles del inicio permiten recuperarlo y cambiar ambos tamaños. Funciona sobre juegos en ventana o pantalla completa sin bordes; Windows no permite garantizar superposición sobre pantalla completa exclusiva.
+- Historial de cambios incluido dentro del programa, visible únicamente para la cuenta propietaria verificada.
 - Apartado Mods Shiny con búsqueda bilingüe por nombre, variante, estilo, ranura o ID; contador individual de duplicados nivel 17 fallidos y colección de Shiny conseguidos.
 - Catálogo local completo de 1.825 registros exactos: 207 del sistema anterior, 809 normales 2.0 y 809 Shiny 2.0. Todos se pueden añadir al seguimiento y localizar después dentro del historial personal.
 - Filtros por estilo de arma o pieza de armadura y por sistema de origen. Los módulos normales muestran Nivel 1–17 y los Shiny, Nivel 17 brillante. Hora punta con Estrella descendente está incluida como combinación exacta y siguen disponibles los nombres personalizados para incorporaciones futuras.
@@ -30,7 +30,8 @@ Repositorio oficial: <https://github.com/OscarD0823/Caja-Fantasma>
 - Animación de apertura al iniciar: se conserva la imagen completa, el emblema de Once Human viaja hasta la ranura de una esquina y la caja reacciona con escaneo, órbitas, partículas, energía y chispas antes de revelar el programa.
 - La imagen de la recompensa conserva la caja y muestra una cantidad de 17.
 - Barra ambiental: Lunar activa usa la referencia de la luna roja con figuras de ojos rojos; Simbiosis activa usa la referencia de criaturas transformadas; Gravedad activa alterna sus dos escenas de ciudad y objetos suspendidos.
-- Secuencia especial de la Ballena, exclusiva de la ventana flotante de Gravedad: desde el minuto 15 llega por la izquierda, cruza el contador y se coloca debajo. El rayo azul funciona como barra y reloj propio durante los 15 minutos restantes del evento más 5 minutos adicionales; al llegar a cero se apaga y la Ballena sale por la derecha.
+- Secuencia especial de la Ballena, exclusiva de la ventana flotante de Abismo de Gravedad: desde el minuto 15 llega por la izquierda, cruza el contador y se coloca debajo. El jefe usa un recorte transparente optimizado; cola, cuerpo, cabeza, núcleo y rayo se animan como elementos separados. El rayo azul funciona como barra y reloj propio durante los 15 minutos restantes del evento más 5 minutos adicionales; al llegar a cero se apaga y la Ballena sale por la derecha.
+- Rendimiento adaptativo: el reloj, la lectura del estado y la sincronización reducen su frecuencia cuando la interfaz no está visible, y la nueva imagen transparente de la Ballena reemplaza dos capturas de varios megabytes.
 
 ## Catálogo compartido
 
@@ -40,7 +41,7 @@ Existe un único instalador para todos. En `Configuración > Editor de OscarD082
 
 El botón de acceso abre el inicio de sesión web de GitHub CLI. La aplicación no recibe ni guarda la contraseña o el token. Una vez verificada la cuenta propietaria, el editor permite añadir ruedas u opciones y publica cada cambio automáticamente después de 1,8 segundos sin escribir; también existe un botón para publicar de inmediato. Las pruebas validan la estructura del catálogo sin bloquear valores que el propietario haya editado legítimamente.
 
-El modo desarrollador incluye un laboratorio visual que reutiliza la misma interfaz del contador flotante. Permite simular espera, evento activo, disparo o salida de la Ballena y probar forma, reloj, idioma, nombre personalizado y tamaño sin publicar esos estados de prueba. El editor del catálogo también conserva el nombre en español e inglés de cada rueda futura.
+El modo desarrollador incluye un laboratorio visual que reutiliza la misma interfaz del contador flotante. Permite simular espera, evento activo, retraso visual, disparo o salida de la Ballena y probar forma, reloj, idioma, nombre personalizado, tamaño de ventana y tamaño de adicionales sin publicar esos estados de prueba. Las herramientas y el apartado Cambios solo aparecen cuando se verifica la cuenta propietaria; la pantalla de acceso no expone el editor. El editor del catálogo también conserva el nombre en español e inglés de cada rueda futura.
 
 ## Actualizaciones
 

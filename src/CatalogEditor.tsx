@@ -66,6 +66,7 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
         selectedVisionId: visionId,
         waitMinutes: timing?.waitMinutes ?? 30,
         activeMinutes: timing?.activeMinutes ?? 30,
+        transitionDelaySeconds: timing?.transitionDelaySeconds ?? 3,
         phaseStartedAt: timing?.phaseStartedAt ?? updatedAt,
         phase: timing?.phase ?? "waiting",
         updatedAt,

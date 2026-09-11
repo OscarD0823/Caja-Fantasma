@@ -23,6 +23,7 @@ export type SharedEventTiming = {
   selectedVisionId: string;
   waitMinutes: number;
   activeMinutes: number;
+  transitionDelaySeconds?: number;
   phaseStartedAt: string;
   phase: "waiting" | "active";
   updatedAt: string;
@@ -92,10 +93,12 @@ export type Settings = {
   phase: "waiting" | "active";
   overlayEnabled: boolean;
   overlayScale: number;
+  overlayAddonScale: number;
   overlayShape: OverlayShape;
   overlayCounterStyle: OverlayCounterStyle;
   overlayNameMode: OverlayNameMode;
   overlayCustomName: string;
+  transitionDelaySeconds: number;
   notificationsEnabled: boolean;
   voiceNotificationsEnabled: boolean;
   voiceLeadMinutes: number;
@@ -136,7 +139,13 @@ export type GravityWhaleSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.10.0";
+export type CountdownTransitionSnapshot = {
+  active: boolean;
+  remainingMs: number;
+  progress: number;
+};
+
+export const APP_VERSION = "1.11.0";
 export const AUTHOR = "OscarD0823";
 export const DEFAULT_CHARACTER_ID = "character-main";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
@@ -216,6 +225,16 @@ export function computeCycle(settings: Settings, now = Date.now()): CycleSnapsho
     progress: Math.min(1, elapsed / duration),
     phaseEndsAt: new Date(startedAt + duration).toISOString(),
   };
+}
+
+export function computeCountdownTransition(settings: Settings, now = Date.now()): CountdownTransitionSnapshot {
+  const cycle = computeCycle(settings, now);
+  const delayMs = clampNumber(settings.transitionDelaySeconds, 0, 300) * 1000;
+  if (cycle.phase !== "waiting" || delayMs <= 0) return { active: false, remainingMs: 0, progress: 1 };
+  const waitMs = clampNumber(settings.waitMinutes, 1, 525_600) * 60_000;
+  const elapsedWaitingMs = Math.max(0, waitMs - cycle.remainingMs);
+  const remainingMs = Math.max(0, delayMs - elapsedWaitingMs);
+  return { active: remainingMs > 0, remainingMs, progress: Math.min(1, elapsedWaitingMs / delayMs) };
 }
 
 export function shouldShowGravityWhale(settings: Settings, now = Date.now()) {
@@ -358,6 +377,7 @@ export function validateCatalog(value: unknown): value is Catalog {
   const validTiming = timing === undefined || (typeof timing.selectedVisionId === "string"
     && Number.isFinite(timing.waitMinutes) && timing.waitMinutes >= 1 && timing.waitMinutes <= 525_600
     && Number.isFinite(timing.activeMinutes) && timing.activeMinutes >= 1 && timing.activeMinutes <= 525_600
+    && (timing.transitionDelaySeconds === undefined || (Number.isFinite(timing.transitionDelaySeconds) && timing.transitionDelaySeconds >= 0 && timing.transitionDelaySeconds <= 300))
     && typeof timing.phaseStartedAt === "string"
     && Number.isFinite(Date.parse(timing.phaseStartedAt))
     && (timing.phase === "waiting" || timing.phase === "active")

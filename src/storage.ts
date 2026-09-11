@@ -80,10 +80,12 @@ export function initialState(): PersistedState {
       phase: "waiting",
       overlayEnabled: false,
       overlayScale: 1,
+      overlayAddonScale: 1,
       overlayShape: "event",
       overlayCounterStyle: "digital",
       overlayNameMode: "spanish",
       overlayCustomName: "",
+      transitionDelaySeconds: 3,
       notificationsEnabled: false,
       voiceNotificationsEnabled: true,
       voiceLeadMinutes: 5,
@@ -117,11 +119,13 @@ export function loadState(): PersistedState {
     settings.dataResetVersion = CURRENT_DATA_RESET_VERSION;
     const catalog = parsed.catalog.catalogVersion >= fresh.catalog.catalogVersion ? parsed.catalog : fresh.catalog;
     settings.selectedVisionId = sharedVisionId(catalog, settings.selectedVisionId);
-    settings.overlayScale = clampNumber(Number(settings.overlayScale) || 1, .7, 1.5);
+    settings.overlayScale = clampNumber(Number(settings.overlayScale) || 1, .2, 1.5);
+    settings.overlayAddonScale = clampNumber(Number(settings.overlayAddonScale) || 1, .2, 1);
     settings.overlayShape = OVERLAY_SHAPES.has(settings.overlayShape) ? settings.overlayShape : "event";
     settings.overlayCounterStyle = OVERLAY_COUNTER_STYLES.has(settings.overlayCounterStyle) ? settings.overlayCounterStyle : "digital";
     settings.overlayNameMode = OVERLAY_NAME_MODES.has(settings.overlayNameMode) ? settings.overlayNameMode : "spanish";
     settings.overlayCustomName = typeof settings.overlayCustomName === "string" ? settings.overlayCustomName.trim().slice(0, 40) : "";
+    settings.transitionDelaySeconds = clampNumber(Math.round(Number(settings.transitionDelaySeconds ?? fresh.settings.transitionDelaySeconds)), 0, 300);
     const characters = characterState(parsed, fresh);
     return {
       ...fresh,
@@ -193,11 +197,13 @@ export function importState(text: string) {
       ...fresh.settings,
       ...(parsed.settings ?? {}),
       selectedVisionId: sharedVisionId(catalog),
-      overlayScale: clampNumber(Number(parsed.settings?.overlayScale) || 1, .7, 1.5),
+      overlayScale: clampNumber(Number(parsed.settings?.overlayScale) || 1, .2, 1.5),
+      overlayAddonScale: clampNumber(Number(parsed.settings?.overlayAddonScale) || 1, .2, 1),
       overlayShape: OVERLAY_SHAPES.has(parsed.settings?.overlayShape as OverlayShape) ? parsed.settings!.overlayShape! : "event",
       overlayCounterStyle: OVERLAY_COUNTER_STYLES.has(parsed.settings?.overlayCounterStyle as OverlayCounterStyle) ? parsed.settings!.overlayCounterStyle! : "digital",
       overlayNameMode: OVERLAY_NAME_MODES.has(parsed.settings?.overlayNameMode as OverlayNameMode) ? parsed.settings!.overlayNameMode! : "spanish",
       overlayCustomName: typeof parsed.settings?.overlayCustomName === "string" ? parsed.settings.overlayCustomName.trim().slice(0, 40) : "",
+      transitionDelaySeconds: clampNumber(Math.round(Number(parsed.settings?.transitionDelaySeconds ?? fresh.settings.transitionDelaySeconds)), 0, 300),
       notificationsEnabled: false,
       dataResetVersion: CURRENT_DATA_RESET_VERSION,
     },
