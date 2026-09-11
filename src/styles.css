@@ -74,6 +74,9 @@ main { height: 100vh; overflow-y: auto; scrollbar-color: #26515a transparent; sc
 .topbar.vision-lunar.active { border-bottom-color: rgba(255, 72, 82, .36); background: linear-gradient(90deg, rgba(13, 11, 20, .95), rgba(51, 7, 14, .9)); }
 .topbar.vision-lunar.active .vision-moon { display: none; }
 .lunar-scene-image { position: absolute; inset: 50% 0 auto; width: 100%; height: auto; min-height: 100%; display: block; object-fit: cover; object-position: center 52%; opacity: .78; transform: translateY(-52%); filter: saturate(1.12) contrast(1.08); -webkit-mask-image: linear-gradient(90deg, transparent 0, rgba(0,0,0,.55) 22%, #000 48%, rgba(0,0,0,.78) 100%); mask-image: linear-gradient(90deg, transparent 0, rgba(0,0,0,.55) 22%, #000 48%, rgba(0,0,0,.78) 100%); }
+.topbar.vision-symbiosis.active { border-bottom-color: rgba(179, 91, 255, .42); background: linear-gradient(90deg, rgba(9, 13, 23, .96), rgba(34, 8, 51, .92)); }
+.topbar.vision-symbiosis.active .vision-moon { display: none; }
+.symbiosis-scene-image { position: absolute; top: 0; right: 0; width: min(78%, 920px); height: 100%; display: block; object-fit: cover; object-position: center 34%; opacity: .82; filter: saturate(1.18) contrast(1.08); -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 24%, #000 100%); mask-image: linear-gradient(90deg, transparent 0, #000 24%, #000 100%); }
 .topbar.vision-gravity.active { border-bottom-color: rgba(76, 181, 255, .38); background: linear-gradient(90deg, rgba(5, 17, 30, .96), rgba(5, 37, 66, .9)); }
 .topbar.vision-gravity.active .vision-moon { background: radial-gradient(circle at 35% 30%, #bde8ff, #258fd1 52%, #082d61 78%); box-shadow: 0 0 58px rgba(45, 170, 255, .5); }
 .gravity-floaters i { position: absolute; width: 15px; height: 10px; border: 1px solid rgba(171, 228, 255, .5); background: #193b54; box-shadow: 0 0 13px rgba(100, 203, 255, .35); animation: gravity-float 3.7s ease-in-out infinite alternate; }
@@ -405,6 +408,8 @@ input { width: 100%; min-height: 34px; margin-top: 5px; padding: 0 10px; border:
 .floating-overlay.vision-lunar.active .overlay-icon, .floating-overlay.vision-lunar.active .overlay-copy span { color: #ff7b82; }
 .floating-overlay.vision-gravity.active { border-color: rgba(83, 188, 255, .58); background: linear-gradient(135deg, rgba(5, 31, 54, .97), rgba(5, 17, 31, .98)); }
 .floating-overlay.vision-gravity.active .overlay-icon, .floating-overlay.vision-gravity.active .overlay-copy span { color: #77ceff; }
+.floating-overlay.vision-symbiosis.active { border-color: rgba(185, 101, 255, .58); background: linear-gradient(135deg, rgba(35, 8, 50, .97), rgba(8, 17, 30, .98)); }
+.floating-overlay.vision-symbiosis.active .overlay-icon, .floating-overlay.vision-symbiosis.active .overlay-copy span { color: #cf8cff; }
 .overlay-icon { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; flex: none; color: var(--cyan); background: rgba(92, 225, 210, .1); }
 .active .overlay-icon { color: var(--yellow); background: rgba(255, 206, 100, .1); }
 .overlay-copy { flex: 1; min-width: 0; }

@@ -44,7 +44,7 @@ import {
 } from "lucide-react";
 import CatalogEditor from "./CatalogEditor";
 import AppUpdater from "./Updater";
-import { LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, RIFTWALKER_WHALE_IMAGE } from "./assets";
+import { LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, RIFTWALKER_WHALE_IMAGE, SYMBIOSIS_EVENT_IMAGE } from "./assets";
 import type { Activity, Catalog, PersistedState, PointAction, Settings, ShinyModRecord, Vision } from "./model";
 import {
   APP_VERSION,
@@ -88,6 +88,16 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.6.2",
+    date: "10 de septiembre de 2026",
+    title: "Ambiente propio para Simbiosis",
+    items: [
+      "La nueva referencia de criaturas transformadas se muestra exclusivamente durante la fase activa de Simbiosis.",
+      "La barra y el contador flotante adoptan tonos violeta para distinguir este evento.",
+      "Las imágenes de Lunar y Gravedad permanecen separadas de Simbiosis.",
+    ],
+  },
   {
     version: "1.6.1",
     date: "10 de septiembre de 2026",
@@ -1007,6 +1017,7 @@ function VisionAtmosphere({ visionId, active, showWhale }: { visionId?: string; 
   return <div className="vision-atmosphere" aria-hidden="true">
     <span className="vision-moon" />
     {visionId === "lunar" && active && <img className="lunar-scene-image" src={LUNAR_EVENT_IMAGE} alt="" />}
+    {visionId === "symbiosis" && active && <img className="symbiosis-scene-image" src={SYMBIOSIS_EVENT_IMAGE} alt="" />}
     {visionId === "gravity" && active && <span className="gravity-floaters"><i /><i /><i /><i /></span>}
     {showWhale && <img className="topbar-whale" src={RIFTWALKER_WHALE_IMAGE} alt="" />}
   </div>;
