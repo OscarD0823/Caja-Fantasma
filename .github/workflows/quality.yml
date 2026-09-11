@@ -19,7 +19,7 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.19.0
       - uses: dtolnay/rust-toolchain@stable
