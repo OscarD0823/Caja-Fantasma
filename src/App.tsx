@@ -72,6 +72,7 @@ import {
   formatDuration,
   overlayVisionName,
   parseManualBaseline,
+  resolveTransitionDelayMilliseconds,
   sharedVisionId,
   splitPlatformCarryover,
   validateCatalog,
@@ -115,6 +116,18 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.13.0",
+    date: "12 de septiembre de 2026",
+    title: "Guardado general del administrador",
+    items: [
+      "La rueda, los puntos, el objetivo y los tiempos se editan como un único borrador local.",
+      "El envío automático por campo fue eliminado para evitar bloqueos mientras el administrador escribe.",
+      "Un solo botón Guardar todo publica la configuración general completa para los demás equipos.",
+      "La espera y duración activa se configuran en minutos; el retraso previo al próximo contador se configura en milisegundos.",
+      "Cuando el programa principal está oculto o minimizado, el contador deja pasar el ratón y oculta sus controles para no interferir con el juego.",
+    ],
+  },
   {
     version: "1.12.0",
     date: "11 de septiembre de 2026",
@@ -598,7 +611,7 @@ export default function App() {
             ...(hasNewTiming ? {
               waitMinutes: timing.waitMinutes,
               activeMinutes: timing.activeMinutes,
-              transitionDelaySeconds: clampNumber(timing.transitionDelaySeconds ?? current.settings.transitionDelaySeconds, 0, 300),
+              transitionDelayMilliseconds: resolveTransitionDelayMilliseconds(timing, current.settings.transitionDelayMilliseconds),
               phaseStartedAt: timing.phaseStartedAt,
               phase: timing.phase,
               lastNotificationPhaseStartedAt: undefined,
@@ -913,8 +926,26 @@ export default function App() {
   };
 
   const saveCatalog = useCallback((catalog: Catalog) => {
-    commitState((current) => ({ ...current, catalog, settings: { ...current.settings, selectedVisionId: sharedVisionId(catalog, current.settings.selectedVisionId) } }));
-    setSyncStatus(`Cambios locales v${catalog.catalogVersion} listos para publicar`);
+    const timing = catalog.eventTiming;
+    commitState((current) => ({
+      ...current,
+      catalog,
+      settings: {
+        ...current.settings,
+        selectedVisionId: sharedVisionId(catalog, current.settings.selectedVisionId),
+        ...(timing ? {
+          waitMinutes: timing.waitMinutes,
+          activeMinutes: timing.activeMinutes,
+          transitionDelayMilliseconds: resolveTransitionDelayMilliseconds(timing, current.settings.transitionDelayMilliseconds),
+          phaseStartedAt: timing.phaseStartedAt,
+          phase: timing.phase,
+          sharedTimingUpdatedAt: timing.updatedAt,
+          lastNotificationPhaseStartedAt: undefined,
+          lastVoiceAlertPhaseStartedAt: undefined,
+        } : {}),
+      },
+    }));
+    setSyncStatus(`Configuración general v${catalog.catalogVersion} publicada`);
   }, [commitState]);
 
   const publishCatalog = useCallback(async (catalog: Catalog) => {
@@ -967,7 +998,8 @@ export default function App() {
         selectedVisionId: sharedSettings.selectedVisionId,
         waitMinutes: sharedSettings.waitMinutes,
         activeMinutes: sharedSettings.activeMinutes,
-        transitionDelaySeconds: sharedSettings.transitionDelaySeconds,
+        transitionDelayMilliseconds: sharedSettings.transitionDelayMilliseconds,
+        transitionDelaySeconds: sharedSettings.transitionDelayMilliseconds / 1_000,
         phaseStartedAt: sharedSettings.phaseStartedAt,
         phase: sharedSettings.phase,
         updatedAt,
@@ -1341,8 +1373,8 @@ export default function App() {
         {tab === "settings" && (
           <section className="page settings-page">
             <div className="settings-grid">
-              <article className="settings-card panel">
-                <div className="settings-icon"><Clock3 /></div><div><h3>Duración del ciclo</h3><p>Define cuánto espera la rueda, cuánto permanece activa y el retraso visual antes de mostrar el próximo conteo.</p><div className="field-row"><label>Espera (minutos)<input type="number" min={1} max={525600} value={state.settings.waitMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, waitMinutes: clampNumber(Number(event.target.value), 1, 525600), phaseStartedAt: new Date().toISOString() } }))} /></label><label>Activa (minutos)<input type="number" min={1} max={525600} value={state.settings.activeMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, activeMinutes: clampNumber(Number(event.target.value), 1, 525600), phaseStartedAt: new Date().toISOString() } }))} /></label><label>Retraso visual (segundos)<input type="number" min={0} max={300} value={state.settings.transitionDelaySeconds} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, transitionDelaySeconds: clampNumber(Math.round(Number(event.target.value)), 0, 300) } }))} /></label></div><small>Este retraso no cambia la hora real del siguiente evento.</small></div>
+              <article className="settings-card panel public-timing-summary">
+                <div className="settings-icon"><Clock3 /></div><div><h3>Duración pública del ciclo</h3><p>Estos valores los define el administrador y se sincronizan junto con la rueda y sus puntos.</p><div className="timing-summary-values"><span><small>Espera</small><strong>{state.settings.waitMinutes} min</strong></span><span><small>Activa</small><strong>{state.settings.activeMinutes} min</strong></span><span><small>Retraso</small><strong>{state.settings.transitionDelayMilliseconds} ms</strong></span></div><small>El propietario puede modificarlos en el editor general inferior y enviarlos todos con un solo botón.</small></div>
               </article>
               <article className="settings-card panel setting-disabled"><div className="settings-icon"><Bell /></div><div><h3>Notificaciones de escritorio</h3><p>Desactivadas en esta versión. Gravedad puede seguir avisando mediante voz.</p><span className="disabled-setting-badge">DESACTIVADAS</span></div></article>
               <article className="settings-card voice-settings panel">

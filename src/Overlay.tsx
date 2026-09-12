@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { LogicalSize, PhysicalPosition } from "@tauri-apps/api/dpi";
 import { emit } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, Window } from "@tauri-apps/api/window";
 import type { PersistedState } from "./model";
 import { clampNumber, computeCountdownTransition, computeCycle, computeGravityWhale } from "./model";
 import OverlayVisual, { overlayDesignSize } from "./OverlayVisual";
@@ -10,6 +10,7 @@ import { loadOverlayPosition, loadState, saveOverlayPosition, saveState } from "
 export default function Overlay() {
   const [state, setState] = useState<PersistedState>(() => loadState());
   const [now, setNow] = useState(Date.now());
+  const [interactive, setInteractive] = useState(true);
   const cycle = computeCycle(state.settings, now);
   const transition = computeCountdownTransition(state.settings, now);
   const whale = computeGravityWhale(state.settings, now);
@@ -32,6 +33,41 @@ export default function Overlay() {
     return () => {
       document.documentElement.classList.remove("overlay-document");
       document.body.classList.remove("overlay-document");
+    };
+  }, []);
+
+  useEffect(() => {
+    const overlayWindow = getCurrentWindow();
+    let stopped = false;
+    let timer = 0;
+    let lastInteractive: boolean | undefined;
+    const updateInteraction = async () => {
+      if (stopped) return;
+      try {
+        const mainWindow = await Window.getByLabel("main");
+        const visible = await mainWindow?.isVisible() ?? false;
+        const minimized = visible ? await mainWindow?.isMinimized() ?? false : false;
+        const nextInteractive = visible && !minimized;
+        if (nextInteractive !== lastInteractive) {
+          lastInteractive = nextInteractive;
+          setInteractive(nextInteractive);
+          await overlayWindow.setIgnoreCursorEvents(!nextInteractive);
+        }
+      } catch {
+        if (lastInteractive !== false) {
+          lastInteractive = false;
+          setInteractive(false);
+          await overlayWindow.setIgnoreCursorEvents(true).catch(() => undefined);
+        }
+      } finally {
+        if (!stopped) timer = window.setTimeout(updateInteraction, 1_000);
+      }
+    };
+    void updateInteraction();
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+      void overlayWindow.setIgnoreCursorEvents(false);
     };
   }, []);
 
@@ -85,9 +121,9 @@ export default function Overlay() {
   }, []);
 
   return (
-    <div className="floating-overlay" onMouseDown={(event) => { if ((event.target as HTMLElement).closest("button")) return; void getCurrentWindow().startDragging(); }}>
+    <div className={`floating-overlay ${interactive ? "interactive" : "passive"}`} onMouseDown={(event) => { if (!interactive || (event.target as HTMLElement).closest("button")) return; void getCurrentWindow().startDragging(); }}>
       <div className="overlay-scale-stage" style={{ width: designSize.width, height: designSize.height, transform: `scale(${overlayScale})` }}>
-        <OverlayVisual vision={selectedVision} phase={cycle.phase} remainingMs={cycle.remainingMs} progress={cycle.progress} transitionRemainingMs={transition.active ? transition.remainingMs : 0} whale={displayedWhale} addonScale={state.settings.overlayAddonScale} shape={state.settings.overlayShape} counterStyle={state.settings.overlayCounterStyle} nameMode={state.settings.overlayNameMode} customName={state.settings.overlayCustomName} onClose={hideOverlay} />
+        <OverlayVisual vision={selectedVision} phase={cycle.phase} remainingMs={cycle.remainingMs} progress={cycle.progress} transitionRemainingMs={transition.active ? transition.remainingMs : 0} whale={displayedWhale} addonScale={state.settings.overlayAddonScale} shape={state.settings.overlayShape} counterStyle={state.settings.overlayCounterStyle} nameMode={state.settings.overlayNameMode} customName={state.settings.overlayCustomName} onClose={hideOverlay} interactive={interactive} />
       </div>
     </div>
   );

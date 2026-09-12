@@ -1,6 +1,6 @@
 import defaultCatalog from "../catalog/visions.json";
 import type { Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, ShinyModRecord } from "./model";
-import { VISION_CYCLE_WAIT_STARTED_AT, clampNumber, createInitialCharacterTracking, sharedVisionId, validateCatalog } from "./model";
+import { VISION_CYCLE_WAIT_STARTED_AT, clampNumber, createInitialCharacterTracking, resolveTransitionDelayMilliseconds, sharedVisionId, validateCatalog } from "./model";
 
 const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
 const OVERLAY_POSITION_KEY = "caja-fantasma.once-human.overlay-position.v1";
@@ -86,7 +86,7 @@ export function initialState(): PersistedState {
       overlayCounterStyle: "digital",
       overlayNameMode: "spanish",
       overlayCustomName: "",
-      transitionDelaySeconds: 3,
+      transitionDelayMilliseconds: 3_000,
       notificationsEnabled: false,
       voiceNotificationsEnabled: true,
       voiceLeadMinutes: 5,
@@ -127,7 +127,7 @@ export function loadState(): PersistedState {
     settings.overlayCounterStyle = OVERLAY_COUNTER_STYLES.has(settings.overlayCounterStyle) ? settings.overlayCounterStyle : "digital";
     settings.overlayNameMode = OVERLAY_NAME_MODES.has(settings.overlayNameMode) ? settings.overlayNameMode : "spanish";
     settings.overlayCustomName = typeof settings.overlayCustomName === "string" ? settings.overlayCustomName.trim().slice(0, 40) : "";
-    settings.transitionDelaySeconds = clampNumber(Math.round(Number(settings.transitionDelaySeconds ?? fresh.settings.transitionDelaySeconds)), 0, 300);
+    settings.transitionDelayMilliseconds = resolveTransitionDelayMilliseconds(parsed.settings, fresh.settings.transitionDelayMilliseconds);
     const characters = characterState(parsed, fresh);
     return {
       ...fresh,
@@ -206,7 +206,7 @@ export function importState(text: string) {
       overlayCounterStyle: OVERLAY_COUNTER_STYLES.has(parsed.settings?.overlayCounterStyle as OverlayCounterStyle) ? parsed.settings!.overlayCounterStyle! : "digital",
       overlayNameMode: OVERLAY_NAME_MODES.has(parsed.settings?.overlayNameMode as OverlayNameMode) ? parsed.settings!.overlayNameMode! : "spanish",
       overlayCustomName: typeof parsed.settings?.overlayCustomName === "string" ? parsed.settings.overlayCustomName.trim().slice(0, 40) : "",
-      transitionDelaySeconds: clampNumber(Math.round(Number(parsed.settings?.transitionDelaySeconds ?? fresh.settings.transitionDelaySeconds)), 0, 300),
+      transitionDelayMilliseconds: resolveTransitionDelayMilliseconds(parsed.settings, fresh.settings.transitionDelayMilliseconds),
       notificationsEnabled: false,
       dataResetVersion: CURRENT_DATA_RESET_VERSION,
     },

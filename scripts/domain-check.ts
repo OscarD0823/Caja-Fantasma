@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import catalog from "../catalog/visions.json" with { type: "json" };
-import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, boxStatistics, buildBreakdown, computeCountdownTransition, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, overlayVisionName, parseManualBaseline, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type PointAction, type Settings } from "../src/model.ts";
+import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, boxStatistics, buildBreakdown, computeCountdownTransition, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, overlayVisionName, parseManualBaseline, resolveTransitionDelayMilliseconds, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type PointAction, type Settings } from "../src/model.ts";
 import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesModSearch, normalizeModSearch } from "../src/shinyModsCatalog.ts";
 
 const freshState = { ...createInitialCharacterTracking(Date.parse("2026-09-11T00:00:00Z")), actions: [] as PointAction[] };
@@ -39,7 +39,7 @@ const settings: Settings = {
   overlayCounterStyle: "digital",
   overlayNameMode: "spanish",
   overlayCustomName: "",
-  transitionDelaySeconds: 3,
+  transitionDelayMilliseconds: 3_000,
   notificationsEnabled: false,
   voiceNotificationsEnabled: true,
   voiceLeadMinutes: 5,
@@ -64,6 +64,8 @@ const transitionStart = computeCountdownTransition(synchronizedSettings, Date.pa
 assert.equal(transitionStart.active, true);
 assert.equal(transitionStart.remainingMs, 3_000);
 assert.equal(computeCountdownTransition(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 60 * 60_000 + 3_001).active, false);
+assert.equal(resolveTransitionDelayMilliseconds({ transitionDelayMilliseconds: 2_750 }), 2_750);
+assert.equal(resolveTransitionDelayMilliseconds({ transitionDelaySeconds: 2.75 }), 2_750, "Los catálogos anteriores deben migrar su retraso a milisegundos.");
 assert.equal(computeCycle(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 60 * 60_000 + 3_001).remainingMs, 30 * 60_000 - 3_001, "El retraso visual no debe mover el ciclo real.");
 assert.equal(computeCycle(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 24 * 60 * 60_000).phase, "waiting", "El ciclo absoluto debe avanzar aunque el PC haya estado apagado.");
 assert.equal(shouldShowGravityWhale(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 44 * 60_000), false);

@@ -28,6 +28,7 @@ type Props = {
   customName: string;
   onClose?: () => void;
   preview?: boolean;
+  interactive?: boolean;
 };
 
 export function overlayDesignSize(showWhale: boolean, shape: OverlayShape = "event", addonScale = 1) {
@@ -39,7 +40,7 @@ export function overlayDesignSize(showWhale: boolean, shape: OverlayShape = "eve
   } : base;
 }
 
-export default function OverlayVisual({ vision, phase, remainingMs, progress, transitionRemainingMs = 0, whale, addonScale, shape, counterStyle, nameMode, customName, onClose, preview = false }: Props) {
+export default function OverlayVisual({ vision, phase, remainingMs, progress, transitionRemainingMs = 0, whale, addonScale, shape, counterStyle, nameMode, customName, onClose, preview = false, interactive = true }: Props) {
   const remainingWhalePercent = Math.max(0, Math.min(100, Math.round((1 - whale.progress) * 100)));
   const normalizedAddonScale = whaleScaleWithinWindow(addonScale, shape);
   const eventName = overlayVisionName(vision, nameMode, customName);
@@ -64,8 +65,8 @@ export default function OverlayVisual({ vision, phase, remainingMs, progress, tr
       <div className="overlay-content">
         <div className="overlay-icon">{phase === "active" ? <Zap size={23} /> : <Box size={23} />}</div>
         <div className="overlay-copy"><span>{transitionActive ? "Preparando próximo contador" : phase === "active" ? `${eventName} activa` : `Próxima ${eventName}`}</span>{counterStyle === "ring" ? <div className="overlay-timer-ring"><strong>{timer}</strong></div> : <strong>{timer}</strong>}</div>
-        <GripHorizontal className="overlay-grip" size={18} />
-        <button type="button" aria-label={preview ? "Vista previa del botón cerrar" : "Cerrar y desactivar contador"} onClick={onClose}><X size={15} /></button>
+        {interactive && <GripHorizontal className="overlay-grip" size={18} />}
+        {interactive && <button type="button" aria-label={preview ? "Vista previa del botón cerrar" : "Cerrar y desactivar contador"} onClick={onClose}><X size={15} /></button>}
       </div>
     </section>
 

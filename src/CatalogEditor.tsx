@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Github, Plus, RadioTower, Save, Trash2, UploadCloud } from "lucide-react";
+import { Check, Github, Plus, RadioTower, Save, Trash2 } from "lucide-react";
 import type { Activity, Catalog, Vision } from "./model";
-import { AUTHOR, clampNumber, createId } from "./model";
+import { AUTHOR, clampNumber, createId, resolveTransitionDelayMilliseconds } from "./model";
 
 type Props = {
   catalog: Catalog;
@@ -14,9 +14,7 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState("");
   const [publishing, setPublishing] = useState(false);
-  const [revision, setRevision] = useState(0);
   const revisionRef = useRef(0);
-  const autoAttemptedRevision = useRef(0);
 
   useEffect(() => {
     if (!dirty) setDraft(structuredClone(catalog));
@@ -26,7 +24,6 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
     setDraft((current) => updater(structuredClone(current)));
     setDirty(true);
     revisionRef.current += 1;
-    setRevision(revisionRef.current);
     setStatus("");
   };
 
@@ -66,6 +63,7 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
         selectedVisionId: visionId,
         waitMinutes: timing?.waitMinutes ?? 30,
         activeMinutes: timing?.activeMinutes ?? 30,
+        transitionDelayMilliseconds: resolveTransitionDelayMilliseconds(timing),
         transitionDelaySeconds: timing?.transitionDelaySeconds ?? 3,
         phaseStartedAt: timing?.phaseStartedAt ?? updatedAt,
         phase: timing?.phase ?? "waiting",
@@ -75,36 +73,45 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
     };
   });
 
-  const prepareVersion = useCallback(() => ({
-    ...draft,
-    catalogVersion: Math.max(catalog.catalogVersion + 1, draft.catalogVersion),
-    updatedAt: new Date().toISOString(),
-    updatedBy: AUTHOR,
-    boxTargetPoints: clampNumber(draft.boxTargetPoints, 1, 10_000),
-  }), [catalog.catalogVersion, draft]);
+  const prepareVersion = useCallback(() => {
+    const updatedAt = new Date().toISOString();
+    const timing = draft.eventTiming;
+    const selectedVisionId = timing?.selectedVisionId ?? draft.visions.find((vision) => vision.enabled)?.id ?? draft.visions[0]?.id ?? "gravity";
+    const transitionDelayMilliseconds = resolveTransitionDelayMilliseconds(timing);
+    return {
+      ...draft,
+      catalogVersion: Math.max(catalog.catalogVersion + 1, draft.catalogVersion),
+      updatedAt,
+      updatedBy: AUTHOR,
+      boxTargetPoints: clampNumber(draft.boxTargetPoints, 1, 10_000),
+      eventTiming: {
+        selectedVisionId,
+        waitMinutes: clampNumber(Math.round(timing?.waitMinutes ?? 30), 1, 525_600),
+        activeMinutes: clampNumber(Math.round(timing?.activeMinutes ?? 30), 1, 525_600),
+        transitionDelayMilliseconds,
+        transitionDelaySeconds: transitionDelayMilliseconds / 1_000,
+        phaseStartedAt: timing?.phaseStartedAt ?? updatedAt,
+        phase: timing?.phase ?? "waiting" as const,
+        updatedAt,
+        updatedBy: AUTHOR,
+      },
+    };
+  }, [catalog.catalogVersion, draft]);
 
-  const save = () => {
-    const next = prepareVersion();
-    setDraft(next);
-    onSave(next);
-    setDirty(false);
-    setStatus(`Versión local v${next.catalogVersion} guardada.`);
-  };
-
-  const publish = useCallback(async (automatic = false) => {
+  const publish = useCallback(async () => {
     const publishingRevision = revisionRef.current;
     const next = prepareVersion();
     setPublishing(true);
-    setStatus(automatic ? "Guardando y enviando automáticamente…" : "Publicando en GitHub…");
+    setStatus("Guardando toda la configuración en un solo envío…");
     try {
-      onSave(next);
-      setDraft(next);
       const message = await onPublish(next);
+      onSave(next);
       if (revisionRef.current === publishingRevision) {
+        setDraft(next);
         setDirty(false);
         setStatus(message);
       } else {
-        setStatus(`${message} Hay cambios nuevos pendientes de enviar.`);
+        setStatus(`${message} Hay cambios nuevos en el borrador; pulsa Guardar todo otra vez cuando termines.`);
       }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -113,20 +120,11 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
     }
   }, [onPublish, onSave, prepareVersion]);
 
-  useEffect(() => {
-    if (!dirty || publishing || revision === autoAttemptedRevision.current) return;
-    const timer = window.setTimeout(() => {
-      autoAttemptedRevision.current = revision;
-      void publish(true);
-    }, 1800);
-    return () => window.clearTimeout(timer);
-  }, [dirty, draft, publish, publishing, revision]);
-
   return (
     <div className="catalog-editor">
       <div className="catalog-toolbar">
         <label>Objetivo visual de la caja<input type="number" min={1} max={10000} value={draft.boxTargetPoints} onChange={(event) => change((current) => ({ ...current, boxTargetPoints: clampNumber(Number(event.target.value), 1, 10_000) }))} /></label>
-        <div><span className="auto-publish-badge"><Check size={14} /> Envío automático</span><button type="button" className="secondary compact" disabled={!dirty} onClick={save}><Save size={16} /> Guardar local</button><button type="button" className="primary compact" disabled={publishing} onClick={() => void publish(false)}><UploadCloud size={16} /> {publishing ? "Publicando…" : "Publicar ahora"}</button></div>
+        <div><span className="auto-publish-badge manual"><Check size={14} /> Borrador local · un solo envío</span><button type="button" className="primary compact" disabled={!dirty || publishing} onClick={() => void publish()}><Save size={16} /> {publishing ? "Guardando todo…" : "Guardar todo"}</button></div>
       </div>
       {status && <div className={`catalog-status ${status.toLowerCase().includes("error") || status.toLowerCase().includes("no ") ? "error" : ""}`}><Github size={16} />{status}</div>}
 
@@ -138,6 +136,12 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
             return <button key={vision.id} type="button" disabled={!vision.enabled} className={selected ? "selected" : ""} onClick={() => selectPublicVision(vision.id)}><span>{vision.enabled ? "Disponible" : "Desactivada"}</span><strong>{vision.name}</strong>{selected && <Check size={16} />}</button>;
           })}
         </div>
+        <div className="admin-timing-grid">
+          <label>Espera entre eventos (minutos)<input type="number" min={1} max={525600} value={draft.eventTiming?.waitMinutes ?? 30} onChange={(event) => change((current) => ({ ...current, eventTiming: { ...current.eventTiming!, waitMinutes: clampNumber(Math.round(Number(event.target.value)), 1, 525_600) } }))} /></label>
+          <label>Duración activa (minutos)<input type="number" min={1} max={525600} value={draft.eventTiming?.activeMinutes ?? 30} onChange={(event) => change((current) => ({ ...current, eventTiming: { ...current.eventTiming!, activeMinutes: clampNumber(Math.round(Number(event.target.value)), 1, 525_600) } }))} /></label>
+          <label>Retraso antes del próximo contador (ms)<input type="number" min={0} max={300000} step={100} value={resolveTransitionDelayMilliseconds(draft.eventTiming)} onChange={(event) => change((current) => { const milliseconds = clampNumber(Math.round(Number(event.target.value)), 0, 300_000); return { ...current, eventTiming: { ...current.eventTiming!, transitionDelayMilliseconds: milliseconds, transitionDelaySeconds: milliseconds / 1_000 } }; })} /></label>
+        </div>
+        <small className="admin-batch-note">La rueda, los tiempos, el objetivo y todas las recompensas permanecen como borrador hasta pulsar “Guardar todo”.</small>
       </section>
 
       <EditorGroup title="Recompensas Pro" subtitle={`${draft.proActivities.length} opciones`} onAdd={() => addActivity("pro")}>

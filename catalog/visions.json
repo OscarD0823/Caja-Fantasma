@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": 20,
+  "catalogVersion": 21,
   "updatedAt": "2026-09-11T19:40:00.000Z",
   "updatedBy": "OscarD0823",
   "boxTargetPoints": 1000,
@@ -8,6 +8,7 @@
     "selectedVisionId": "gravity",
     "waitMinutes": 30,
     "activeMinutes": 30,
+    "transitionDelayMilliseconds": 3000,
     "transitionDelaySeconds": 3,
     "phaseStartedAt": "2026-09-11T04:22:28.526Z",
     "phase": "active",

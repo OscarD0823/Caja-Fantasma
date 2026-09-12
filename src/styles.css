@@ -484,6 +484,7 @@ input { width: 100%; min-height: 34px; margin-top: 5px; padding: 0 10px; border:
 .catalog-toolbar label { width: 185px; }
 .catalog-toolbar > div { display: flex; gap: 7px; }
 .auto-publish-badge { min-height: 34px; padding: 0 9px; border-radius: 9px; display: inline-flex; align-items: center; gap: 5px; color: var(--green); background: rgba(85, 231, 161, .06); font-size: 8px; font-weight: 700; text-transform: uppercase; }
+.auto-publish-badge.manual { color: var(--cyan); background: rgba(92, 225, 210, .06); }
 .catalog-status { margin: 9px 0; padding: 9px 12px; border-radius: 9px; display: flex; align-items: center; gap: 7px; color: var(--green); background: rgba(85, 231, 161, .06); font-size: 10px; }
 .catalog-status.error { color: var(--yellow); background: rgba(255, 206, 100, .06); }
 .admin-vision-picker { margin: 12px 0; padding: 15px; border: 1px solid rgba(92, 225, 210, .14); border-radius: 13px; display: grid; grid-template-columns: minmax(220px, .75fr) minmax(360px, 1.25fr); gap: 16px; align-items: center; background: rgba(5, 20, 29, .48); }
@@ -496,6 +497,15 @@ input { width: 100%; min-height: 34px; margin-top: 5px; padding: 0 10px; border:
 .admin-vision-options button > svg { position: absolute; right: 9px; color: var(--cyan); }
 .admin-vision-options button.selected { border-color: rgba(92, 225, 210, .42); background: rgba(36, 111, 112, .2); }
 .admin-vision-options button:disabled { opacity: .4; cursor: not-allowed; }
+.admin-timing-grid { grid-column: 1/-1; padding-top: 14px; border-top: 1px solid rgba(133, 175, 182, .1); display: grid; grid-template-columns: repeat(3, minmax(170px, 1fr)); gap: 9px; }
+.admin-timing-grid label { color: #819aa1; font-size: 8px; }
+.admin-timing-grid input { min-height: 38px; }
+.admin-batch-note { grid-column: 1/-1; color: #6f8b93; font-size: 8px; line-height: 1.5; }
+.timing-summary-values { margin: 12px 0 10px; display: grid; grid-template-columns: repeat(3, minmax(75px, 1fr)); gap: 7px; }
+.timing-summary-values span { padding: 9px; border: 1px solid rgba(92, 225, 210, .11); border-radius: 9px; background: rgba(92, 225, 210, .04); }
+.timing-summary-values small, .timing-summary-values strong { display: block; }
+.timing-summary-values small { color: #6e8991; font-size: 7px; text-transform: uppercase; }
+.timing-summary-values strong { margin-top: 3px; color: var(--cyan-bright); font: 700 11px "Space Grotesk", sans-serif; }
 .editor-group { margin-top: 12px; padding: 13px; border: 1px solid var(--line); border-radius: 13px; background: rgba(5, 18, 27, .38); }
 .editor-group > header { min-height: 35px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .editor-group > header strong, .editor-group > header span { display: block; }
@@ -519,6 +529,7 @@ input { width: 100%; min-height: 34px; margin-top: 5px; padding: 0 10px; border:
 
 html.overlay-document, body.overlay-document, body.overlay-document #root { overflow: hidden; background: transparent !important; }
 .floating-overlay { position: relative; width: 100vw; height: 100vh; overflow: hidden; color: #ecffff; background: transparent; user-select: none; cursor: move; }
+.floating-overlay.passive { cursor: default; }
 .overlay-scale-stage { position: relative; transform-origin: top left; }
 .overlay-visual { position: relative; width: 100%; height: 100%; padding: 4px; overflow: hidden; display: flex; flex-direction: column; align-items: center; color: #ecffff; background: transparent; user-select: none; }
 .overlay-main-shell { position: relative; z-index: 3; flex: none; width: var(--overlay-main-width, 420px); height: var(--overlay-main-height, 100px); overflow: hidden; border: 1px solid rgba(92, 225, 210, .42); border-radius: 18px; background: #071a26; box-shadow: 0 13px 34px rgba(0, 0, 0, .48), inset 0 0 30px rgba(92, 225, 210, .06); transition: width .35s ease, height .35s ease, border-radius .6s ease, clip-path .6s ease, border-color .6s ease; }
@@ -706,6 +717,7 @@ html.overlay-document, body.overlay-document, body.overlay-document #root { over
   .voice-controls label { width: 100%; }
   .overlay-lab-heading { align-items: stretch; flex-direction: column; }
   .overlay-lab-controls, .admin-vision-options { grid-template-columns: 1fr; }
+  .admin-timing-grid, .timing-summary-values { grid-template-columns: 1fr; }
   .home-overlay-controls { grid-template-columns: 1fr; }
   .home-overlay-size-panel { grid-template-columns: 1fr; }
   .public-vision-card { grid-template-columns: 45px 1fr; }
