@@ -4,9 +4,9 @@ Archivos de distribución del programa creado por [OscarD0823](https://github.co
 
 ## Windows
 
-- [`Windows/Caja-Fantasma-1.13.0-Instalador.exe`](Windows/Caja-Fantasma-1.13.0-Instalador.exe): instalador firmado para Windows x64.
-- Tamaño: 10.528.482 bytes.
-- SHA-256: `17A4DCB67100B9BDE567437BA3786B3296B62BE2907D47A361BB08D0ADBE6567`.
+- [`Windows/Caja-Fantasma-1.14.0-Instalador.exe`](Windows/Caja-Fantasma-1.14.0-Instalador.exe): instalador para Windows x64 con firma criptográfica del actualizador.
+- Tamaño: 10.530.519 bytes.
+- SHA-256: `CADEE711C85489E80E76A0E4CE9D41FBC445B78304B3F6FE4BC7126510DCF195`.
 
 El instalador contiene únicamente Caja Fantasma y su desinstalador. Si el equipo no tiene Microsoft Edge WebView2, puede descargar el componente oficial necesario para mostrar la interfaz.
 

@@ -68,6 +68,26 @@ export type BoxRecord = {
   breakdown: Array<{ name: string; count: number; points: number }>;
 };
 
+export type PointRoundTrigger = "event-start" | "manual" | "whale-end";
+
+export type PointRoundRecord = {
+  id: string;
+  startedAt: string;
+  endedAt: string;
+  trigger: PointRoundTrigger;
+  points: number;
+  claims: number;
+  actionIds: string[];
+  visionId?: string;
+  visionName?: string;
+  trackingMode: "solo" | "team";
+  characterId?: string;
+  characterName?: string;
+  teamSessionId?: string;
+  characterIds?: string[];
+  breakdown: Array<{ name: string; count: number; points: number }>;
+};
+
 export type CharacterProfile = {
   id: string;
   name: string;
@@ -114,6 +134,8 @@ export type Settings = {
   lastNotificationPhaseStartedAt?: string;
   lastVoiceAlertPhaseStartedAt?: string;
   sharedTimingUpdatedAt?: string;
+  lastPointRoundEventStartedAt?: string;
+  lastWhalePointRoundWaitStartedAt?: string;
   dataResetVersion: number;
 };
 
@@ -122,6 +144,8 @@ export type PersistedState = {
   catalog: Catalog;
   actions: PointAction[];
   boxes: BoxRecord[];
+  pointRounds: PointRoundRecord[];
+  pointRoundBoundaries: Record<string, string>;
   manualBaselinePoints: number[];
   shinyMods: ShinyModRecord[];
   characters: CharacterProfile[];
@@ -152,7 +176,7 @@ export type CountdownTransitionSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.13.0";
+export const APP_VERSION = "1.14.0";
 export const AUTHOR = "OscarD0823";
 export const DEFAULT_CHARACTER_ID = "character-main";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
@@ -422,6 +446,15 @@ export function buildBreakdown(actions: PointAction[]) {
     groups.set(key, current);
   }
   return [...groups.values()].sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+}
+
+export function pointActionsInRound(actions: PointAction[], startedAt?: string, endedAt?: string) {
+  const startedAtMs = startedAt ? Date.parse(startedAt) : Number.NEGATIVE_INFINITY;
+  const endedAtMs = endedAt ? Date.parse(endedAt) : Number.POSITIVE_INFINITY;
+  return actions.filter((action) => {
+    const occurredAtMs = Date.parse(action.occurredAt);
+    return Number.isFinite(occurredAtMs) && occurredAtMs > startedAtMs && occurredAtMs <= endedAtMs;
+  });
 }
 
 export function splitPlatformCarryover(actions: PointAction[], now = Date.now(), delayMinutes = 60) {

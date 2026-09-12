@@ -1,5 +1,5 @@
 import defaultCatalog from "../catalog/visions.json";
-import type { Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, ShinyModRecord } from "./model";
+import type { Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointRoundRecord, PointRoundTrigger, ShinyModRecord } from "./model";
 import { VISION_CYCLE_WAIT_STARTED_AT, clampNumber, createInitialCharacterTracking, resolveTransitionDelayMilliseconds, sharedVisionId, validateCatalog } from "./model";
 
 const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
@@ -8,6 +8,7 @@ const CURRENT_DATA_RESET_VERSION = 2;
 const OVERLAY_SHAPES = new Set<OverlayShape>(["event", "rectangle", "square", "vertical", "round"]);
 const OVERLAY_COUNTER_STYLES = new Set<OverlayCounterStyle>(["digital", "compact", "ring"]);
 const OVERLAY_NAME_MODES = new Set<OverlayNameMode>(["spanish", "english", "custom"]);
+const POINT_ROUND_TRIGGERS = new Set<PointRoundTrigger>(["event-start", "manual", "whale-end"]);
 
 export type OverlayPosition = { x: number; y: number };
 
@@ -47,6 +48,49 @@ function sanitizeCharacters(value: unknown, fallback: CharacterProfile[]) {
   return characters.length > 0 ? characters : fallback;
 }
 
+function sanitizePointRounds(value: unknown): PointRoundRecord[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const candidate = entry as Partial<PointRoundRecord>;
+    const startedAt = typeof candidate.startedAt === "string" && Number.isFinite(Date.parse(candidate.startedAt)) ? candidate.startedAt : "";
+    const endedAt = typeof candidate.endedAt === "string" && Number.isFinite(Date.parse(candidate.endedAt)) ? candidate.endedAt : "";
+    if (typeof candidate.id !== "string" || !startedAt || !endedAt || !POINT_ROUND_TRIGGERS.has(candidate.trigger as PointRoundTrigger) || (candidate.trackingMode !== "solo" && candidate.trackingMode !== "team")) return [];
+    const points = Math.max(0, Math.min(1_000_000, Math.round(Number(candidate.points) || 0)));
+    const claims = Math.max(0, Math.min(100_000, Math.round(Number(candidate.claims) || 0)));
+    return [{
+      id: candidate.id,
+      startedAt,
+      endedAt,
+      trigger: candidate.trigger as PointRoundTrigger,
+      points,
+      claims,
+      actionIds: Array.isArray(candidate.actionIds) ? candidate.actionIds.filter((id): id is string => typeof id === "string").slice(0, 100_000) : [],
+      visionId: typeof candidate.visionId === "string" ? candidate.visionId : undefined,
+      visionName: typeof candidate.visionName === "string" ? candidate.visionName.slice(0, 80) : undefined,
+      trackingMode: candidate.trackingMode,
+      characterId: typeof candidate.characterId === "string" ? candidate.characterId : undefined,
+      characterName: typeof candidate.characterName === "string" ? candidate.characterName.slice(0, 40) : undefined,
+      teamSessionId: typeof candidate.teamSessionId === "string" ? candidate.teamSessionId : undefined,
+      characterIds: Array.isArray(candidate.characterIds) ? candidate.characterIds.filter((id): id is string => typeof id === "string").slice(0, 12) : undefined,
+      breakdown: Array.isArray(candidate.breakdown) ? candidate.breakdown.flatMap((item) => {
+        if (!item || typeof item !== "object") return [];
+        const detail = item as { name?: unknown; count?: unknown; points?: unknown };
+        if (typeof detail.name !== "string") return [];
+        return [{ name: detail.name.slice(0, 120), count: Math.max(0, Math.round(Number(detail.count) || 0)), points: Math.max(0, Math.round(Number(detail.points) || 0)) }];
+      }).slice(0, 200) : [],
+    }];
+  }).slice(0, 2_000);
+}
+
+function sanitizePointRoundBoundaries(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([key, boundary]) => {
+    if (!key.slice(0, 80) || typeof boundary !== "string" || !Number.isFinite(Date.parse(boundary))) return [];
+    return [[key.slice(0, 80), boundary]];
+  }).slice(0, 100));
+}
+
 function characterState(parsed: Partial<PersistedState>, fallback: PersistedState) {
   const characters = sanitizeCharacters(parsed.characters, fallback.characters);
   const characterIds = new Set(characters.map((character) => character.id));
@@ -69,6 +113,8 @@ export function initialState(): PersistedState {
     catalog: defaultCatalog as Catalog,
     actions: [],
     boxes: [],
+    pointRounds: [],
+    pointRoundBoundaries: {},
     manualBaselinePoints: [],
     shinyMods: [],
     ...createInitialCharacterTracking(),
@@ -141,6 +187,8 @@ export function loadState(): PersistedState {
       catalog,
       actions: mustClearPreviousRecords ? [] : Array.isArray(parsed.actions) ? parsed.actions : [],
       boxes: mustClearBoxHistory ? [] : Array.isArray(parsed.boxes) ? parsed.boxes : [],
+      pointRounds: mustClearPreviousRecords ? [] : sanitizePointRounds(parsed.pointRounds),
+      pointRoundBoundaries: mustClearPreviousRecords ? {} : sanitizePointRoundBoundaries(parsed.pointRoundBoundaries),
       manualBaselinePoints: mustClearPreviousRecords ? [] : Array.isArray(parsed.manualBaselinePoints)
         ? parsed.manualBaselinePoints.filter((value) => Number.isFinite(value) && value > 0 && value <= 10_000).map(Math.round).slice(0, 500)
         : [],
@@ -196,6 +244,8 @@ export function importState(text: string) {
     ...parsed,
     actions: parsed.actions,
     boxes: parsed.boxes,
+    pointRounds: sanitizePointRounds(parsed.pointRounds),
+    pointRoundBoundaries: sanitizePointRoundBoundaries(parsed.pointRoundBoundaries),
     manualBaselinePoints: Array.isArray(parsed.manualBaselinePoints)
       ? parsed.manualBaselinePoints.filter((value) => Number.isFinite(value) && value > 0 && value <= 10_000).map(Math.round).slice(0, 500)
       : [],

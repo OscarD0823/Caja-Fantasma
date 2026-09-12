@@ -50,7 +50,7 @@ import CatalogEditor from "./CatalogEditor";
 import OverlayPreviewLab from "./OverlayPreviewLab";
 import AppUpdater from "./Updater";
 import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, SYMBIOSIS_EVENT_IMAGE } from "./assets";
-import type { Activity, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, Settings, ShinyModRecord, Vision } from "./model";
+import type { Activity, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, PointRoundRecord, PointRoundTrigger, Settings, ShinyModRecord, Vision } from "./model";
 import {
   APP_VERSION,
   AUTHOR,
@@ -73,6 +73,7 @@ import {
   formatDuration,
   overlayVisionName,
   parseManualBaseline,
+  pointActionsInRound,
   resolveTransitionDelayMilliseconds,
   sharedEventTimingFromSettings,
   sharedVisionId,
@@ -141,6 +142,18 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.14.0",
+    date: "12 de septiembre de 2026",
+    title: "Historial de rondas de puntos",
+    items: [
+      "El cuadro principal muestra los puntos de la ronda actual sin alterar el progreso total de la Caja Fantasma.",
+      "Al comenzar una rueda, la ronda anterior se guarda con fecha, recompensas y desglose, y el conteo parcial vuelve a cero.",
+      "El botón Guardar ronda permite cerrar el conteo actual manualmente y consultar debajo cuántas rondas y puntos se llevan.",
+      "En Gravedad, la ronda se guarda automáticamente un minuto después de que termina y desaparece la Ballena.",
+      "Se eliminaron las sombras grises exteriores del contador flotante y de la Ballena.",
+    ],
+  },
   {
     version: "1.13.0",
     date: "12 de septiembre de 2026",
@@ -393,6 +406,79 @@ function normalizeCycleState(state: PersistedState, now: number): PersistedState
   return { ...state, settings: { ...state.settings, phase: cycle.phase, phaseStartedAt } };
 }
 
+type PointRoundContext = {
+  key: string;
+  trackingMode: "solo" | "team";
+  actions: PointAction[];
+  characterId?: string;
+  characterName?: string;
+  teamSessionId?: string;
+  characterIds?: string[];
+};
+
+function pointRoundContexts(state: PersistedState): PointRoundContext[] {
+  const solo = state.characters.map((character) => ({
+    key: `solo:${character.id}`,
+    trackingMode: "solo" as const,
+    actions: actionsForCharacter(state.actions, character.id),
+    characterId: character.id,
+    characterName: character.name,
+  }));
+  const teamSessionIds = new Set(state.actions.flatMap((action) => action.trackingMode === "team" && action.teamSessionId ? [action.teamSessionId] : []));
+  teamSessionIds.add(state.activeTeamSessionId);
+  const teams = [...teamSessionIds].map((teamSessionId) => {
+    const actions = actionsForTeamSession(state.actions, teamSessionId);
+    return {
+      key: `team:${teamSessionId}`,
+      trackingMode: "team" as const,
+      actions,
+      teamSessionId,
+      characterIds: [...new Set(actions.flatMap(actionCharacterIds))],
+    };
+  });
+  return [...solo, ...teams];
+}
+
+function archivePointRounds(state: PersistedState, trigger: PointRoundTrigger, endedAt: string, vision?: Vision, onlyContextKey?: string) {
+  const endedAtMs = Date.parse(endedAt);
+  if (!Number.isFinite(endedAtMs)) return state;
+  const boundaries = { ...state.pointRoundBoundaries };
+  const records: PointRoundRecord[] = [];
+  for (const context of pointRoundContexts(state)) {
+    if (onlyContextKey && context.key !== onlyContextKey) continue;
+    const startedAt = boundaries[context.key];
+    const startedAtMs = startedAt ? Date.parse(startedAt) : Number.NEGATIVE_INFINITY;
+    if (Number.isFinite(startedAtMs) && endedAtMs <= startedAtMs) continue;
+    const actions = pointActionsInRound(context.actions, startedAt, endedAt);
+    boundaries[context.key] = endedAt;
+    if (actions.length === 0) continue;
+    records.push({
+      id: createId("round"),
+      startedAt: startedAt ?? actions[0].occurredAt,
+      endedAt,
+      trigger,
+      points: actions.reduce((sum, action) => sum + action.points, 0),
+      claims: actions.length,
+      actionIds: actions.map((action) => action.id),
+      visionId: vision?.id,
+      visionName: vision?.name,
+      trackingMode: context.trackingMode,
+      characterId: context.characterId,
+      characterName: context.characterName,
+      teamSessionId: context.teamSessionId,
+      characterIds: context.characterIds,
+      breakdown: buildBreakdown(actions),
+    });
+  }
+  return { ...state, pointRounds: [...records, ...state.pointRounds].slice(0, 2_000), pointRoundBoundaries: boundaries };
+}
+
+function pointRoundTriggerLabel(trigger: PointRoundTrigger) {
+  if (trigger === "event-start") return "Inicio de evento";
+  if (trigger === "whale-end") return "Fin de Ballena +1 min";
+  return "Guardado manual";
+}
+
 async function showOverlay(show: boolean) {
   if (!isTauri()) return;
   const overlay = await WebviewWindow.getByLabel("overlay");
@@ -448,6 +534,11 @@ export default function App() {
   const currentActions = isTeamMode ? activeTeamActions : activeCharacterActions;
   const currentPoints = useMemo(() => currentActions.reduce((sum, action) => sum + action.points, 0), [currentActions]);
   const currentClaims = currentActions.length;
+  const currentPointRoundKey = isTeamMode ? `team:${state.activeTeamSessionId}` : `solo:${activeCharacter.id}`;
+  const currentPointRoundActions = useMemo(() => pointActionsInRound(currentActions, state.pointRoundBoundaries[currentPointRoundKey]), [currentActions, currentPointRoundKey, state.pointRoundBoundaries]);
+  const currentPointRoundPoints = useMemo(() => currentPointRoundActions.reduce((sum, action) => sum + action.points, 0), [currentPointRoundActions]);
+  const visiblePointRounds = useMemo(() => state.pointRounds.filter((record) => isTeamMode ? record.trackingMode === "team" : record.trackingMode === "solo" && record.characterId === activeCharacter.id), [activeCharacter.id, isTeamMode, state.pointRounds]);
+  const savedPointRoundTotal = useMemo(() => visiblePointRounds.reduce((sum, record) => sum + record.points, 0), [visiblePointRounds]);
   const breakdown = useMemo(() => buildBreakdown(currentActions), [currentActions]);
   const activeCharacterBoxes = useMemo(() => state.boxes.filter((box) => (box.characterId ?? DEFAULT_CHARACTER_ID) === activeCharacter.id), [state.boxes, activeCharacter.id]);
   const activeCharacterPoints = useMemo(() => activeCharacterActions.reduce((sum, action) => sum + action.points, 0), [activeCharacterActions]);
@@ -467,6 +558,8 @@ export default function App() {
   const publicVisionId = sharedVisionId(state.catalog, state.settings.selectedVisionId);
   const selectedVision = state.catalog.visions.find((vision) => vision.id === publicVisionId) ?? state.catalog.visions.find((vision) => vision.enabled) ?? state.catalog.visions[0];
   const cycle = computeCycle(state.settings, now);
+  const cycleDurationMinutes = cycle.phase === "active" ? state.settings.activeMinutes : state.settings.waitMinutes;
+  const cyclePhaseStartedAt = new Date(Date.parse(cycle.phaseEndsAt) - cycleDurationMinutes * 60_000).toISOString();
   const transition = computeCountdownTransition(state.settings, now);
   const overlayDisplayName = overlayVisionName(selectedVision, state.settings.overlayNameMode, state.settings.overlayCustomName);
   const overlayDisplayMs = transition.active ? transition.remainingMs : cycle.remainingMs;
@@ -609,6 +702,27 @@ export default function App() {
   }, [state.settings.overlayEnabled]);
 
   useEffect(() => {
+    if (cycle.phase !== "active" || state.settings.lastPointRoundEventStartedAt === cyclePhaseStartedAt) return;
+    commitState((current) => {
+      if (current.settings.lastPointRoundEventStartedAt === cyclePhaseStartedAt) return current;
+      const archived = archivePointRounds(current, "event-start", cyclePhaseStartedAt, selectedVision);
+      return { ...archived, settings: { ...archived.settings, lastPointRoundEventStartedAt: cyclePhaseStartedAt } };
+    });
+  }, [commitState, cycle.phase, cyclePhaseStartedAt, selectedVision, state.settings.lastPointRoundEventStartedAt]);
+
+  useEffect(() => {
+    if (cycle.phase !== "waiting" || selectedVision?.id !== "gravity" || state.settings.lastWhalePointRoundWaitStartedAt === cyclePhaseStartedAt) return;
+    const saveAtMs = Date.parse(cyclePhaseStartedAt) + 6 * 60_000;
+    if (now < saveAtMs) return;
+    const saveAt = new Date(saveAtMs).toISOString();
+    commitState((current) => {
+      if (current.settings.lastWhalePointRoundWaitStartedAt === cyclePhaseStartedAt) return current;
+      const archived = archivePointRounds(current, "whale-end", saveAt, selectedVision);
+      return { ...archived, settings: { ...archived.settings, lastWhalePointRoundWaitStartedAt: cyclePhaseStartedAt } };
+    });
+  }, [commitState, cycle.phase, cyclePhaseStartedAt, now, selectedVision, state.settings.lastWhalePointRoundWaitStartedAt]);
+
+  useEffect(() => {
     const leadMinutes = clampNumber(state.settings.voiceLeadMinutes, 1, 60);
     const phaseKey = state.settings.phaseStartedAt;
     if (cycle.phase !== "waiting" || selectedVision?.id !== "gravity" || !state.settings.voiceNotificationsEnabled) return;
@@ -703,6 +817,14 @@ export default function App() {
   const undoLastAction = () => {
     const action = currentActions.at(-1);
     if (action) removeActionFromCurrentTracking(action.id);
+  };
+
+  const saveCurrentPointRound = () => {
+    if (currentPointRoundActions.length === 0) return;
+    const endedAt = new Date().toISOString();
+    commitState((current) => archivePointRounds(current, "manual", endedAt, selectedVision, currentPointRoundKey));
+    setToast(`Ronda guardada con ${currentPointRoundPoints} ${currentPointRoundPoints === 1 ? "punto" : "puntos"}; el conteo parcial vuelve a 0`);
+    window.setTimeout(() => setToast(""), 2800);
   };
 
   const markBox = (source: "normal" | "platform-mail" = "normal") => {
@@ -1129,6 +1251,20 @@ export default function App() {
                     <button type="button" className="secondary" disabled={currentActions.length === 0} onClick={undoLastAction}><Undo2 size={18} /> Deshacer último</button>
                     <button type="button" className={`secondary overlay-home-button ${state.settings.overlayEnabled ? "enabled" : ""}`} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><Eye size={18} /> {state.settings.overlayEnabled ? "Quitar ventana flotante" : "Agregar ventana flotante"}</button>
                   </div>
+                  <section className="point-round-history" aria-label="Historial de rondas de puntos">
+                    <header>
+                      <div><span>RONDA ACTUAL</span><strong>{currentPointRoundPoints} {currentPointRoundPoints === 1 ? "punto" : "puntos"}</strong><small>{currentPointRoundActions.length} {currentPointRoundActions.length === 1 ? "recompensa" : "recompensas"} desde el último guardado</small></div>
+                      <button type="button" className="secondary compact" disabled={currentPointRoundActions.length === 0} onClick={saveCurrentPointRound}><Save size={15} /> Guardar ronda</button>
+                    </header>
+                    <div className="point-round-totals"><span><strong>{visiblePointRounds.length}</strong> {visiblePointRounds.length === 1 ? "ronda guardada" : "rondas guardadas"}</span><span><strong>{savedPointRoundTotal}</strong> {savedPointRoundTotal === 1 ? "punto registrado" : "puntos registrados"}</span></div>
+                    {visiblePointRounds.length > 0 && <div className="point-round-list">
+                      {visiblePointRounds.slice(0, 5).map((record, index) => <article key={record.id}>
+                        <span>#{visiblePointRounds.length - index}</span>
+                        <strong>{record.points} pts</strong>
+                        <small>{record.claims} {record.claims === 1 ? "recompensa" : "recompensas"} · {pointRoundTriggerLabel(record.trigger)} · {new Date(record.endedAt).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" })}</small>
+                      </article>)}
+                    </div>}
+                  </section>
                 </div>
                 <div className="ghost-orbit" aria-hidden="true"><div className="orbital-ring" /><img className="ghost-crate-image" src={PHANTOM_CRATE_IMAGE} alt="" /><div className="once-human-wordmark"><span>ONCE</span><strong>HUMAN</strong></div><Sparkles className="spark-one" /><Sparkles className="spark-two" /></div>
               </article>

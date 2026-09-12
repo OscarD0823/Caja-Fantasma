@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import catalog from "../catalog/visions.json" with { type: "json" };
-import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, applyRemoteCatalog, boxStatistics, buildBreakdown, computeCountdownTransition, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, overlayVisionName, parseManualBaseline, resolveTransitionDelayMilliseconds, sharedEventTimingFromSettings, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type Catalog, type PersistedState, type PointAction, type Settings } from "../src/model.ts";
+import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, applyRemoteCatalog, boxStatistics, buildBreakdown, computeCountdownTransition, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, overlayVisionName, parseManualBaseline, pointActionsInRound, resolveTransitionDelayMilliseconds, sharedEventTimingFromSettings, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type Catalog, type PersistedState, type PointAction, type Settings } from "../src/model.ts";
 import { whaleCounterLayoutWithinWindow, whaleCounterScaleWithinWindow, whaleScaleWithinWindow } from "../src/overlayGeometry.ts";
 import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesModSearch, normalizeModSearch } from "../src/shinyModsCatalog.ts";
 
@@ -80,6 +80,8 @@ const localState: PersistedState = {
   catalog: catalog as Catalog,
   actions: [],
   boxes: [],
+  pointRounds: [],
+  pointRoundBoundaries: {},
   manualBaselinePoints: [],
   shinyMods: [],
   ...createInitialCharacterTracking(Date.parse("2026-09-12T00:00:00Z")),
@@ -165,6 +167,7 @@ assert.deepEqual(buildBreakdown(actions), [
   { name: "Gravedad · Ballena", count: 1, points: 1 },
 ]);
 assert.equal(actionsForCharacter(actions, DEFAULT_CHARACTER_ID).length, 3, "Los registros anteriores deben migrar al personaje principal.");
+assert.deepEqual(pointActionsInRound(actions, "2026-09-10T10:00:00Z", "2026-09-10T10:05:00Z").map((action) => action.id), ["2"], "Una ronda nueva no debe repetir la acción del límite anterior ni incluir acciones posteriores a su cierre.");
 
 const teamActions: PointAction[] = [
   { id: "team-1", activityId: "pro-silo", activityName: "Silo", points: 1, occurredAt: "2026-09-10T12:00:00Z", characterIds: ["alpha", "beta"], trackingMode: "team", teamSessionId: "session-a" },
