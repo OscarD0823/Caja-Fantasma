@@ -94,6 +94,7 @@ export type Settings = {
   overlayEnabled: boolean;
   overlayScale: number;
   overlayAddonScale: number;
+  overlayWhaleEnabled: boolean;
   overlayShape: OverlayShape;
   overlayCounterStyle: OverlayCounterStyle;
   overlayNameMode: OverlayNameMode;

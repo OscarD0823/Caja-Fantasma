@@ -81,6 +81,7 @@ export function initialState(): PersistedState {
       overlayEnabled: false,
       overlayScale: 1,
       overlayAddonScale: 1,
+      overlayWhaleEnabled: true,
       overlayShape: "event",
       overlayCounterStyle: "digital",
       overlayNameMode: "spanish",
@@ -121,6 +122,7 @@ export function loadState(): PersistedState {
     settings.selectedVisionId = sharedVisionId(catalog, settings.selectedVisionId);
     settings.overlayScale = clampNumber(Number(settings.overlayScale) || 1, .2, 1.5);
     settings.overlayAddonScale = clampNumber(Number(settings.overlayAddonScale) || 1, .2, 1);
+    settings.overlayWhaleEnabled = settings.overlayWhaleEnabled !== false;
     settings.overlayShape = OVERLAY_SHAPES.has(settings.overlayShape) ? settings.overlayShape : "event";
     settings.overlayCounterStyle = OVERLAY_COUNTER_STYLES.has(settings.overlayCounterStyle) ? settings.overlayCounterStyle : "digital";
     settings.overlayNameMode = OVERLAY_NAME_MODES.has(settings.overlayNameMode) ? settings.overlayNameMode : "spanish";
@@ -199,6 +201,7 @@ export function importState(text: string) {
       selectedVisionId: sharedVisionId(catalog),
       overlayScale: clampNumber(Number(parsed.settings?.overlayScale) || 1, .2, 1.5),
       overlayAddonScale: clampNumber(Number(parsed.settings?.overlayAddonScale) || 1, .2, 1),
+      overlayWhaleEnabled: parsed.settings?.overlayWhaleEnabled !== false,
       overlayShape: OVERLAY_SHAPES.has(parsed.settings?.overlayShape as OverlayShape) ? parsed.settings!.overlayShape! : "event",
       overlayCounterStyle: OVERLAY_COUNTER_STYLES.has(parsed.settings?.overlayCounterStyle as OverlayCounterStyle) ? parsed.settings!.overlayCounterStyle! : "digital",
       overlayNameMode: OVERLAY_NAME_MODES.has(parsed.settings?.overlayNameMode as OverlayNameMode) ? parsed.settings!.overlayNameMode! : "spanish",
