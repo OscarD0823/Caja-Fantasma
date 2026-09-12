@@ -50,7 +50,7 @@ import CatalogEditor from "./CatalogEditor";
 import OverlayPreviewLab from "./OverlayPreviewLab";
 import AppUpdater from "./Updater";
 import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, SYMBIOSIS_EVENT_IMAGE } from "./assets";
-import type { Activity, Catalog, CharacterProfile, PersistedState, PointAction, Settings, ShinyModRecord, Vision } from "./model";
+import type { Activity, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, Settings, ShinyModRecord, Vision } from "./model";
 import {
   APP_VERSION,
   AUTHOR,
@@ -64,40 +64,92 @@ import {
   boxStatistics,
   buildBreakdown,
   clampNumber,
+  computeCountdownTransition,
   computeCycle,
   createId,
   detachCharacterFromActions,
+  formatCompactDuration,
   formatDuration,
+  overlayVisionName,
   parseManualBaseline,
   sharedVisionId,
   splitPlatformCarryover,
   validateCatalog,
 } from "./model";
 import { exportState, importState, loadState, saveState } from "./storage";
-import {
-  SHINY_MOD_CATALOG,
-  SHINY_MOD_CATALOG_META,
-  SHINY_MOD_GROUPS,
-  catalogOriginLabel,
-  catalogStatusLabel,
-  matchesModSearch,
-  normalizeModSearch,
-  type ShinyModCatalogItem,
-} from "./shinyModsCatalog";
+import type { ShinyModCatalogItem } from "./shinyModsCatalog";
 
-type TabId = "progress" | "vision" | "history" | "shiny" | "changes" | "settings";
+type ShinyCatalogModule = typeof import("./shinyModsCatalog");
+const EMPTY_SHINY_CATALOG: ShinyModCatalogItem[] = [];
+const EMPTY_SHINY_GROUPS: ShinyCatalogModule["SHINY_MOD_GROUPS"] = [];
+
+function catalogStatusLabel(item: Pick<ShinyModCatalogItem, "levelLabel">) {
+  return item.levelLabel;
+}
+
+function catalogOriginLabel(item: Pick<ShinyModCatalogItem, "system">) {
+  return item.system === "legacy" ? "Sistema anterior" : "Sistema 2.0";
+}
+
+function normalizeModSearch(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es").trim();
+}
+
+function matchesModSearch(item: ShinyModCatalogItem, search: string) {
+  if (!search) return true;
+  const haystack = normalizeModSearch([item.name, item.englishName, item.baseName, item.baseEnglishName, item.variant, item.applyRange, item.modType, item.groupName, item.levelLabel, catalogOriginLabel(item), item.itemId].join(" "));
+  return search.split(/\s+/).filter(Boolean).every((term) => haystack.includes(term));
+}
+
+type TabId = "progress" | "characters" | "vision" | "history" | "shiny" | "changes" | "settings";
 type CreatorAccess = "checking" | "locked" | "granted";
 
 const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
   { id: "progress", label: "Caja", icon: Box },
+  { id: "characters", label: "Personajes", icon: Users },
   { id: "vision", label: "Visión", icon: Eye },
   { id: "history", label: "Historial", icon: History },
-  { id: "shiny", label: "Mods Shiny", icon: Gem },
+  { id: "shiny", label: "Mods Brillantes", icon: Gem },
   { id: "changes", label: "Cambios", icon: FileClock },
   { id: "settings", label: "Configuración", icon: Settings2 },
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.12.0",
+    date: "11 de septiembre de 2026",
+    title: "Ballena sin marco y módulos desde nivel cero",
+    items: [
+      "Lunar vuelve a mostrarse como Lunar en español; el nombre inglés permanece como Lunar Revelry.",
+      "Todos los módulos normales muestran Nivel 0–17 y el estado especial se presenta como Brillante.",
+      "La Ballena nada desde que entra, continúa moviéndose mientras dispara y conserva el movimiento al retirarse.",
+      "El área transparente de la Ballena cambia de tamaño de forma independiente al contador y ya no usa el marco oscuro anterior.",
+      "Inicio incluye un botón que abre los controles de tamaño de la ventana y del área de la Ballena.",
+    ],
+  },
+  {
+    version: "1.11.0",
+    date: "11 de septiembre de 2026",
+    title: "Riftwalker animado y controles más ligeros",
+    items: [
+      "La Ballena usa un recorte transparente optimizado y mueve cola, cuerpo, cabeza, energía y rayo como capas independientes.",
+      "El tamaño de la ventana baja hasta 20 % y la Ballena o futuros adicionales tienen un ajuste propio de 20 % a 100 %.",
+      "Personajes tiene su propio menú y los apartados Cambios y Desarrollador solo se muestran al propietario verificado.",
+      "Puede añadirse un retraso visual corto al terminar el evento sin alterar el ciclo real ni perder tiempo al apagar el PC.",
+      "Los temporizadores, sondeos y sincronizaciones reducen su actividad cuando la interfaz está oculta.",
+    ],
+  },
+  {
+    version: "1.10.0",
+    date: "11 de septiembre de 2026",
+    title: "Contador flotante a tu estilo",
+    items: [
+      "La ventana flotante puede conservar la forma automática del evento o usar un diseño rectangular, cuadrado, vertical o redondo.",
+      "El reloj ofrece estilos digital, compacto y circular con anillo de progreso.",
+      "El nombre de la rueda puede mostrarse en español, inglés o con un texto personalizado guardado únicamente en este PC.",
+      "El laboratorio visual del desarrollador usa la misma combinación elegida y permite comprobarla antes de abrir la ventana real.",
+    ],
+  },
   {
     version: "1.9.0",
     date: "11 de septiembre de 2026",
@@ -178,7 +230,7 @@ const CHANGELOG = [
     items: [
       "Las armas aparecen agrupadas por estilo y las armaduras por casco, máscara, parte superior, guantes, pantalones y zapatos.",
       "Cada grupo tiene su propio encabezado y el selector separa claramente ARMAS de ARMADURA.",
-      "Los módulos normales muestran Nivel 1–17 y las versiones Shiny muestran Nivel 17 brillante.",
+      "Los módulos normales muestran Nivel 0–17 y las versiones especiales se muestran como Brillante.",
       "El nivel antiguo de la fuente dejó de mostrarse como si fuera el nivel actual del módulo.",
       "El objetivo global cambió a 1.000 puntos y el Desafío de Manibus de Endless Dream ahora suma 1 punto.",
       "El propietario puede publicar el tiempo exacto de la rueda para que todos los equipos adopten el mismo ciclo absoluto, incluso tras apagar el PC.",
@@ -193,19 +245,19 @@ const CHANGELOG = [
     date: "10 de septiembre de 2026",
     title: "Catálogo completo de módulos",
     items: [
-      "El buscador ahora cubre los 1.825 registros exactos: 207 del sistema anterior, 809 normales 2.0 y 809 Shiny 2.0.",
+      "El buscador ahora cubre los 1.825 registros exactos: 207 del sistema anterior, 809 normales 2.0 y 809 Brillantes 2.0.",
       "Cada combinación de nombre, variante, ranura, estilo e ID se puede buscar y añadir al seguimiento.",
-      "Todos los registros se pueden controlar como objetivo Shiny, sin restricciones por su clasificación de origen.",
-      "Nuevo buscador para localizar objetivos activos y módulos Shiny ya conseguidos dentro del historial personal.",
+      "Todos los registros se pueden controlar como objetivo Brillante, sin restricciones por su clasificación de origen.",
+      "Nuevo buscador para localizar objetivos activos y módulos Brillantes ya conseguidos dentro del historial personal.",
     ],
   },
   {
     version: "1.4.0",
     date: "10 de septiembre de 2026",
-    title: "Control de módulos Shiny",
+    title: "Control de módulos Brillantes",
     items: [
       "Nuevo seguimiento de intentos fallidos con duplicados nivel 17 para cada módulo y variante.",
-      "Colección separada para marcar los módulos que ya se convirtieron en Shiny y conservar su fecha.",
+      "Colección separada para marcar los módulos que ya se convirtieron en Brillantes y conservar su fecha.",
       "Catálogo bilingüe con 100 módulos base actuales: 36 de arma y 64 de armadura.",
       "Hora punta · Estrella descendente está disponible como combinación del catálogo.",
     ],
@@ -316,6 +368,7 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState("Catálogo local listo");
   const [toast, setToast] = useState("");
   const [introVisible, setIntroVisible] = useState(true);
+  const [homeOverlayConfigOpen, setHomeOverlayConfigOpen] = useState(false);
   const [creatorAccess, setCreatorAccess] = useState<CreatorAccess>("checking");
   const [creatorMessage, setCreatorMessage] = useState("Comprobando la cuenta de GitHub…");
   const initialCycle = useRef(computeCycle(state.settings));
@@ -325,14 +378,21 @@ export default function App() {
   const [counterSeconds, setCounterSeconds] = useState(() => String(initialCycleSeconds % 60));
   const [manualHistoryText, setManualHistoryText] = useState("");
   const [newCharacterName, setNewCharacterName] = useState("");
-  const defaultShinyMod = SHINY_MOD_CATALOG.find((item) => item.englishName === "Rush Hour <Downstar>" && !item.isCatalogShiny) ?? SHINY_MOD_CATALOG[0];
+  const [shinyCatalogModule, setShinyCatalogModule] = useState<ShinyCatalogModule>();
+  const [shinyCatalogError, setShinyCatalogError] = useState("");
+  const [shinyCatalogAttempt, setShinyCatalogAttempt] = useState(0);
   const [shinySearch, setShinySearch] = useState("");
   const [shinyGroupFilter, setShinyGroupFilter] = useState("all");
   const [shinySystemFilter, setShinySystemFilter] = useState("all");
   const [shinyRecordSearch, setShinyRecordSearch] = useState("");
-  const [selectedShinyModId, setSelectedShinyModId] = useState(defaultShinyMod.id);
+  const [selectedShinyModId, setSelectedShinyModId] = useState("");
   const importRef = useRef<HTMLInputElement>(null);
   const voiceAlertRef = useRef("");
+
+  const SHINY_MOD_CATALOG = shinyCatalogModule?.SHINY_MOD_CATALOG ?? EMPTY_SHINY_CATALOG;
+  const SHINY_MOD_GROUPS = shinyCatalogModule?.SHINY_MOD_GROUPS ?? EMPTY_SHINY_GROUPS;
+  const SHINY_MOD_CATALOG_META = shinyCatalogModule?.SHINY_MOD_CATALOG_META ?? { sourceUrl: "", sourceCheckedAt: "", total: 0, legacy: 0, normal: 0, shiny: 0 };
+  const defaultShinyMod = SHINY_MOD_CATALOG.find((item) => item.englishName === "Rush Hour <Downstar>" && !item.isCatalogShiny) ?? SHINY_MOD_CATALOG[0];
 
   const referencePoints = useMemo(() => [...BASELINE_BOX_POINTS, ...state.manualBaselinePoints], [state.manualBaselinePoints]);
   const target = clampNumber(state.catalog.boxTargetPoints, 1, 10_000);
@@ -362,6 +422,11 @@ export default function App() {
   const publicVisionId = sharedVisionId(state.catalog, state.settings.selectedVisionId);
   const selectedVision = state.catalog.visions.find((vision) => vision.id === publicVisionId) ?? state.catalog.visions.find((vision) => vision.enabled) ?? state.catalog.visions[0];
   const cycle = computeCycle(state.settings, now);
+  const transition = computeCountdownTransition(state.settings, now);
+  const overlayDisplayName = overlayVisionName(selectedVision, state.settings.overlayNameMode, state.settings.overlayCustomName);
+  const overlayDisplayMs = transition.active ? transition.remainingMs : cycle.remainingMs;
+  const overlayDisplayTimer = state.settings.overlayCounterStyle === "compact" ? formatCompactDuration(overlayDisplayMs) : formatDuration(overlayDisplayMs);
+  const visibleTabs = TABS.filter((item) => item.id !== "changes" || creatorAccess === "granted");
   const targetProgress = Math.min(100, Math.round((currentPoints / target) * 100));
   const selectedShinyMod = SHINY_MOD_CATALOG.find((item) => item.id === selectedShinyModId) ?? defaultShinyMod;
   const normalizedShinySearch = normalizeModSearch(shinySearch);
@@ -371,12 +436,12 @@ export default function App() {
     if (shinySystemFilter === "normal" && (item.system !== "new" || item.isCatalogShiny)) return false;
     if (shinySystemFilter === "shiny" && (item.system !== "new" || !item.isCatalogShiny)) return false;
     return matchesModSearch(item, normalizedShinySearch);
-  }), [normalizedShinySearch, shinyGroupFilter, shinySystemFilter]);
+  }), [SHINY_MOD_CATALOG, normalizedShinySearch, shinyGroupFilter, shinySystemFilter]);
   const visibleItemsPerGroup = shinyGroupFilter !== "all" || normalizedShinySearch ? 150 : 12;
   const groupedVisibleShinyCatalog = useMemo(() => SHINY_MOD_GROUPS.map((group) => ({
     ...group,
     items: filteredShinyCatalog.filter((item) => item.groupId === group.id).slice(0, visibleItemsPerGroup),
-  })).filter((group) => group.items.length > 0), [filteredShinyCatalog, visibleItemsPerGroup]);
+  })).filter((group) => group.items.length > 0), [SHINY_MOD_GROUPS, filteredShinyCatalog, visibleItemsPerGroup]);
   const visibleShinyCatalogCount = groupedVisibleShinyCatalog.reduce((sum, group) => sum + group.items.length, 0);
   const normalizedRecordSearch = normalizeModSearch(shinyRecordSearch);
   const matchesRecordSearch = (item: ShinyModRecord) => !normalizedRecordSearch || normalizeModSearch(`${item.modName} ${item.englishName ?? ""} ${item.groupName} ${item.variant}`).includes(normalizedRecordSearch);
@@ -394,6 +459,11 @@ export default function App() {
 
   const checkCreatorAccess = useCallback(async () => {
     if (!isTauri()) {
+      if (import.meta.env.DEV) {
+        setCreatorAccess("granted");
+        setCreatorMessage("Laboratorio local de desarrollo; la publicación está deshabilitada en el navegador.");
+        return;
+      }
       setCreatorAccess("locked");
       setCreatorMessage("La verificación solo funciona en el instalador Creador de Windows.");
       return;
@@ -430,6 +500,23 @@ export default function App() {
     void checkCreatorAccess();
   }, [checkCreatorAccess]);
 
+  useEffect(() => {
+    if (tab !== "shiny" || shinyCatalogModule) return;
+    let cancelled = false;
+    setShinyCatalogError("");
+    void import("./shinyModsCatalog")
+      .then((catalogModule) => {
+        if (cancelled) return;
+        setShinyCatalogModule(catalogModule);
+        const initial = catalogModule.SHINY_MOD_CATALOG.find((item) => item.englishName === "Rush Hour <Downstar>" && !item.isCatalogShiny) ?? catalogModule.SHINY_MOD_CATALOG[0];
+        if (initial) setSelectedShinyModId((current) => current || initial.id);
+      })
+      .catch(() => {
+        if (!cancelled) setShinyCatalogError("No se pudo cargar el catálogo local de módulos.");
+      });
+    return () => { cancelled = true; };
+  }, [shinyCatalogAttempt, shinyCatalogModule, tab]);
+
   useEffect(() => saveState(state), [state]);
 
   useEffect(() => {
@@ -444,13 +531,25 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
+    let stopped = false;
+    let timer = 0;
+    const tick = () => {
+      if (stopped) return;
       const timestamp = Date.now();
       setNow(timestamp);
       setState((current) => normalizeCycleState(current, timestamp));
-    }, 1000);
-    return () => window.clearInterval(timer);
+      timer = window.setTimeout(tick, document.visibilityState === "visible" ? 1_000 : 5_000);
+    };
+    timer = window.setTimeout(tick, 1_000);
+    return () => {
+      stopped = true;
+      window.clearTimeout(timer);
+    };
   }, []);
+
+  useEffect(() => {
+    if (creatorAccess !== "granted" && tab === "changes") setTab("progress");
+  }, [creatorAccess, tab]);
 
   useEffect(() => {
     void showOverlay(state.settings.overlayEnabled);
@@ -499,6 +598,7 @@ export default function App() {
             ...(hasNewTiming ? {
               waitMinutes: timing.waitMinutes,
               activeMinutes: timing.activeMinutes,
+              transitionDelaySeconds: clampNumber(timing.transitionDelaySeconds ?? current.settings.transitionDelaySeconds, 0, 300),
               phaseStartedAt: timing.phaseStartedAt,
               phase: timing.phase,
               lastNotificationPhaseStartedAt: undefined,
@@ -517,7 +617,9 @@ export default function App() {
 
   useEffect(() => {
     void syncCatalog(true);
-    const timer = window.setInterval(() => void syncCatalog(true), 60_000);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void syncCatalog(true);
+    }, 60_000);
     const refresh = () => void syncCatalog(true);
     const refreshWhenVisible = () => { if (document.visibilityState === "visible") refresh(); };
     window.addEventListener("online", refresh);
@@ -763,6 +865,11 @@ export default function App() {
   };
 
   const addShinyTracker = (customName?: string) => {
+    if (!selectedShinyMod) {
+      setToast("El catálogo de módulos todavía se está cargando");
+      window.setTimeout(() => setToast(""), 2200);
+      return;
+    }
     const custom = customName?.trim();
     const modName = custom || selectedShinyMod.baseName;
     const catalogId = custom ? undefined : selectedShinyMod.id;
@@ -801,7 +908,7 @@ export default function App() {
 
   const setShinyObtained = (id: string, obtained: boolean) => {
     updateShinyRecord(id, (record) => ({ ...record, isShiny: obtained, obtainedAt: obtained ? new Date().toISOString() : undefined }));
-    setToast(obtained ? "Módulo marcado como Shiny" : "Módulo devuelto a la lista de búsqueda");
+    setToast(obtained ? "Módulo marcado como Brillante" : "Módulo devuelto a la lista de búsqueda");
     window.setTimeout(() => setToast(""), 2200);
   };
 
@@ -860,6 +967,7 @@ export default function App() {
         selectedVisionId: sharedSettings.selectedVisionId,
         waitMinutes: sharedSettings.waitMinutes,
         activeMinutes: sharedSettings.activeMinutes,
+        transitionDelaySeconds: sharedSettings.transitionDelaySeconds,
         phaseStartedAt: sharedSettings.phaseStartedAt,
         phase: sharedSettings.phase,
         updatedAt,
@@ -915,7 +1023,7 @@ export default function App() {
         </div>
 
         <nav aria-label="Navegación principal">
-          {TABS.map(({ id, label, icon: Icon }) => (
+          {visibleTabs.map(({ id, label, icon: Icon }) => (
             <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
               <Icon size={19} /><span>{label}</span>{tab === id && <ChevronRight size={15} />}
             </button>
@@ -941,12 +1049,12 @@ export default function App() {
         <header className={`topbar vision-${selectedVision?.id ?? "none"} ${cycle.phase}`}>
           <VisionAtmosphere visionId={selectedVision?.id} active={cycle.phase === "active"} />
           <div className="topbar-copy">
-            <span className="eyebrow">{tab === "progress" ? "SEGUIMIENTO ACTUAL" : tab === "vision" ? "RUEDA VISIONAL" : tab === "history" ? "REGISTRO PERSONAL" : tab === "shiny" ? "COLECCIÓN DE MÓDULOS" : tab === "changes" ? "NOVEDADES" : "PREFERENCIAS"}</span>
+            <span className="eyebrow">{tab === "progress" ? "SEGUIMIENTO ACTUAL" : tab === "characters" ? "PERFILES DE JUEGO" : tab === "vision" ? "RUEDA VISIONAL" : tab === "history" ? "REGISTRO PERSONAL" : tab === "shiny" ? "COLECCIÓN DE MÓDULOS" : tab === "changes" ? "NOVEDADES" : "PREFERENCIAS"}</span>
             <h1>{TABS.find((item) => item.id === tab)?.label}</h1>
           </div>
-          <div className={`phase-chip ${cycle.phase}`}>
+          <div className={`phase-chip ${cycle.phase} ${transition.active ? "transitioning" : ""}`}>
             <span className="pulse" />
-            <div><small>{cycle.phase === "active" ? `${selectedVision?.name ?? "Visión"} activa` : "Próxima activación"}</small><strong>{formatDuration(cycle.remainingMs)}</strong></div>
+            <div><small>{transition.active ? "Preparando próximo contador" : cycle.phase === "active" ? `${selectedVision?.name ?? "Visión"} activa` : "Próxima activación"}</small><strong>{formatDuration(overlayDisplayMs)}</strong></div>
           </div>
         </header>
 
@@ -1001,6 +1109,18 @@ export default function App() {
               </article>
             </div>
 
+            <article className={`home-overlay-controls panel ${homeOverlayConfigOpen ? "expanded" : ""}`}>
+              <div><span className="eyebrow"><MonitorUp size={15} /> VENTANA FLOTANTE</span><h2>Tamaño rápido</h2><p>Abre los controles para ajustar por separado el contador y el espacio transparente de la Ballena.</p></div>
+              <div className="home-overlay-actions">
+                <button type="button" className="secondary" aria-expanded={homeOverlayConfigOpen} aria-controls="home-overlay-size-panel" onClick={() => setHomeOverlayConfigOpen((current) => !current)}><Settings2 size={17} /> {homeOverlayConfigOpen ? "Ocultar tamaños" : "Configurar tamaños"}</button>
+                <button type="button" className={`secondary overlay-home-button ${state.settings.overlayEnabled ? "enabled" : ""}`} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><Eye size={18} /> {state.settings.overlayEnabled ? "Quitar ventana" : "Agregar ventana"}</button>
+              </div>
+              {homeOverlayConfigOpen && <div id="home-overlay-size-panel" className="home-overlay-size-panel">
+                <label className="overlay-size-control"><span>Ventana <strong>{Math.round(state.settings.overlayScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
+                <label className="overlay-size-control"><span>Área de Ballena <strong>{Math.round(state.settings.overlayAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(state.settings.overlayAddonScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(Number(event.target.value) / 100, .2, 1) } }))} /></label>
+              </div>}
+            </article>
+
             <div className="section-heading"><div><span className="eyebrow">RECOMPENSAS PRO</span><h2>Suma lo que reclames</h2></div><span>Solo las recompensas completadas cuentan</span></div>
             <div className="activity-grid">
               {state.catalog.proActivities.map((activity) => (
@@ -1026,9 +1146,9 @@ export default function App() {
           <section className="page vision-page">
             <div className="vision-layout">
               <article className={`timer-panel panel ${cycle.phase}`}>
-                <div className="timer-top"><span className="eyebrow"><Clock3 size={15} /> CICLO AUTOMÁTICO</span><span className="live-dot">{cycle.phase === "active" ? "EN CURSO" : "EN ESPERA"}</span></div>
-                <h2>{cycle.phase === "active" ? "La Rueda está activa" : "La Rueda comenzará en"}</h2>
-                <strong className="timer-value">{formatDuration(cycle.remainingMs)}</strong>
+                <div className="timer-top"><span className="eyebrow"><Clock3 size={15} /> CICLO AUTOMÁTICO</span><span className="live-dot">{transition.active ? "TRANSICIÓN" : cycle.phase === "active" ? "EN CURSO" : "EN ESPERA"}</span></div>
+                <h2>{transition.active ? "Preparando el próximo contador" : cycle.phase === "active" ? "La Rueda está activa" : "La Rueda comenzará en"}</h2>
+                <strong className="timer-value">{formatDuration(overlayDisplayMs)}</strong>
                 <div className="cycle-track"><span style={{ width: `${Math.round(cycle.progress * 100)}%` }} /></div>
                 <p>{cycle.phase === "active" ? `Termina el ${formatDate(cycle.phaseEndsAt)}.` : `Comienza el ${formatDate(cycle.phaseEndsAt)}.`}</p>
                 <div className="hero-actions">
@@ -1041,9 +1161,16 @@ export default function App() {
 
               <article className="overlay-preview panel">
                 <div className="panel-title"><div><span className="eyebrow">VENTANA FLOTANTE</span><h3>Siempre visible</h3></div><button type="button" className={`switch ${state.settings.overlayEnabled ? "on" : ""}`} aria-pressed={state.settings.overlayEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><span /></button></div>
-                <div className={`mock-overlay ${cycle.phase}`}><span>{cycle.phase === "active" ? `${selectedVision?.name} activa` : `Próxima ${selectedVision?.name}`}</span><strong>{formatDuration(cycle.remainingMs)}</strong></div>
-                <label className="overlay-size-control"><span>Tamaño <strong>{Math.round(state.settings.overlayScale * 100)}%</strong></span><input type="range" min={70} max={150} step={5} value={Math.round(state.settings.overlayScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(Number(event.target.value) / 100, .7, 1.5) } }))} /></label>
-                <p>Arrástrala a cualquier zona de la pantalla. Se mantiene encima en juegos con pantalla completa sin bordes.</p>
+                <div className={`mock-overlay ${cycle.phase} vision-${selectedVision?.id ?? "none"} shape-${state.settings.overlayShape} counter-${state.settings.overlayCounterStyle}`}><span>{transition.active ? "Preparando próximo contador" : cycle.phase === "active" ? `${overlayDisplayName} activa` : `Próxima ${overlayDisplayName}`}</span><strong>{overlayDisplayTimer}</strong></div>
+                <div className="overlay-style-config">
+                  <label>Forma<select value={state.settings.overlayShape} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayShape: event.target.value as OverlayShape } }))}><option value="event">Automática por evento</option><option value="rectangle">Rectangular</option><option value="square">Cuadrada</option><option value="vertical">Vertical</option><option value="round">Redonda</option></select></label>
+                  <label>Estilo del contador<select value={state.settings.overlayCounterStyle} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayCounterStyle: event.target.value as OverlayCounterStyle } }))}><option value="digital">Digital</option><option value="compact">Compacto</option><option value="ring">Anillo de progreso</option></select></label>
+                  <label>Nombre del evento<select value={state.settings.overlayNameMode} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayNameMode: event.target.value as OverlayNameMode } }))}><option value="spanish">Español</option><option value="english">Inglés</option><option value="custom">Personalizado</option></select></label>
+                  {state.settings.overlayNameMode === "custom" && <label>Tu nombre<input maxLength={40} value={state.settings.overlayCustomName} placeholder="Ej. Gravedad azul" onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayCustomName: event.target.value.slice(0, 40) } }))} /></label>}
+                </div>
+                <label className="overlay-size-control"><span>Tamaño de ventana <strong>{Math.round(state.settings.overlayScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
+                <label className="overlay-size-control"><span>Área de Ballena <strong>{Math.round(state.settings.overlayAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(state.settings.overlayAddonScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(Number(event.target.value) / 100, .2, 1) } }))} /></label>
+                <p>Arrástrala a cualquier zona de la pantalla. El tamaño del contador y el espacio transparente de la Ballena se configuran por separado.</p>
               </article>
             </div>
 
@@ -1074,6 +1201,37 @@ export default function App() {
               <div><span className="eyebrow">RUEDA PÚBLICA</span><h2>{selectedVision?.name ?? "Sin rueda activa"}</h2><p>{selectedVision?.description}</p><small>La selecciona OscarD0823 y se sincroniza automáticamente en todos los equipos.</small></div>
               <UserCheck size={22} />
             </article>
+          </section>
+        )}
+
+        {tab === "characters" && (
+          <section className="page characters-page">
+            <article className="character-manager panel">
+              <div className="panel-title"><div><span className="eyebrow"><Users size={15} /> PERSONAJES</span><h2>Perfiles de juego</h2></div><span className="character-limit">{state.characters.length} / 12</span></div>
+              <p>La aplicación siempre abre en Solitario. Cada personaje conserva sus puntos, porcentaje e historial; en Equipo, una recompensa se suma a todos los integrantes seleccionados.</p>
+              <form className="character-add" onSubmit={(event) => { event.preventDefault(); addCharacter(); }}>
+                <label>Nuevo personaje<input value={newCharacterName} maxLength={40} placeholder="Nombre dentro del juego" onChange={(event) => setNewCharacterName(event.target.value)} /></label>
+                <button type="submit" className="primary" disabled={state.characters.length >= 12}><UserPlus size={17} /> Agregar personaje</button>
+              </form>
+              <div className="character-manager-list">
+                {state.characters.map((character, index) => {
+                  const summary = characterSummaries.find((item) => item.character.id === character.id);
+                  return <div className="character-manager-row" key={character.id}>
+                    <span className="character-avatar"><UserRound size={18} /></span>
+                    <label>Nombre<input defaultValue={character.name} maxLength={40} onBlur={(event) => renameCharacter(character.id, event.target.value.trim() || character.name)} /></label>
+                    <span className="character-manager-stats"><strong>{summary?.points ?? 0} puntos</strong><small>{(summary?.chance ?? 0).toFixed(1)}% estimado</small></span>
+                    {index === 0 && <span className="main-character-badge">PRINCIPAL</span>}
+                    <button type="button" className="character-delete" disabled={state.characters.length <= 1} aria-label={`Eliminar ${character.name}`} onClick={() => removeCharacter(character.id)}><Trash2 size={16} /></button>
+                  </div>;
+                })}
+              </div>
+            </article>
+
+            {state.characters.length > 1 && <article className="character-dashboard panel">
+              <div className="character-dashboard-top"><div><span className="eyebrow"><Users size={15} /> REGISTRO ACTUAL</span><h2>{isTeamMode ? "Equipo" : `Solitario · ${activeCharacter.name}`}</h2></div><div className="tracking-mode-switch"><button type="button" className={!isTeamMode ? "selected" : ""} onClick={() => setTrackingMode("solo")}><UserRound size={16} /> Solitario</button><button type="button" className={isTeamMode ? "selected team" : ""} onClick={() => setTrackingMode("team")}><Users size={16} /> Equipo</button></div></div>
+              <div className="character-progress-list">{characterSummaries.map((summary) => { const selected = isTeamMode ? state.teamMemberIds.includes(summary.character.id) : summary.character.id === activeCharacter.id; return <button type="button" key={summary.character.id} className={selected ? "selected" : ""} onClick={() => isTeamMode ? toggleTeamMember(summary.character.id) : selectCharacter(summary.character.id)}><span className="character-avatar"><UserRound size={17} /></span><span className="character-progress-copy"><strong>{summary.character.name}</strong><small>{summary.points} puntos · {summary.chance.toFixed(1)}% estimado</small><span className="character-progress-track"><i style={{ width: `${Math.min(100, Math.round((summary.points / target) * 100))}%` }} /></span></span>{isTeamMode && <span className={`team-member-check ${selected ? "selected" : ""}`}>{selected ? <Check size={14} /> : <Plus size={14} />}</span>}</button>; })}</div>
+              {isTeamMode && <div className={`team-guidance ${teamReady ? "ready" : "warning"}`}><Users size={17} /><span><strong>{state.teamMemberIds.length} personajes seleccionados.</strong>{teamReady ? " Cada recompensa se suma a todos." : " Elige al menos dos."}</span><button type="button" className="secondary compact" onClick={startNewTeamCount}><RotateCcw size={15} /> Nuevo conteo en 0</button></div>}
+            </article>}
           </section>
         )}
 
@@ -1122,18 +1280,20 @@ export default function App() {
           </section>
         )}
 
-        {tab === "shiny" && (
+        {tab === "shiny" && (!shinyCatalogModule || !selectedShinyMod ? (
+          <section className="page shiny-page"><div className="empty-card shiny-catalog-loading"><RefreshCw size={28} /><strong>{shinyCatalogError || "Cargando los 1.825 módulos…"}</strong><span>El catálogo se abre solo al entrar aquí para que el inicio use menos memoria.</span>{shinyCatalogError && <button type="button" className="secondary compact" onClick={() => { setShinyCatalogError(""); setShinyCatalogAttempt((current) => current + 1); }}>Reintentar</button>}</div></section>
+        ) : (
           <section className="page shiny-page">
             <div className="stats-grid shiny-stats">
               <StatCard icon={Search} label="Buscando convertir" value={String(allActiveShinyGoals.length)} />
-              <StatCard icon={Gem} label="Shiny conseguidos" value={String(allObtainedShinyMods.length)} />
+              <StatCard icon={Gem} label="Brillantes conseguidos" value={String(allObtainedShinyMods.length)} />
               <StatCard icon={RotateCcw} label="Duplicados +17 fallidos" value={String(totalShinyAttempts)} />
               <StatCard icon={Trophy} label="Colección del catálogo" value={`${shinyCollectionPercent.toFixed(1)}%`} />
             </div>
 
             <article className="shiny-rule panel">
               <div className="shiny-rule-icon"><Gem /></div>
-              <div><span className="eyebrow">CÓMO FUNCIONA</span><h2>Del nivel 1 al 17, después brillante</h2><p>Todos los módulos progresan del nivel 1 al 17. Cuando ya tienes uno en nivel 17, otro igual puede convertirse en su versión Shiny, mostrada como “Nivel 17 brillante”. Pulsa “Otro +17 no se convirtió” después de cada fallo; cuando salga, márcalo como conseguido.</p></div>
+              <div><span className="eyebrow">CÓMO FUNCIONA</span><h2>Del nivel 0 al 17, después Brillante</h2><p>Todos los módulos progresan del nivel 0 al 17. Cuando ya tienes uno en nivel 17, otro igual puede convertirse en Brillante. Pulsa “Otro +17 no se convirtió” después de cada fallo; cuando salga, márcalo como conseguido.</p></div>
             </article>
 
             <article className="shiny-catalog-panel panel">
@@ -1141,7 +1301,7 @@ export default function App() {
               <div className="shiny-search-controls">
                 <label className="shiny-search-field">Buscar nombre, variante, estilo o ID<div><Search size={16} /><input value={shinySearch} onChange={(event) => setShinySearch(event.target.value)} placeholder="Ejemplo: Hora punta, Downstar o 19500542" /></div></label>
                 <label>Estilo o pieza<select value={shinyGroupFilter} onChange={(event) => setShinyGroupFilter(event.target.value)}><option value="all">Todas las armas y armaduras</option><optgroup label="ARMAS">{SHINY_MOD_GROUPS.filter((entry) => entry.category === "weapon").map((entry) => <option key={entry.id} value={entry.id}>{entry.name.replace("Arma · ", "")} ({entry.count})</option>)}</optgroup><optgroup label="ARMADURA">{SHINY_MOD_GROUPS.filter((entry) => entry.category === "armor").map((entry) => <option key={entry.id} value={entry.id}>{entry.name.replace("Armadura · ", "")} ({entry.count})</option>)}</optgroup></select></label>
-                <label>Nivel y sistema<select value={shinySystemFilter} onChange={(event) => setShinySystemFilter(event.target.value)}><option value="all">Todos ({SHINY_MOD_CATALOG_META.total.toLocaleString("es-CO")})</option><option value="legacy">Nivel 1–17 · anterior ({SHINY_MOD_CATALOG_META.legacy})</option><option value="normal">Nivel 1–17 · sistema 2.0 ({SHINY_MOD_CATALOG_META.normal})</option><option value="shiny">Nivel 17 brillante ({SHINY_MOD_CATALOG_META.shiny})</option></select></label>
+                <label>Nivel y sistema<select value={shinySystemFilter} onChange={(event) => setShinySystemFilter(event.target.value)}><option value="all">Todos ({SHINY_MOD_CATALOG_META.total.toLocaleString("es-CO")})</option><option value="legacy">Nivel 0–17 · anterior ({SHINY_MOD_CATALOG_META.legacy})</option><option value="normal">Nivel 0–17 · sistema 2.0 ({SHINY_MOD_CATALOG_META.normal})</option><option value="shiny">Brillante ({SHINY_MOD_CATALOG_META.shiny})</option></select></label>
               </div>
               <div className="shiny-result-summary"><span>{filteredShinyCatalog.length.toLocaleString("es-CO")} coincidencias en {groupedVisibleShinyCatalog.length} grupos</span>{filteredShinyCatalog.length > visibleShinyCatalogCount && <small>Se muestran {visibleShinyCatalogCount}. Elige una pieza, estilo o escribe una búsqueda para ver más.</small>}</div>
               <div className="shiny-catalog-results">
@@ -1154,20 +1314,20 @@ export default function App() {
                 <button type="button" className="primary" onClick={() => addShinyTracker()}><Plus size={17} /> Empezar en 0</button>
                 <button type="button" className="secondary" disabled={!shinySearch.trim()} onClick={() => addShinyTracker(shinySearch)}><Plus size={17} /> Agregar nombre escrito</button>
               </div>
-              <p className="catalog-source-note">Los {SHINY_MOD_CATALOG_META.total.toLocaleString("es-CO")} registros están ordenados por tipo de arma o pieza de armadura. Los normales cubren niveles 1–17; los {SHINY_MOD_CATALOG_META.shiny} registros brillantes representan el estado Shiny de nivel 17.</p>
+              <p className="catalog-source-note">Los {SHINY_MOD_CATALOG_META.total.toLocaleString("es-CO")} registros están ordenados por tipo de arma o pieza de armadura. Todos progresan de nivel 0 a 17; los {SHINY_MOD_CATALOG_META.shiny} registros especiales representan el estado Brillante.</p>
             </article>
 
-            <label className="shiny-search-field shiny-record-search">Buscar en mi registro<div><Search size={16} /><input value={shinyRecordSearch} onChange={(event) => setShinyRecordSearch(event.target.value)} placeholder="Buscar entre objetivos e historial Shiny" /></div></label>
+            <label className="shiny-search-field shiny-record-search">Buscar en mi registro<div><Search size={16} /><input value={shinyRecordSearch} onChange={(event) => setShinyRecordSearch(event.target.value)} placeholder="Buscar entre objetivos e historial Brillante" /></div></label>
 
             <div className="section-heading shiny-heading"><div><span className="eyebrow">EN PROCESO</span><h2>Intentos de conversión</h2></div><span>{activeShinyGoals.length}{normalizedRecordSearch ? ` de ${allActiveShinyGoals.length}` : ""} activos</span></div>
             {activeShinyGoals.length === 0 ? <div className="empty-card shiny-empty"><Gem size={30} /><strong>{normalizedRecordSearch ? "No hay coincidencias en los objetivos" : "No estás siguiendo ningún módulo"}</strong><span>{normalizedRecordSearch ? "Prueba con otro nombre, variante o estilo." : "Busca uno arriba, elige el registro exacto y pulsa “Empezar en 0”."}</span></div> : <div className="shiny-tracker-grid">{activeShinyGoals.map((record) => <ShinyTrackerCard key={record.id} record={record} onDecrease={() => adjustShinyAttempts(record.id, -1)} onIncrease={() => adjustShinyAttempts(record.id, 1)} onToggle={() => setShinyObtained(record.id, true)} onDelete={() => commitState((current) => ({ ...current, shinyMods: current.shinyMods.filter((item) => item.id !== record.id) }))} />)}</div>}
 
-            <div className="section-heading shiny-heading"><div><span className="eyebrow">COLECCIÓN SHINY</span><h2>Módulos conseguidos</h2></div><span>{obtainedShinyMods.length}{normalizedRecordSearch ? ` de ${allObtainedShinyMods.length}` : ""} marcados</span></div>
-            {obtainedShinyMods.length === 0 ? <div className="empty-card shiny-empty obtained"><Trophy size={30} /><strong>{normalizedRecordSearch ? "No hay coincidencias en los conseguidos" : "Aún no has marcado ningún Shiny"}</strong><span>{normalizedRecordSearch ? "La búsqueda también revisa nombre, variante y estilo." : "También puedes agregar un módulo y marcarlo directamente si ya lo tenías."}</span></div> : <div className="shiny-tracker-grid">{obtainedShinyMods.map((record) => <ShinyTrackerCard key={record.id} record={record} onDecrease={() => adjustShinyAttempts(record.id, -1)} onIncrease={() => adjustShinyAttempts(record.id, 1)} onToggle={() => setShinyObtained(record.id, false)} onDelete={() => commitState((current) => ({ ...current, shinyMods: current.shinyMods.filter((item) => item.id !== record.id) }))} />)}</div>}
+            <div className="section-heading shiny-heading"><div><span className="eyebrow">COLECCIÓN BRILLANTE</span><h2>Módulos conseguidos</h2></div><span>{obtainedShinyMods.length}{normalizedRecordSearch ? ` de ${allObtainedShinyMods.length}` : ""} marcados</span></div>
+            {obtainedShinyMods.length === 0 ? <div className="empty-card shiny-empty obtained"><Trophy size={30} /><strong>{normalizedRecordSearch ? "No hay coincidencias en los conseguidos" : "Aún no has marcado ningún Brillante"}</strong><span>{normalizedRecordSearch ? "La búsqueda también revisa nombre, variante y estilo." : "También puedes agregar un módulo y marcarlo directamente si ya lo tenías."}</span></div> : <div className="shiny-tracker-grid">{obtainedShinyMods.map((record) => <ShinyTrackerCard key={record.id} record={record} onDecrease={() => adjustShinyAttempts(record.id, -1)} onIncrease={() => adjustShinyAttempts(record.id, 1)} onToggle={() => setShinyObtained(record.id, false)} onDelete={() => commitState((current) => ({ ...current, shinyMods: current.shinyMods.filter((item) => item.id !== record.id) }))} />)}</div>}
           </section>
-        )}
+        ))}
 
-        {tab === "changes" && (
+        {tab === "changes" && creatorAccess === "granted" && (
           <section className="page changes-page">
             <article className="release-hero panel"><div><span className="eyebrow"><ShieldCheck size={15} /> VERSIÓN INSTALADA</span><h2>Versión {APP_VERSION}</h2><p>Las actualizaciones se comprueban al abrir y llegan firmadas desde GitHub Releases.</p></div><button type="button" className="secondary" onClick={openRepository}><Github size={18} /> Ver repositorio</button></article>
             <div className="timeline">
@@ -1180,7 +1340,7 @@ export default function App() {
           <section className="page settings-page">
             <div className="settings-grid">
               <article className="settings-card panel">
-                <div className="settings-icon"><Clock3 /></div><div><h3>Duración del ciclo</h3><p>Define cuánto espera la rueda para empezar y cuánto permanece activa.</p><div className="field-row"><label>Espera (minutos)<input type="number" min={1} max={525600} value={state.settings.waitMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, waitMinutes: clampNumber(Number(event.target.value), 1, 525600), phaseStartedAt: new Date().toISOString() } }))} /></label><label>Activa (minutos)<input type="number" min={1} max={525600} value={state.settings.activeMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, activeMinutes: clampNumber(Number(event.target.value), 1, 525600), phaseStartedAt: new Date().toISOString() } }))} /></label></div></div>
+                <div className="settings-icon"><Clock3 /></div><div><h3>Duración del ciclo</h3><p>Define cuánto espera la rueda, cuánto permanece activa y el retraso visual antes de mostrar el próximo conteo.</p><div className="field-row"><label>Espera (minutos)<input type="number" min={1} max={525600} value={state.settings.waitMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, waitMinutes: clampNumber(Number(event.target.value), 1, 525600), phaseStartedAt: new Date().toISOString() } }))} /></label><label>Activa (minutos)<input type="number" min={1} max={525600} value={state.settings.activeMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, activeMinutes: clampNumber(Number(event.target.value), 1, 525600), phaseStartedAt: new Date().toISOString() } }))} /></label><label>Retraso visual (segundos)<input type="number" min={0} max={300} value={state.settings.transitionDelaySeconds} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, transitionDelaySeconds: clampNumber(Math.round(Number(event.target.value)), 0, 300) } }))} /></label></div><small>Este retraso no cambia la hora real del siguiente evento.</small></div>
               </article>
               <article className="settings-card panel setting-disabled"><div className="settings-icon"><Bell /></div><div><h3>Notificaciones de escritorio</h3><p>Desactivadas en esta versión. Gravedad puede seguir avisando mediante voz.</p><span className="disabled-setting-badge">DESACTIVADAS</span></div></article>
               <article className="settings-card voice-settings panel">
@@ -1190,33 +1350,11 @@ export default function App() {
               <SettingToggle icon={Eye} title="Ventana flotante" description="Contador pequeño, movible y siempre encima del juego." enabled={state.settings.overlayEnabled} onToggle={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))} />
             </div>
 
-            <article className="character-manager panel">
-              <div className="panel-title"><div><span className="eyebrow"><Users size={15} /> PERSONAJES</span><h2>Perfiles de juego</h2></div><span className="character-limit">{state.characters.length} / 12</span></div>
-              <p>La aplicación siempre abre en Solitario. Cada personaje guarda su intento y sus cajas; en Equipo, una recompensa se reparte a todos los integrantes seleccionados.</p>
-              <form className="character-add" onSubmit={(event) => { event.preventDefault(); addCharacter(); }}>
-                <label>Nuevo personaje<input value={newCharacterName} maxLength={40} placeholder="Nombre dentro del juego" onChange={(event) => setNewCharacterName(event.target.value)} /></label>
-                <button type="submit" className="primary" disabled={state.characters.length >= 12}><UserPlus size={17} /> Agregar personaje</button>
-              </form>
-              <div className="character-manager-list">
-                {state.characters.map((character, index) => {
-                  const summary = characterSummaries.find((item) => item.character.id === character.id);
-                  return <div className="character-manager-row" key={character.id}>
-                    <span className="character-avatar"><UserRound size={18} /></span>
-                    <label>Nombre<input defaultValue={character.name} maxLength={40} onBlur={(event) => renameCharacter(character.id, event.target.value.trim() || character.name)} /></label>
-                    <span className="character-manager-stats"><strong>{summary?.points ?? 0} puntos</strong><small>{(summary?.chance ?? 0).toFixed(1)}% estimado</small></span>
-                    {index === 0 && <span className="main-character-badge">PRINCIPAL</span>}
-                    <button type="button" className="character-delete" disabled={state.characters.length <= 1} aria-label={`Eliminar ${character.name}`} onClick={() => removeCharacter(character.id)}><Trash2 size={16} /></button>
-                  </div>;
-                })}
-              </div>
-            </article>
-
             <article className="backup-panel panel"><div><span className="eyebrow">DATOS PERSONALES</span><h2>Respaldo local</h2><p>El historial permanece en este equipo y no se sube al repositorio público.</p></div><div><button type="button" className="secondary" onClick={() => exportState(state)}><Download size={17} /> Exportar</button><button type="button" className="secondary" onClick={() => importRef.current?.click()}><Upload size={17} /> Importar</button><input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(event) => void onImport(event.target.files?.[0])} /></div></article>
 
             <article className="owner-panel panel">
-              <div className="panel-title"><div><span className="eyebrow">MODO DESARROLLADOR</span><h2>Editor de OscarD0823</h2></div><span className={`creator-access-badge ${creatorAccess}`}>{creatorAccess === "granted" ? <UserCheck size={15} /> : <LockKeyhole size={15} />}{creatorAccess === "granted" ? "Propietario verificado" : creatorAccess === "checking" ? "Comprobando" : "Bloqueado"}</span></div>
-              <p>Cada cambio se publica automáticamente. El servidor vuelve a comprobar la cuenta de GitHub antes de aceptar cada actualización.</p>
-              {creatorAccess === "granted" ? <><OverlayPreviewLab catalog={state.catalog} scale={state.settings.overlayScale} onScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(scale, .7, 1.5) } }))} onOpenRealOverlay={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: true } }))} /><CatalogEditor catalog={state.catalog} onSave={saveCatalog} onPublish={publishCatalog} /></> : <div className="creator-login-card"><div className="creator-lock"><LockKeyhole size={25} /></div><div><strong>Inicia sesión con la cuenta propietaria</strong><span>{creatorMessage}</span><div className="creator-login-actions"><button type="button" className="primary compact" onClick={() => void startCreatorLogin()}><LogIn size={15} /> Iniciar sesión con GitHub</button><button type="button" className="secondary compact" disabled={creatorAccess === "checking"} onClick={() => void checkCreatorAccess()}><RefreshCw size={15} /> Comprobar cuenta</button></div></div></div>}
+              <div className="panel-title"><div><span className="eyebrow">{creatorAccess === "granted" ? "MODO DESARROLLADOR" : "CUENTA PROPIETARIA"}</span><h2>{creatorAccess === "granted" ? "Editor de OscarD0823" : "Acceso privado"}</h2></div><span className={`creator-access-badge ${creatorAccess}`}>{creatorAccess === "granted" ? <UserCheck size={15} /> : <LockKeyhole size={15} />}{creatorAccess === "granted" ? "Propietario verificado" : creatorAccess === "checking" ? "Comprobando" : "Bloqueado"}</span></div>
+              {creatorAccess === "granted" ? <><p>Las herramientas privadas y el historial de cambios solo aparecen al propietario verificado. Publicar sigue siendo una acción separada; esta compilación permanece local.</p><OverlayPreviewLab catalog={state.catalog} scale={state.settings.overlayScale} addonScale={state.settings.overlayAddonScale} shape={state.settings.overlayShape} counterStyle={state.settings.overlayCounterStyle} nameMode={state.settings.overlayNameMode} customName={state.settings.overlayCustomName} onScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(scale, .2, 1.5) } }))} onAddonScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(scale, .2, 1) } }))} onAppearanceChange={(patch) => commitState((current) => ({ ...current, settings: { ...current.settings, ...(patch.shape ? { overlayShape: patch.shape } : {}), ...(patch.counterStyle ? { overlayCounterStyle: patch.counterStyle } : {}), ...(patch.nameMode ? { overlayNameMode: patch.nameMode } : {}), ...(patch.customName !== undefined ? { overlayCustomName: patch.customName.slice(0, 40) } : {}) } }))} onOpenRealOverlay={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: true } }))} /><CatalogEditor catalog={state.catalog} onSave={saveCatalog} onPublish={publishCatalog} /></> : <div className="creator-login-card"><div className="creator-lock"><LockKeyhole size={25} /></div><div><strong>Acceso privado del propietario</strong><span>{creatorMessage}</span><div className="creator-login-actions"><button type="button" className="primary compact" onClick={() => void startCreatorLogin()}><LogIn size={15} /> Iniciar sesión con GitHub</button><button type="button" className="secondary compact" disabled={creatorAccess === "checking"} onClick={() => void checkCreatorAccess()}><RefreshCw size={15} /> Comprobar cuenta</button></div></div></div>}
             </article>
           </section>
         )}
@@ -1235,7 +1373,7 @@ function ShinyTrackerCard({ record, onDecrease, onIncrease, onToggle, onDelete }
     <div className="shiny-variant"><span>VARIANTE</span><strong>{record.variant}</strong></div>
     <div className="shiny-attempt-count"><span>Duplicados +17 que no se convirtieron</span><strong>{record.attempts}</strong></div>
     {!record.isShiny && <div className="shiny-attempt-actions"><button type="button" aria-label="Restar un intento" disabled={record.attempts === 0} onClick={onDecrease}><Minus size={17} /></button><button type="button" className="primary" onClick={onIncrease}><Plus size={17} /> Otro +17 no se convirtió</button></div>}
-    <button type="button" className={`shiny-obtained-button ${record.isShiny ? "active" : ""}`} onClick={onToggle}>{record.isShiny ? <><Check size={17} /> Shiny conseguido · {record.obtainedAt ? formatDate(record.obtainedAt) : "sin fecha"}</> : <><Sparkles size={17} /> Marcar como Shiny</>}</button>
+    <button type="button" className={`shiny-obtained-button ${record.isShiny ? "active" : ""}`} onClick={onToggle}>{record.isShiny ? <><Check size={17} /> Brillante conseguido · {record.obtainedAt ? formatDate(record.obtainedAt) : "sin fecha"}</> : <><Sparkles size={17} /> Marcar como Brillante</>}</button>
   </article>;
 }
 

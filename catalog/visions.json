@@ -1,16 +1,17 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": 17,
-  "updatedAt": "2026-09-11T14:38:44.392Z",
+  "catalogVersion": 20,
+  "updatedAt": "2026-09-11T19:40:00.000Z",
   "updatedBy": "OscarD0823",
   "boxTargetPoints": 1000,
   "eventTiming": {
     "selectedVisionId": "gravity",
     "waitMinutes": 30,
     "activeMinutes": 30,
+    "transitionDelaySeconds": 3,
     "phaseStartedAt": "2026-09-11T04:22:28.526Z",
     "phase": "active",
-    "updatedAt": "2026-09-11T14:38:22.945Z",
+    "updatedAt": "2026-09-11T17:20:00.000Z",
     "updatedBy": "OscarD0823"
   },
   "proActivities": [
@@ -82,15 +83,17 @@
     {
       "id": "lunar",
       "name": "Lunar",
+      "englishName": "Lunar Revelry",
       "enabled": false,
-      "description": "Rueda Visional Lunar. Lista preparada para añadir recompensas futuras.",
+      "description": "Lunar / Lunar Revelry. Lista preparada para añadir recompensas futuras.",
       "activities": []
     },
     {
       "id": "gravity",
-      "name": "Gravedad",
+      "name": "Abismo de Gravedad",
+      "englishName": "Gravity Abyss",
       "enabled": true,
-      "description": "Abismo de Gravedad.",
+      "description": "Abismo de Gravedad / Gravity Abyss.",
       "activities": [
         {
           "id": "gravity-whale",
@@ -110,9 +113,10 @@
     },
     {
       "id": "symbiosis",
-      "name": "Simbiosis",
+      "name": "Progenie Aberrante",
+      "englishName": "Aberrant Progeny",
       "enabled": false,
-      "description": "Evento desactivado. Sus opciones quedan disponibles para futuras configuraciones.",
+      "description": "Progenie Aberrante / Aberrant Progeny. Evento desactivado con opciones preparadas para futuras configuraciones.",
       "activities": [
         {
           "id": "symbiosis-spider",

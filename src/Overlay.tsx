@@ -3,7 +3,7 @@ import { LogicalSize, PhysicalPosition } from "@tauri-apps/api/dpi";
 import { emit } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { PersistedState } from "./model";
-import { clampNumber, computeCycle, computeGravityWhale } from "./model";
+import { clampNumber, computeCountdownTransition, computeCycle, computeGravityWhale } from "./model";
 import OverlayVisual, { overlayDesignSize } from "./OverlayVisual";
 import { loadOverlayPosition, loadState, saveOverlayPosition, saveState } from "./storage";
 
@@ -11,10 +11,11 @@ export default function Overlay() {
   const [state, setState] = useState<PersistedState>(() => loadState());
   const [now, setNow] = useState(Date.now());
   const cycle = computeCycle(state.settings, now);
+  const transition = computeCountdownTransition(state.settings, now);
   const whale = computeGravityWhale(state.settings, now);
   const selectedVision = useMemo(() => state.catalog.visions.find((vision) => vision.id === state.settings.selectedVisionId), [state.catalog.visions, state.settings.selectedVisionId]);
-  const overlayScale = clampNumber(state.settings.overlayScale, .7, 1.5);
-  const designSize = overlayDesignSize(whale.visible);
+  const overlayScale = clampNumber(state.settings.overlayScale, .2, 1.5);
+  const designSize = overlayDesignSize(whale.visible, state.settings.overlayShape, state.settings.overlayAddonScale);
 
   const hideOverlay = () => {
     const next = { ...state, settings: { ...state.settings, overlayEnabled: false } };
@@ -37,13 +38,27 @@ export default function Overlay() {
     const onStorage = () => setState(loadState());
     window.addEventListener("storage", onStorage);
     window.addEventListener("caja-fantasma-state", onStorage as EventListener);
-    const stateTimer = window.setInterval(onStorage, 2000);
-    const clockTimer = window.setInterval(() => setNow(Date.now()), 1000);
+    let stopped = false;
+    let stateTimer = 0;
+    let clockTimer = 0;
+    const refreshState = () => {
+      if (stopped) return;
+      onStorage();
+      stateTimer = window.setTimeout(refreshState, document.visibilityState === "visible" ? 15_000 : 60_000);
+    };
+    const refreshClock = () => {
+      if (stopped) return;
+      setNow(Date.now());
+      clockTimer = window.setTimeout(refreshClock, document.visibilityState === "visible" ? 1_000 : 10_000);
+    };
+    stateTimer = window.setTimeout(refreshState, 15_000);
+    clockTimer = window.setTimeout(refreshClock, 1_000);
     return () => {
+      stopped = true;
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("caja-fantasma-state", onStorage as EventListener);
-      window.clearInterval(stateTimer);
-      window.clearInterval(clockTimer);
+      window.clearTimeout(stateTimer);
+      window.clearTimeout(clockTimer);
     };
   }, []);
 
@@ -71,7 +86,7 @@ export default function Overlay() {
   return (
     <div className="floating-overlay" onMouseDown={(event) => { if ((event.target as HTMLElement).closest("button")) return; void getCurrentWindow().startDragging(); }}>
       <div className="overlay-scale-stage" style={{ width: designSize.width, height: designSize.height, transform: `scale(${overlayScale})` }}>
-        <OverlayVisual vision={selectedVision} phase={cycle.phase} remainingMs={cycle.remainingMs} whale={whale} onClose={hideOverlay} />
+        <OverlayVisual vision={selectedVision} phase={cycle.phase} remainingMs={cycle.remainingMs} progress={cycle.progress} transitionRemainingMs={transition.active ? transition.remainingMs : 0} whale={whale} addonScale={state.settings.overlayAddonScale} shape={state.settings.overlayShape} counterStyle={state.settings.overlayCounterStyle} nameMode={state.settings.overlayNameMode} customName={state.settings.overlayCustomName} onClose={hideOverlay} />
       </div>
     </div>
   );

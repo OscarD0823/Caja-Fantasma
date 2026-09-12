@@ -50,7 +50,7 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
   });
 
   const addVision = () => change((current) => {
-    const vision: Vision = { id: createId("vision"), name: "Nueva visión", enabled: true, description: "Añade aquí la descripción del evento.", activities: [] };
+    const vision: Vision = { id: createId("vision"), name: "Nueva visión", englishName: "New vision", enabled: true, description: "Añade aquí la descripción del evento.", activities: [] };
     current.visions.push(vision);
     return current;
   });
@@ -66,6 +66,7 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
         selectedVisionId: visionId,
         waitMinutes: timing?.waitMinutes ?? 30,
         activeMinutes: timing?.activeMinutes ?? 30,
+        transitionDelaySeconds: timing?.transitionDelaySeconds ?? 3,
         phaseStartedAt: timing?.phaseStartedAt ?? updatedAt,
         phase: timing?.phase ?? "waiting",
         updatedAt,
@@ -146,7 +147,8 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
       {draft.visions.map((vision) => (
         <EditorGroup key={vision.id} title={vision.name} subtitle={vision.enabled ? "Activa" : "Desactivada"} onAdd={() => addActivity(vision.id)} onRemove={draft.eventTiming?.selectedVisionId === vision.id ? undefined : () => removeVision(vision.id)}>
           <div className="vision-edit-fields">
-            <label>Nombre<input value={vision.name} onChange={(event) => change((current) => ({ ...current, visions: current.visions.map((item) => item.id === vision.id ? { ...item, name: event.target.value } : item) }))} /></label>
+            <label>Nombre en español<input value={vision.name} onChange={(event) => change((current) => ({ ...current, visions: current.visions.map((item) => item.id === vision.id ? { ...item, name: event.target.value } : item) }))} /></label>
+            <label>Nombre en inglés<input value={vision.englishName ?? ""} onChange={(event) => change((current) => ({ ...current, visions: current.visions.map((item) => item.id === vision.id ? { ...item, englishName: event.target.value } : item) }))} /></label>
             <label>Descripción<input value={vision.description} onChange={(event) => change((current) => ({ ...current, visions: current.visions.map((item) => item.id === vision.id ? { ...item, description: event.target.value } : item) }))} /></label>
             <label className="check-field" title={draft.eventTiming?.selectedVisionId === vision.id ? "Selecciona otra rueda pública antes de desactivar esta." : undefined}><input type="checkbox" disabled={draft.eventTiming?.selectedVisionId === vision.id} checked={vision.enabled} onChange={(event) => change((current) => ({ ...current, visions: current.visions.map((item) => item.id === vision.id ? { ...item, enabled: event.target.checked } : item) }))} /> <span>{vision.enabled ? <Check size={15} /> : null}Evento habilitado</span></label>
           </div>

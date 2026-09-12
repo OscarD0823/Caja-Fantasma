@@ -9,15 +9,21 @@ export type Activity = {
 export type Vision = {
   id: string;
   name: string;
+  englishName?: string;
   enabled: boolean;
   description: string;
   activities: Activity[];
 };
 
+export type OverlayShape = "event" | "rectangle" | "square" | "vertical" | "round";
+export type OverlayCounterStyle = "digital" | "compact" | "ring";
+export type OverlayNameMode = "spanish" | "english" | "custom";
+
 export type SharedEventTiming = {
   selectedVisionId: string;
   waitMinutes: number;
   activeMinutes: number;
+  transitionDelaySeconds?: number;
   phaseStartedAt: string;
   phase: "waiting" | "active";
   updatedAt: string;
@@ -87,6 +93,12 @@ export type Settings = {
   phase: "waiting" | "active";
   overlayEnabled: boolean;
   overlayScale: number;
+  overlayAddonScale: number;
+  overlayShape: OverlayShape;
+  overlayCounterStyle: OverlayCounterStyle;
+  overlayNameMode: OverlayNameMode;
+  overlayCustomName: string;
+  transitionDelaySeconds: number;
   notificationsEnabled: boolean;
   voiceNotificationsEnabled: boolean;
   voiceLeadMinutes: number;
@@ -127,7 +139,13 @@ export type GravityWhaleSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.9.0";
+export type CountdownTransitionSnapshot = {
+  active: boolean;
+  remainingMs: number;
+  progress: number;
+};
+
+export const APP_VERSION = "1.12.0";
 export const AUTHOR = "OscarD0823";
 export const DEFAULT_CHARACTER_ID = "character-main";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
@@ -209,6 +227,16 @@ export function computeCycle(settings: Settings, now = Date.now()): CycleSnapsho
   };
 }
 
+export function computeCountdownTransition(settings: Settings, now = Date.now()): CountdownTransitionSnapshot {
+  const cycle = computeCycle(settings, now);
+  const delayMs = clampNumber(settings.transitionDelaySeconds, 0, 300) * 1000;
+  if (cycle.phase !== "waiting" || delayMs <= 0) return { active: false, remainingMs: 0, progress: 1 };
+  const waitMs = clampNumber(settings.waitMinutes, 1, 525_600) * 60_000;
+  const elapsedWaitingMs = Math.max(0, waitMs - cycle.remainingMs);
+  const remainingMs = Math.max(0, delayMs - elapsedWaitingMs);
+  return { active: remainingMs > 0, remainingMs, progress: Math.min(1, elapsedWaitingMs / delayMs) };
+}
+
 export function shouldShowGravityWhale(settings: Settings, now = Date.now()) {
   if (settings.selectedVisionId !== "gravity") return false;
   const cycle = computeCycle(settings, now);
@@ -258,6 +286,24 @@ export function formatDuration(milliseconds: number) {
   const rest = seconds % 60;
   if (days > 0) return `${days}d ${hours.toString().padStart(2, "0")}h ${minutes.toString().padStart(2, "0")}m`;
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${rest.toString().padStart(2, "0")}`;
+}
+
+export function formatCompactDuration(milliseconds: number) {
+  const seconds = Math.max(0, Math.ceil(milliseconds / 1000));
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3_600);
+  const minutes = Math.floor((seconds % 3_600) / 60);
+  const rest = seconds % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes.toString().padStart(2, "0")}m`;
+  return `${minutes}m ${rest.toString().padStart(2, "0")}s`;
+}
+
+export function overlayVisionName(vision: Vision | undefined, mode: OverlayNameMode, customName = "") {
+  const fallback = vision?.name?.trim() || "Rueda Visional";
+  if (mode === "custom" && customName.trim()) return customName.trim().slice(0, 40);
+  if (mode === "english") return vision?.englishName?.trim() || fallback;
+  return fallback;
 }
 
 export function boxStatistics(boxes: BoxRecord[], currentPoints: number, baseline: readonly number[] = BASELINE_BOX_POINTS) {
@@ -331,6 +377,7 @@ export function validateCatalog(value: unknown): value is Catalog {
   const validTiming = timing === undefined || (typeof timing.selectedVisionId === "string"
     && Number.isFinite(timing.waitMinutes) && timing.waitMinutes >= 1 && timing.waitMinutes <= 525_600
     && Number.isFinite(timing.activeMinutes) && timing.activeMinutes >= 1 && timing.activeMinutes <= 525_600
+    && (timing.transitionDelaySeconds === undefined || (Number.isFinite(timing.transitionDelaySeconds) && timing.transitionDelaySeconds >= 0 && timing.transitionDelaySeconds <= 300))
     && typeof timing.phaseStartedAt === "string"
     && Number.isFinite(Date.parse(timing.phaseStartedAt))
     && (timing.phase === "waiting" || timing.phase === "active")
@@ -345,7 +392,7 @@ export function validateCatalog(value: unknown): value is Catalog {
     && Array.isArray(catalog.proActivities)
     && catalog.proActivities.every(validActivity)
     && Array.isArray(catalog.visions)
-    && catalog.visions.every((vision) => vision && typeof vision.id === "string" && typeof vision.name === "string" && typeof vision.enabled === "boolean" && Array.isArray(vision.activities) && vision.activities.every(validActivity))
+    && catalog.visions.every((vision) => vision && typeof vision.id === "string" && typeof vision.name === "string" && (vision.englishName === undefined || typeof vision.englishName === "string") && typeof vision.enabled === "boolean" && Array.isArray(vision.activities) && vision.activities.every(validActivity))
     && (timing === undefined || catalog.visions.some((vision) => vision.id === timing.selectedVisionId && vision.enabled))
     && validTiming;
 }
