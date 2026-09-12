@@ -1,6 +1,6 @@
 # Caja Fantasma 1.12.0
 
-Versión preparada localmente el 11 de septiembre de 2026. Todavía no está publicada.
+Versión publicada el 11 de septiembre de 2026.
 
 ## Novedades
 
@@ -13,4 +13,4 @@ Versión preparada localmente el 11 de septiembre de 2026. Todavía no está pub
 
 ## Estado
 
-El instalador se prepara únicamente en el equipo local. No se crea etiqueta, release ni actualización pública hasta recibir una indicación expresa.
+Esta versión incluye instalador para Windows y actualización automática mediante GitHub Releases.
