@@ -97,6 +97,8 @@ export type Settings = {
   overlayScale: number;
   overlayAddonScale: number;
   overlayWhaleEnabled: boolean;
+  overlayWhaleCounterScale: number;
+  overlayWhaleCounterStyle: OverlayCounterStyle;
   overlayShape: OverlayShape;
   overlayCounterStyle: OverlayCounterStyle;
   overlayNameMode: OverlayNameMode;
@@ -253,6 +255,21 @@ export function resolveTransitionDelayMilliseconds(
     return clampNumber(Math.round(source!.transitionDelaySeconds! * 1_000), 0, 300_000);
   }
   return clampNumber(Math.round(fallback), 0, 300_000);
+}
+
+export function sharedEventTimingFromSettings(settings: Settings, updatedAt: string, updatedBy: string): SharedEventTiming {
+  const transitionDelayMilliseconds = resolveTransitionDelayMilliseconds(settings);
+  return {
+    selectedVisionId: settings.selectedVisionId,
+    waitMinutes: clampNumber(Math.round(settings.waitMinutes), 1, 525_600),
+    activeMinutes: clampNumber(Math.round(settings.activeMinutes), 1, 525_600),
+    transitionDelayMilliseconds,
+    transitionDelaySeconds: transitionDelayMilliseconds / 1_000,
+    phaseStartedAt: settings.phaseStartedAt,
+    phase: settings.phase,
+    updatedAt,
+    updatedBy,
+  };
 }
 
 export function shouldShowGravityWhale(settings: Settings, now = Date.now()) {

@@ -82,6 +82,8 @@ export function initialState(): PersistedState {
       overlayScale: 1,
       overlayAddonScale: 1,
       overlayWhaleEnabled: true,
+      overlayWhaleCounterScale: 1,
+      overlayWhaleCounterStyle: "digital",
       overlayShape: "event",
       overlayCounterStyle: "digital",
       overlayNameMode: "spanish",
@@ -123,6 +125,8 @@ export function loadState(): PersistedState {
     settings.overlayScale = clampNumber(Number(settings.overlayScale) || 1, .2, 1.5);
     settings.overlayAddonScale = clampNumber(Number(settings.overlayAddonScale) || 1, .2, 1);
     settings.overlayWhaleEnabled = settings.overlayWhaleEnabled !== false;
+    settings.overlayWhaleCounterScale = clampNumber(Number(settings.overlayWhaleCounterScale) || 1, .2, 1.5);
+    settings.overlayWhaleCounterStyle = OVERLAY_COUNTER_STYLES.has(settings.overlayWhaleCounterStyle) ? settings.overlayWhaleCounterStyle : "digital";
     settings.overlayShape = OVERLAY_SHAPES.has(settings.overlayShape) ? settings.overlayShape : "event";
     settings.overlayCounterStyle = OVERLAY_COUNTER_STYLES.has(settings.overlayCounterStyle) ? settings.overlayCounterStyle : "digital";
     settings.overlayNameMode = OVERLAY_NAME_MODES.has(settings.overlayNameMode) ? settings.overlayNameMode : "spanish";
@@ -202,6 +206,8 @@ export function importState(text: string) {
       overlayScale: clampNumber(Number(parsed.settings?.overlayScale) || 1, .2, 1.5),
       overlayAddonScale: clampNumber(Number(parsed.settings?.overlayAddonScale) || 1, .2, 1),
       overlayWhaleEnabled: parsed.settings?.overlayWhaleEnabled !== false,
+      overlayWhaleCounterScale: clampNumber(Number(parsed.settings?.overlayWhaleCounterScale) || 1, .2, 1.5),
+      overlayWhaleCounterStyle: OVERLAY_COUNTER_STYLES.has(parsed.settings?.overlayWhaleCounterStyle as OverlayCounterStyle) ? parsed.settings!.overlayWhaleCounterStyle! : "digital",
       overlayShape: OVERLAY_SHAPES.has(parsed.settings?.overlayShape as OverlayShape) ? parsed.settings!.overlayShape! : "event",
       overlayCounterStyle: OVERLAY_COUNTER_STYLES.has(parsed.settings?.overlayCounterStyle as OverlayCounterStyle) ? parsed.settings!.overlayCounterStyle! : "digital",
       overlayNameMode: OVERLAY_NAME_MODES.has(parsed.settings?.overlayNameMode as OverlayNameMode) ? parsed.settings!.overlayNameMode! : "spanish",

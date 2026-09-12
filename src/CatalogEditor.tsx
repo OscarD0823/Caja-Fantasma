@@ -139,9 +139,9 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
         <div className="admin-timing-grid">
           <label>Espera entre eventos (minutos)<input type="number" min={1} max={525600} value={draft.eventTiming?.waitMinutes ?? 30} onChange={(event) => change((current) => ({ ...current, eventTiming: { ...current.eventTiming!, waitMinutes: clampNumber(Math.round(Number(event.target.value)), 1, 525_600) } }))} /></label>
           <label>Duración activa (minutos)<input type="number" min={1} max={525600} value={draft.eventTiming?.activeMinutes ?? 30} onChange={(event) => change((current) => ({ ...current, eventTiming: { ...current.eventTiming!, activeMinutes: clampNumber(Math.round(Number(event.target.value)), 1, 525_600) } }))} /></label>
-          <label>Retraso antes del próximo contador (ms)<input type="number" min={0} max={300000} step={100} value={resolveTransitionDelayMilliseconds(draft.eventTiming)} onChange={(event) => change((current) => { const milliseconds = clampNumber(Math.round(Number(event.target.value)), 0, 300_000); return { ...current, eventTiming: { ...current.eventTiming!, transitionDelayMilliseconds: milliseconds, transitionDelaySeconds: milliseconds / 1_000 } }; })} /></label>
+          <label>Transición al desactivarse (ms)<input type="number" min={0} max={300000} step={100} value={resolveTransitionDelayMilliseconds(draft.eventTiming)} onChange={(event) => change((current) => { const milliseconds = clampNumber(Math.round(Number(event.target.value)), 0, 300_000); return { ...current, eventTiming: { ...current.eventTiming!, transitionDelayMilliseconds: milliseconds, transitionDelaySeconds: milliseconds / 1_000 } }; })} /></label>
         </div>
-        <small className="admin-batch-note">La rueda, los tiempos, el objetivo y todas las recompensas permanecen como borrador hasta pulsar “Guardar todo”.</small>
+        <small className="admin-batch-note">La transición empieza al desactivarse el evento. La rueda, los tiempos, el objetivo y todas las recompensas permanecen como borrador hasta pulsar “Guardar todo”.</small>
       </section>
 
       <EditorGroup title="Recompensas Pro" subtitle={`${draft.proActivities.length} opciones`} onAdd={() => addActivity("pro")}>

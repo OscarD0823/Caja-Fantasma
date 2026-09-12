@@ -8,19 +8,23 @@ type Props = {
   catalog: Catalog;
   scale: number;
   addonScale: number;
+  whaleCounterScale: number;
+  whaleCounterStyle: OverlayCounterStyle;
   shape: OverlayShape;
   counterStyle: OverlayCounterStyle;
   nameMode: OverlayNameMode;
   customName: string;
   onScaleChange: (scale: number) => void;
   onAddonScaleChange: (scale: number) => void;
+  onWhaleCounterScaleChange: (scale: number) => void;
+  onWhaleCounterStyleChange: (style: OverlayCounterStyle) => void;
   onAppearanceChange: (patch: Partial<{ shape: OverlayShape; counterStyle: OverlayCounterStyle; nameMode: OverlayNameMode; customName: string }>) => void;
   onOpenRealOverlay: () => void;
 };
 
 type WhaleMode = "hidden" | "active" | "departing";
 
-export default function OverlayPreviewLab({ catalog, scale, addonScale, shape, counterStyle, nameMode, customName, onScaleChange, onAddonScaleChange, onAppearanceChange, onOpenRealOverlay }: Props) {
+export default function OverlayPreviewLab({ catalog, scale, addonScale, whaleCounterScale, whaleCounterStyle, shape, counterStyle, nameMode, customName, onScaleChange, onAddonScaleChange, onWhaleCounterScaleChange, onWhaleCounterStyleChange, onAppearanceChange, onOpenRealOverlay }: Props) {
   const publicVisionId = catalog.eventTiming?.selectedVisionId ?? catalog.visions.find((vision) => vision.enabled)?.id ?? catalog.visions[0]?.id;
   const [visionId, setVisionId] = useState(publicVisionId);
   const [phase, setPhase] = useState<"waiting" | "active" | "transition">("active");
@@ -28,13 +32,14 @@ export default function OverlayPreviewLab({ catalog, scale, addonScale, shape, c
   const vision = catalog.visions.find((item) => item.id === visionId) ?? catalog.visions[0];
   const normalizedScale = clampNumber(scale, .2, 1.5);
   const normalizedAddonScale = clampNumber(addonScale, .2, 1);
+  const normalizedWhaleCounterScale = clampNumber(whaleCounterScale, .2, 1.5);
   const whale = useMemo<GravityWhaleSnapshot>(() => ({
     visible: vision?.id === "gravity" && whaleMode !== "hidden",
     departing: whaleMode === "departing",
     remainingMs: whaleMode === "departing" ? 0 : 12 * 60_000 + 34_000,
     progress: whaleMode === "departing" ? 1 : .38,
   }), [vision?.id, whaleMode]);
-  const designSize = overlayDesignSize(whale.visible, shape, normalizedAddonScale);
+  const designSize = overlayDesignSize(whale.visible, shape, normalizedAddonScale, normalizedWhaleCounterScale, whaleCounterStyle);
 
   return <section className="overlay-lab">
     <div className="overlay-lab-heading">
@@ -52,11 +57,13 @@ export default function OverlayPreviewLab({ catalog, scale, addonScale, shape, c
       <div><span>Ballena</span><div className="preview-choice"><button type="button" className={whaleMode === "hidden" ? "selected" : ""} onClick={() => setWhaleMode("hidden")}>Oculta</button><button type="button" disabled={vision?.id !== "gravity"} className={whaleMode === "active" ? "selected" : ""} onClick={() => setWhaleMode("active")}><Waves size={14} /> Disparando</button><button type="button" disabled={vision?.id !== "gravity"} className={whaleMode === "departing" ? "selected" : ""} onClick={() => setWhaleMode("departing")}>Salida</button></div></div>
       <label className="overlay-size-control"><span>Tamaño de ventana <strong>{Math.round(normalizedScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(normalizedScale * 100)} onChange={(event) => onScaleChange(Number(event.target.value) / 100)} /></label>
       <label className="overlay-size-control"><span>Área de Ballena <strong>{Math.round(normalizedAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(normalizedAddonScale * 100)} onChange={(event) => onAddonScaleChange(Number(event.target.value) / 100)} /></label>
+      <label className="overlay-size-control"><span>Reloj de Ballena <strong>{Math.round(normalizedWhaleCounterScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(normalizedWhaleCounterScale * 100)} onChange={(event) => onWhaleCounterScaleChange(Number(event.target.value) / 100)} /></label>
+      <label>Estilo del reloj de Ballena<select value={whaleCounterStyle} onChange={(event) => onWhaleCounterStyleChange(event.target.value as OverlayCounterStyle)}><option value="digital">Digital</option><option value="compact">Compacto</option><option value="ring">Anillo</option></select></label>
     </div>
 
     <div className="overlay-lab-canvas" style={{ minHeight: Math.round(designSize.height * normalizedScale) + 28 }}>
       <div className="overlay-scale-stage" style={{ width: designSize.width, height: designSize.height, transform: `scale(${normalizedScale})` }}>
-        <OverlayVisual vision={vision} phase={phase === "active" ? "active" : "waiting"} remainingMs={phase === "active" ? 12 * 60_000 + 34_000 : 17 * 60_000 + 8_000} progress={.58} transitionRemainingMs={phase === "transition" ? 2_800 : 0} whale={whale} addonScale={normalizedAddonScale} shape={shape} counterStyle={counterStyle} nameMode={nameMode} customName={customName} preview />
+        <OverlayVisual vision={vision} phase={phase === "active" ? "active" : "waiting"} remainingMs={phase === "active" ? 12 * 60_000 + 34_000 : 17 * 60_000 + 8_000} progress={.58} transitionRemainingMs={phase === "transition" ? 2_800 : 0} whale={whale} addonScale={normalizedAddonScale} whaleCounterScale={normalizedWhaleCounterScale} whaleCounterStyle={whaleCounterStyle} shape={shape} counterStyle={counterStyle} nameMode={nameMode} customName={customName} preview />
       </div>
     </div>
   </section>;

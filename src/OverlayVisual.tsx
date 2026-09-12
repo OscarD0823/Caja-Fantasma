@@ -13,6 +13,11 @@ const OVERLAY_SHAPE_SIZES: Record<OverlayShape, { width: number; height: number 
 };
 export const OVERLAY_WHALE_WIDTH = 520;
 export const OVERLAY_WHALE_HEIGHT = 150;
+const OVERLAY_WHALE_COUNTER_SIZES: Record<OverlayCounterStyle, { width: number; height: number }> = {
+  digital: { width: 142, height: 42 },
+  compact: { width: 112, height: 38 },
+  ring: { width: 72, height: 72 },
+};
 
 type Props = {
   vision?: Vision;
@@ -22,6 +27,8 @@ type Props = {
   transitionRemainingMs?: number;
   whale: GravityWhaleSnapshot;
   addonScale: number;
+  whaleCounterScale: number;
+  whaleCounterStyle: OverlayCounterStyle;
   shape: OverlayShape;
   counterStyle: OverlayCounterStyle;
   nameMode: OverlayNameMode;
@@ -31,18 +38,25 @@ type Props = {
   interactive?: boolean;
 };
 
-export function overlayDesignSize(showWhale: boolean, shape: OverlayShape = "event", addonScale = 1) {
+export function overlayDesignSize(showWhale: boolean, shape: OverlayShape = "event", addonScale = 1, whaleCounterScale = 1, whaleCounterStyle: OverlayCounterStyle = "digital") {
   const base = OVERLAY_SHAPE_SIZES[shape] ?? OVERLAY_SHAPE_SIZES.event;
   const normalizedAddonScale = whaleScaleWithinWindow(addonScale, shape);
+  const normalizedCounterScale = whaleCounterScaleWithinWindow(whaleCounterScale, shape, whaleCounterStyle);
   return showWhale ? {
     width: base.width,
-    height: base.height + Math.round(OVERLAY_WHALE_HEIGHT * normalizedAddonScale),
+    height: base.height + whaleStageHeight(normalizedAddonScale, normalizedCounterScale, whaleCounterStyle),
   } : base;
 }
 
-export default function OverlayVisual({ vision, phase, remainingMs, progress, transitionRemainingMs = 0, whale, addonScale, shape, counterStyle, nameMode, customName, onClose, preview = false, interactive = true }: Props) {
+export default function OverlayVisual({ vision, phase, remainingMs, progress, transitionRemainingMs = 0, whale, addonScale, whaleCounterScale, whaleCounterStyle, shape, counterStyle, nameMode, customName, onClose, preview = false, interactive = true }: Props) {
   const remainingWhalePercent = Math.max(0, Math.min(100, Math.round((1 - whale.progress) * 100)));
   const normalizedAddonScale = whaleScaleWithinWindow(addonScale, shape);
+  const normalizedWhaleCounterScale = whaleCounterScaleWithinWindow(whaleCounterScale, shape, whaleCounterStyle);
+  const counterCompensation = normalizedWhaleCounterScale / normalizedAddonScale;
+  const whaleTimer = whaleCounterStyle === "digital" ? formatDuration(whale.remainingMs) : formatCompactDuration(whale.remainingMs);
+  const whaleCanvasOffset = whaleCanvasOffsetWithinStage(normalizedAddonScale, normalizedWhaleCounterScale, whaleCounterStyle);
+  const whaleCounterLeft = whaleCounterLeftWithinWindow(normalizedAddonScale, normalizedWhaleCounterScale, shape, whaleCounterStyle);
+  const whaleHeight = whaleStageHeight(normalizedAddonScale, normalizedWhaleCounterScale, whaleCounterStyle);
   const eventName = overlayVisionName(vision, nameMode, customName);
   const designSize = OVERLAY_SHAPE_SIZES[shape] ?? OVERLAY_SHAPE_SIZES.event;
   const transitionActive = transitionRemainingMs > 0;
@@ -70,8 +84,8 @@ export default function OverlayVisual({ vision, phase, remainingMs, progress, tr
       </div>
     </section>
 
-    {whale.visible && <section style={{ width: (OVERLAY_WHALE_WIDTH - 8) * normalizedAddonScale, height: (OVERLAY_WHALE_HEIGHT - 4) * normalizedAddonScale } as CSSProperties} className={`overlay-whale-stage ${whale.departing ? "departing" : "engaged"}`} aria-label={whale.departing ? "El Riftwalker se retira" : `Riftwalker activo durante ${formatDuration(whale.remainingMs)}`}>
-      <div className="overlay-whale-canvas" style={{ transform: `translateX(-50%) scale(${normalizedAddonScale})` }}>
+    {whale.visible && <section style={{ width: (OVERLAY_WHALE_WIDTH - 8) * normalizedAddonScale, height: whaleHeight } as CSSProperties} className={`overlay-whale-stage whale-counter-${whaleCounterStyle} ${whale.departing ? "departing" : "engaged"}`} aria-label={whale.departing ? "El Riftwalker se retira" : `Riftwalker activo durante ${formatDuration(whale.remainingMs)}`}>
+      <div className="overlay-whale-canvas" style={{ top: whaleCanvasOffset, transform: `translateX(-50%) scale(${normalizedAddonScale})` }}>
         <div className="overlay-whale-motion">
           <div className="overlay-whale-swimmer">
             <div className="overlay-whale-boss" aria-hidden="true">
@@ -81,11 +95,14 @@ export default function OverlayVisual({ vision, phase, remainingMs, progress, tr
               <span className="boss-energy"><i /><i /><i /></span>
             </div>
             <div className="overlay-whale-beam">
-              <span style={{ width: `${remainingWhalePercent}%` }} />
-              {!whale.departing && <strong>{formatDuration(whale.remainingMs)}</strong>}
+              <span className="overlay-whale-beam-progress" style={{ width: `${remainingWhalePercent}%` }} />
             </div>
           </div>
         </div>
+        {!whale.departing && <div className={`overlay-whale-countdown ${whaleCounterStyle}`} style={{ "--whale-counter-compensation": counterCompensation, "--whale-counter-progress": `${remainingWhalePercent * 3.6}deg`, "--whale-counter-left": `${whaleCounterLeft}px` } as CSSProperties}>
+          <small>RIFTWALKER</small>
+          <strong>{whaleTimer}</strong>
+        </div>}
       </div>
     </section>}
   </div>;
@@ -99,4 +116,34 @@ export function whaleScaleWithinWindow(value: number, shape: OverlayShape = "eve
   const base = OVERLAY_SHAPE_SIZES[shape] ?? OVERLAY_SHAPE_SIZES.event;
   const maximumScale = Math.min(1, (base.width - 8) / (OVERLAY_WHALE_WIDTH - 8));
   return clampAddonScale(value) * maximumScale;
+}
+
+export function whaleCounterScaleWithinWindow(value: number, shape: OverlayShape = "event", style: OverlayCounterStyle = "digital") {
+  const base = OVERLAY_SHAPE_SIZES[shape] ?? OVERLAY_SHAPE_SIZES.event;
+  const size = OVERLAY_WHALE_COUNTER_SIZES[style] ?? OVERLAY_WHALE_COUNTER_SIZES.digital;
+  const requestedScale = Math.max(.2, Math.min(1.5, Number.isFinite(value) ? value : 1));
+  return Math.min(requestedScale, (base.width - 16) / size.width);
+}
+
+function whaleStageHeight(addonScale: number, counterScale: number, style: OverlayCounterStyle) {
+  const counterHeight = OVERLAY_WHALE_COUNTER_SIZES[style]?.height ?? OVERLAY_WHALE_COUNTER_SIZES.digital.height;
+  const bossHeight = (OVERLAY_WHALE_HEIGHT - 4) * addonScale;
+  const counterCenter = 91 * addonScale;
+  const counterBottom = counterCenter + counterHeight * counterScale / 2 + 8;
+  return Math.ceil(whaleCanvasOffsetWithinStage(addonScale, counterScale, style) + Math.max(bossHeight, counterBottom));
+}
+
+function whaleCanvasOffsetWithinStage(addonScale: number, counterScale: number, style: OverlayCounterStyle) {
+  const counterHeight = OVERLAY_WHALE_COUNTER_SIZES[style]?.height ?? OVERLAY_WHALE_COUNTER_SIZES.digital.height;
+  return Math.max(0, counterHeight * counterScale / 2 + 6 - 91 * addonScale);
+}
+
+function whaleCounterLeftWithinWindow(addonScale: number, counterScale: number, shape: OverlayShape, style: OverlayCounterStyle) {
+  const base = OVERLAY_SHAPE_SIZES[shape] ?? OVERLAY_SHAPE_SIZES.event;
+  const counterWidth = (OVERLAY_WHALE_COUNTER_SIZES[style]?.width ?? OVERLAY_WHALE_COUNTER_SIZES.digital.width) * counterScale;
+  const halfCounter = counterWidth / 2;
+  const rightBoundary = base.width / 2 - halfCounter - 8;
+  const beamEndFromCenter = (OVERLAY_WHALE_WIDTH * .97 - OVERLAY_WHALE_WIDTH / 2) * addonScale;
+  const finalCenter = Math.min(rightBoundary, beamEndFromCenter - 8 + halfCounter);
+  return OVERLAY_WHALE_WIDTH / 2 + finalCenter / addonScale;
 }

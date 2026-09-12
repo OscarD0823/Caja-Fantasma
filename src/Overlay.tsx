@@ -17,7 +17,7 @@ export default function Overlay() {
   const displayedWhale = state.settings.overlayWhaleEnabled ? whale : { ...whale, visible: false };
   const selectedVision = useMemo(() => state.catalog.visions.find((vision) => vision.id === state.settings.selectedVisionId), [state.catalog.visions, state.settings.selectedVisionId]);
   const overlayScale = clampNumber(state.settings.overlayScale, .2, 1.5);
-  const designSize = overlayDesignSize(displayedWhale.visible, state.settings.overlayShape, state.settings.overlayAddonScale);
+  const designSize = overlayDesignSize(displayedWhale.visible, state.settings.overlayShape, state.settings.overlayAddonScale, state.settings.overlayWhaleCounterScale, state.settings.overlayWhaleCounterStyle);
 
   const hideOverlay = () => {
     const next = { ...state, settings: { ...state.settings, overlayEnabled: false } };
@@ -123,7 +123,7 @@ export default function Overlay() {
   return (
     <div className={`floating-overlay ${interactive ? "interactive" : "passive"}`} onMouseDown={(event) => { if (!interactive || (event.target as HTMLElement).closest("button")) return; void getCurrentWindow().startDragging(); }}>
       <div className="overlay-scale-stage" style={{ width: designSize.width, height: designSize.height, transform: `scale(${overlayScale})` }}>
-        <OverlayVisual vision={selectedVision} phase={cycle.phase} remainingMs={cycle.remainingMs} progress={cycle.progress} transitionRemainingMs={transition.active ? transition.remainingMs : 0} whale={displayedWhale} addonScale={state.settings.overlayAddonScale} shape={state.settings.overlayShape} counterStyle={state.settings.overlayCounterStyle} nameMode={state.settings.overlayNameMode} customName={state.settings.overlayCustomName} onClose={hideOverlay} interactive={interactive} />
+        <OverlayVisual vision={selectedVision} phase={cycle.phase} remainingMs={cycle.remainingMs} progress={cycle.progress} transitionRemainingMs={transition.active ? transition.remainingMs : 0} whale={displayedWhale} addonScale={state.settings.overlayAddonScale} whaleCounterScale={state.settings.overlayWhaleCounterScale} whaleCounterStyle={state.settings.overlayWhaleCounterStyle} shape={state.settings.overlayShape} counterStyle={state.settings.overlayCounterStyle} nameMode={state.settings.overlayNameMode} customName={state.settings.overlayCustomName} onClose={hideOverlay} interactive={interactive} />
       </div>
     </div>
   );
