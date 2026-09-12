@@ -4,6 +4,10 @@ Aplicación de escritorio para Windows creada por [OscarD0823](https://github.co
 
 Repositorio oficial: <https://github.com/OscarD0823/Caja-Fantasma>
 
+## Descargas organizadas
+
+La carpeta [`Programa`](Programa/) reúne el instalador `.exe` de Windows, el estado de la versión Android, un README de instalación y una copia de la licencia. La APK se incorporará allí cuando la aplicación móvil y su sincronización directa con el PC estén implementadas y firmadas.
+
 ## Funciones
 
 - Recompensas Pro con valores configurables: jefes de monolito, silos y Desafío de Manibus de Endless Dream valen 1; Guerra Pro y Manibus de Manibus valen 2.
@@ -22,7 +26,7 @@ Repositorio oficial: <https://github.com/OscarD0823/Caja-Fantasma>
 - Ajuste directo del contador por fase, minutos y segundos. La sincronización inicial de Gravedad parte de su cierre a las 4:52:30 p. m. de Colombia del 10 de septiembre de 2026.
 - Gravedad emite un aviso de voz anticipado configurable. Las notificaciones de escritorio están desactivadas. La app funciona minimizada en la bandeja e inicia con Windows.
 - Contador flotante movible, siempre visible, escalable entre 20 % y 150 % y con posición recordada. El área transparente de la Ballena y futuros adicionales usa una escala independiente de 20 % a 100 %; al reducirla disminuyen tanto la animación como su espacio reservado y su máximo nunca supera el ancho de la ventana. El reloj luminoso del Riftwalker conserva un tamaño propio de 20 % a 150 % y estilos Digital, Compacto o Anillo, por lo que sigue siendo legible aunque la Ballena sea pequeña. La Ballena puede ocultarse sin desactivar el contador principal. Inicio incluye el botón “Configurar tamaños”, que despliega todos esos controles sin abandonar la pantalla principal. Puede usar la forma automática propia de cada evento o un diseño rectangular, cuadrado, vertical o redondo. El reloj principal admite lectura digital, compacta o mediante anillo de progreso, y el nombre se puede mostrar en español, inglés o con un texto personalizado local. La X lo desactiva y los controles del inicio permiten recuperarlo y cambiar los tamaños. Funciona sobre juegos en ventana o pantalla completa sin bordes; Windows no permite garantizar superposición sobre pantalla completa exclusiva.
-- Cuando el juego obtiene el foco, o la ventana principal está oculta o minimizada, el contador flotante entra en modo pasivo: oculta el agarre y la X, usa el cursor normal y deja pasar los clics al juego. Los controles regresan únicamente mientras Caja Fantasma o su contador tienen el foco.
+- El contador flotante permanece en modo pasivo por defecto: oculta el agarre y la X y deja pasar los clics al juego. Solo se vuelve interactivo después de pulsar “Configurar tamaños”; al terminar el ajuste, cambiar de sección, ocultar o minimizar la aplicación, vuelve a ser transparente para el ratón.
 - Historial de cambios incluido dentro del programa, visible únicamente para la cuenta propietaria verificada.
 - Apartado Mods Brillantes con búsqueda bilingüe por nombre, variante, estilo, ranura o ID; contador individual de duplicados nivel 17 fallidos y colección de Brillantes conseguidos.
 - Catálogo local completo de 1.825 registros exactos: 207 del sistema anterior, 809 normales 2.0 y 809 Brillantes 2.0. Todos se pueden añadir al seguimiento y localizar después dentro del historial personal.
