@@ -32,16 +32,16 @@ type Props = {
 
 export function overlayDesignSize(showWhale: boolean, shape: OverlayShape = "event", addonScale = 1) {
   const base = OVERLAY_SHAPE_SIZES[shape] ?? OVERLAY_SHAPE_SIZES.event;
-  const normalizedAddonScale = clampAddonScale(addonScale);
+  const normalizedAddonScale = whaleScaleWithinWindow(addonScale, shape);
   return showWhale ? {
-    width: Math.max(base.width, Math.round(OVERLAY_WHALE_WIDTH * normalizedAddonScale)),
+    width: base.width,
     height: base.height + Math.round(OVERLAY_WHALE_HEIGHT * normalizedAddonScale),
   } : base;
 }
 
 export default function OverlayVisual({ vision, phase, remainingMs, progress, transitionRemainingMs = 0, whale, addonScale, shape, counterStyle, nameMode, customName, onClose, preview = false }: Props) {
   const remainingWhalePercent = Math.max(0, Math.min(100, Math.round((1 - whale.progress) * 100)));
-  const normalizedAddonScale = clampAddonScale(addonScale);
+  const normalizedAddonScale = whaleScaleWithinWindow(addonScale, shape);
   const eventName = overlayVisionName(vision, nameMode, customName);
   const designSize = OVERLAY_SHAPE_SIZES[shape] ?? OVERLAY_SHAPE_SIZES.event;
   const transitionActive = transitionRemainingMs > 0;
@@ -92,4 +92,10 @@ export default function OverlayVisual({ vision, phase, remainingMs, progress, tr
 
 function clampAddonScale(value: number) {
   return Math.max(.2, Math.min(1, Number.isFinite(value) ? value : 1));
+}
+
+export function whaleScaleWithinWindow(value: number, shape: OverlayShape = "event") {
+  const base = OVERLAY_SHAPE_SIZES[shape] ?? OVERLAY_SHAPE_SIZES.event;
+  const maximumScale = Math.min(1, (base.width - 8) / (OVERLAY_WHALE_WIDTH - 8));
+  return clampAddonScale(value) * maximumScale;
 }

@@ -8,7 +8,8 @@ Versión publicada el 11 de septiembre de 2026.
 - Todos los módulos normales indican Nivel 0–17 y las versiones especiales se muestran como Brillante.
 - La Ballena comienza a nadar durante su entrada, mantiene el movimiento mientras dispara y continúa nadando al retirarse.
 - Se eliminó el marco oscuro del área de la Ballena para conservar únicamente el jefe, la energía, el rayo y el contador.
-- El control “Área de Ballena” cambia tanto el tamaño del jefe como el espacio transparente reservado, independientemente del tamaño del contador flotante.
+- El control “Área de Ballena” cambia tanto el tamaño del jefe como el espacio transparente reservado; su máximo respeta el ancho de la ventana.
+- El contador de la Ballena puede ocultarse por separado sin desactivar la ventana flotante principal.
 - Inicio incorpora el botón “Configurar tamaños” para abrir o cerrar los controles de la ventana y de la Ballena.
 
 ## Estado

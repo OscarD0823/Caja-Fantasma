@@ -254,6 +254,12 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .home-overlay-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
 .home-overlay-actions button { white-space: nowrap; }
 .home-overlay-size-panel { grid-column: 1/-1; padding: 17px 2px 0; border-top: 1px solid rgba(133, 175, 182, .1); display: grid; grid-template-columns: repeat(2, minmax(170px, 1fr)); gap: 22px; animation: home-overlay-panel-in .22s ease both; }
+.overlay-addon-option { min-height: 54px; margin: 0 0 15px; padding: 10px 12px; border: 1px solid rgba(83, 188, 255, .16); border-radius: 11px; display: flex; align-items: center; justify-content: space-between; gap: 15px; background: rgba(11, 39, 55, .48); }
+.overlay-addon-option > span { min-width: 0; }
+.overlay-addon-option strong, .overlay-addon-option small { display: block; }
+.overlay-addon-option strong { color: #dff7ff; font: 700 10px "Space Grotesk", sans-serif; }
+.overlay-addon-option small { max-width: 540px; margin-top: 3px; color: #718e98; font-size: 8px; line-height: 1.45; }
+.home-overlay-size-panel .overlay-addon-option { grid-column: 1/-1; margin: -7px 0 0; }
 .public-vision-card { min-height: 128px; margin-top: 17px; padding: 24px 27px; display: grid; grid-template-columns: 52px 1fr 32px; gap: 17px; align-items: center; background: radial-gradient(circle at 10% 50%, rgba(92, 225, 210, .08), transparent 34%), rgba(9, 28, 38, .82); }
 .public-vision-card .vision-icon { width: 52px; height: 52px; border-radius: 15px; }
 .public-vision-card h2 { margin: 6px 0 4px; font: 700 21px "Space Grotesk", sans-serif; }
