@@ -72,6 +72,8 @@ import {
   formatDuration,
   overlayVisionName,
   parseManualBaseline,
+  resolveTransitionDelayMilliseconds,
+  sharedEventTimingFromSettings,
   sharedVisionId,
   splitPlatformCarryover,
   validateCatalog,
@@ -115,6 +117,20 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.13.0",
+    date: "12 de septiembre de 2026",
+    title: "Guardado general del administrador",
+    items: [
+      "La rueda, los puntos, el objetivo y los tiempos se editan como un único borrador local.",
+      "El envío automático por campo fue eliminado para evitar bloqueos mientras el administrador escribe.",
+      "Un solo botón Guardar todo publica la configuración general completa para los demás equipos.",
+      "La espera y duración activa se configuran en minutos; el retraso previo al próximo contador se configura en milisegundos.",
+      "Cuando el programa principal está oculto o minimizado, el contador deja pasar el ratón y oculta sus controles para no interferir con el juego.",
+      "El reloj del Riftwalker cambia de tamaño y estilo sin depender del tamaño de la Ballena, para conservar una lectura clara.",
+      "Sincronizar con todos publica la fase, la hora absoluta, la espera, la duración activa y la transición al cierre en milisegundos.",
+    ],
+  },
   {
     version: "1.12.0",
     date: "11 de septiembre de 2026",
@@ -598,7 +614,7 @@ export default function App() {
             ...(hasNewTiming ? {
               waitMinutes: timing.waitMinutes,
               activeMinutes: timing.activeMinutes,
-              transitionDelaySeconds: clampNumber(timing.transitionDelaySeconds ?? current.settings.transitionDelaySeconds, 0, 300),
+              transitionDelayMilliseconds: resolveTransitionDelayMilliseconds(timing, current.settings.transitionDelayMilliseconds),
               phaseStartedAt: timing.phaseStartedAt,
               phase: timing.phase,
               lastNotificationPhaseStartedAt: undefined,
@@ -913,8 +929,26 @@ export default function App() {
   };
 
   const saveCatalog = useCallback((catalog: Catalog) => {
-    commitState((current) => ({ ...current, catalog, settings: { ...current.settings, selectedVisionId: sharedVisionId(catalog, current.settings.selectedVisionId) } }));
-    setSyncStatus(`Cambios locales v${catalog.catalogVersion} listos para publicar`);
+    const timing = catalog.eventTiming;
+    commitState((current) => ({
+      ...current,
+      catalog,
+      settings: {
+        ...current.settings,
+        selectedVisionId: sharedVisionId(catalog, current.settings.selectedVisionId),
+        ...(timing ? {
+          waitMinutes: timing.waitMinutes,
+          activeMinutes: timing.activeMinutes,
+          transitionDelayMilliseconds: resolveTransitionDelayMilliseconds(timing, current.settings.transitionDelayMilliseconds),
+          phaseStartedAt: timing.phaseStartedAt,
+          phase: timing.phase,
+          sharedTimingUpdatedAt: timing.updatedAt,
+          lastNotificationPhaseStartedAt: undefined,
+          lastVoiceAlertPhaseStartedAt: undefined,
+        } : {}),
+      },
+    }));
+    setSyncStatus(`Configuración general v${catalog.catalogVersion} publicada`);
   }, [commitState]);
 
   const publishCatalog = useCallback(async (catalog: Catalog) => {
@@ -963,19 +997,10 @@ export default function App() {
       catalogVersion: state.catalog.catalogVersion + 1,
       updatedAt,
       updatedBy: AUTHOR,
-      eventTiming: {
-        selectedVisionId: sharedSettings.selectedVisionId,
-        waitMinutes: sharedSettings.waitMinutes,
-        activeMinutes: sharedSettings.activeMinutes,
-        transitionDelaySeconds: sharedSettings.transitionDelaySeconds,
-        phaseStartedAt: sharedSettings.phaseStartedAt,
-        phase: sharedSettings.phase,
-        updatedAt,
-        updatedBy: AUTHOR,
-      },
+      eventTiming: sharedEventTimingFromSettings(sharedSettings, updatedAt, AUTHOR),
     };
     try {
-      setToast("Publicando contador para todos…");
+      setToast("Publicando fase, tiempos y transición para todos…");
       const message = await publishCatalog(catalog);
       commitState((current) => ({ ...current, catalog, settings: sharedSettings }));
       setNow(synchronized.timestamp);
@@ -1110,7 +1135,7 @@ export default function App() {
             </div>
 
             <article className={`home-overlay-controls panel ${homeOverlayConfigOpen ? "expanded" : ""}`}>
-              <div><span className="eyebrow"><MonitorUp size={15} /> VENTANA FLOTANTE</span><h2>Tamaño rápido</h2><p>Abre los controles para ajustar por separado el contador y el espacio transparente de la Ballena.</p></div>
+              <div><span className="eyebrow"><MonitorUp size={15} /> VENTANA FLOTANTE</span><h2>Tamaño rápido</h2><p>Ajusta por separado la ventana, la Ballena y el reloj que aparece sobre su rayo.</p></div>
               <div className="home-overlay-actions">
                 <button type="button" className="secondary" aria-expanded={homeOverlayConfigOpen} aria-controls="home-overlay-size-panel" onClick={() => setHomeOverlayConfigOpen((current) => !current)}><Settings2 size={17} /> {homeOverlayConfigOpen ? "Ocultar tamaños" : "Configurar tamaños"}</button>
                 <button type="button" className={`secondary overlay-home-button ${state.settings.overlayEnabled ? "enabled" : ""}`} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><Eye size={18} /> {state.settings.overlayEnabled ? "Quitar ventana" : "Agregar ventana"}</button>
@@ -1118,6 +1143,8 @@ export default function App() {
               {homeOverlayConfigOpen && <div id="home-overlay-size-panel" className="home-overlay-size-panel">
                 <label className="overlay-size-control"><span>Ventana <strong>{Math.round(state.settings.overlayScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
                 <label className="overlay-size-control"><span>Área de Ballena <strong>{Math.round(state.settings.overlayAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(state.settings.overlayAddonScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(Number(event.target.value) / 100, .2, 1) } }))} /></label>
+                <label className="overlay-size-control"><span>Reloj de Ballena <strong>{Math.round(state.settings.overlayWhaleCounterScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayWhaleCounterScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
+                <label className="overlay-size-control"><span>Estilo del reloj</span><select value={state.settings.overlayWhaleCounterStyle} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterStyle: event.target.value as OverlayCounterStyle } }))}><option value="digital">Digital</option><option value="compact">Compacto</option><option value="ring">Anillo</option></select></label>
                 <div className="overlay-addon-option"><span><strong>Contador de Ballena</strong><small>Muéstralo durante Gravedad. Su 100% equivale como máximo al ancho de la ventana.</small></span><button type="button" className={`switch ${state.settings.overlayWhaleEnabled ? "on" : ""}`} aria-label="Mostrar contador de Ballena" aria-pressed={state.settings.overlayWhaleEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleEnabled: !current.settings.overlayWhaleEnabled } }))}><span /></button></div>
               </div>}
             </article>
@@ -1171,8 +1198,10 @@ export default function App() {
                 </div>
                 <label className="overlay-size-control"><span>Tamaño de ventana <strong>{Math.round(state.settings.overlayScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
                 <label className="overlay-size-control"><span>Área de Ballena <strong>{Math.round(state.settings.overlayAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(state.settings.overlayAddonScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(Number(event.target.value) / 100, .2, 1) } }))} /></label>
+                <label className="overlay-size-control"><span>Tamaño del reloj de Ballena <strong>{Math.round(state.settings.overlayWhaleCounterScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayWhaleCounterScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
+                <label className="overlay-size-control"><span>Estilo del reloj de Ballena</span><select value={state.settings.overlayWhaleCounterStyle} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterStyle: event.target.value as OverlayCounterStyle } }))}><option value="digital">Digital</option><option value="compact">Compacto</option><option value="ring">Anillo</option></select></label>
                 <div className="overlay-addon-option"><span><strong>Contador de Ballena</strong><small>Puede ocultarse sin desactivar el contador principal. Nunca supera el ancho de la ventana.</small></span><button type="button" className={`switch ${state.settings.overlayWhaleEnabled ? "on" : ""}`} aria-label="Mostrar contador de Ballena" aria-pressed={state.settings.overlayWhaleEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleEnabled: !current.settings.overlayWhaleEnabled } }))}><span /></button></div>
-                <p>Arrástrala a cualquier zona de la pantalla. El tamaño del contador y el espacio transparente de la Ballena se configuran por separado.</p>
+                <p>Arrástrala a cualquier zona de la pantalla. La ventana, la Ballena y el reloj luminoso del rayo se configuran por separado.</p>
               </article>
             </div>
 
@@ -1195,7 +1224,7 @@ export default function App() {
                 <button type="button" className="primary" onClick={synchronizeCountdown}><Save size={17} /> Aplicar en este PC</button>
                 <button type="button" className="secondary shared-counter-button" disabled={creatorAccess !== "granted"} onClick={() => void publishSharedCountdown()}><Upload size={17} /> Sincronizar con todos</button>
               </div>
-              <small className="counter-anchor-note">Sincronización inicial: Gravedad terminó a las 4:52:30 p. m. de Colombia el 10 de septiembre de 2026.</small>
+              <small className="counter-anchor-note">“Sincronizar con todos” es exclusivo del administrador y envía fase, hora absoluta, espera, duración activa y transición al cierre en milisegundos. Sincronización inicial: Gravedad terminó a las 4:52:30 p. m. de Colombia el 10 de septiembre de 2026.</small>
             </article>
 
             <article className="public-vision-card panel">
@@ -1341,8 +1370,8 @@ export default function App() {
         {tab === "settings" && (
           <section className="page settings-page">
             <div className="settings-grid">
-              <article className="settings-card panel">
-                <div className="settings-icon"><Clock3 /></div><div><h3>Duración del ciclo</h3><p>Define cuánto espera la rueda, cuánto permanece activa y el retraso visual antes de mostrar el próximo conteo.</p><div className="field-row"><label>Espera (minutos)<input type="number" min={1} max={525600} value={state.settings.waitMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, waitMinutes: clampNumber(Number(event.target.value), 1, 525600), phaseStartedAt: new Date().toISOString() } }))} /></label><label>Activa (minutos)<input type="number" min={1} max={525600} value={state.settings.activeMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, activeMinutes: clampNumber(Number(event.target.value), 1, 525600), phaseStartedAt: new Date().toISOString() } }))} /></label><label>Retraso visual (segundos)<input type="number" min={0} max={300} value={state.settings.transitionDelaySeconds} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, transitionDelaySeconds: clampNumber(Math.round(Number(event.target.value)), 0, 300) } }))} /></label></div><small>Este retraso no cambia la hora real del siguiente evento.</small></div>
+              <article className="settings-card panel public-timing-summary">
+                <div className="settings-icon"><Clock3 /></div><div><h3>Duración pública del ciclo</h3><p>Estos valores los define el administrador y se sincronizan junto con la rueda y sus puntos.</p><div className="timing-summary-values"><span><small>Espera</small><strong>{state.settings.waitMinutes} min</strong></span><span><small>Activa</small><strong>{state.settings.activeMinutes} min</strong></span><span><small>Transición al cierre</small><strong>{state.settings.transitionDelayMilliseconds} ms</strong></span></div><small>El propietario puede modificarlos en el editor general inferior y enviarlos todos con un solo botón.</small></div>
               </article>
               <article className="settings-card panel setting-disabled"><div className="settings-icon"><Bell /></div><div><h3>Notificaciones de escritorio</h3><p>Desactivadas en esta versión. Gravedad puede seguir avisando mediante voz.</p><span className="disabled-setting-badge">DESACTIVADAS</span></div></article>
               <article className="settings-card voice-settings panel">
@@ -1357,7 +1386,7 @@ export default function App() {
 
             <article className="owner-panel panel">
               <div className="panel-title"><div><span className="eyebrow">{creatorAccess === "granted" ? "MODO DESARROLLADOR" : "CUENTA PROPIETARIA"}</span><h2>{creatorAccess === "granted" ? "Editor de OscarD0823" : "Acceso privado"}</h2></div><span className={`creator-access-badge ${creatorAccess}`}>{creatorAccess === "granted" ? <UserCheck size={15} /> : <LockKeyhole size={15} />}{creatorAccess === "granted" ? "Propietario verificado" : creatorAccess === "checking" ? "Comprobando" : "Bloqueado"}</span></div>
-              {creatorAccess === "granted" ? <><p>Las herramientas privadas y el historial de cambios solo aparecen al propietario verificado. Publicar sigue siendo una acción separada; esta compilación permanece local.</p><OverlayPreviewLab catalog={state.catalog} scale={state.settings.overlayScale} addonScale={state.settings.overlayAddonScale} shape={state.settings.overlayShape} counterStyle={state.settings.overlayCounterStyle} nameMode={state.settings.overlayNameMode} customName={state.settings.overlayCustomName} onScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(scale, .2, 1.5) } }))} onAddonScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(scale, .2, 1) } }))} onAppearanceChange={(patch) => commitState((current) => ({ ...current, settings: { ...current.settings, ...(patch.shape ? { overlayShape: patch.shape } : {}), ...(patch.counterStyle ? { overlayCounterStyle: patch.counterStyle } : {}), ...(patch.nameMode ? { overlayNameMode: patch.nameMode } : {}), ...(patch.customName !== undefined ? { overlayCustomName: patch.customName.slice(0, 40) } : {}) } }))} onOpenRealOverlay={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: true } }))} /><CatalogEditor catalog={state.catalog} onSave={saveCatalog} onPublish={publishCatalog} /></> : <div className="creator-login-card"><div className="creator-lock"><LockKeyhole size={25} /></div><div><strong>Acceso privado del propietario</strong><span>{creatorMessage}</span><div className="creator-login-actions"><button type="button" className="primary compact" onClick={() => void startCreatorLogin()}><LogIn size={15} /> Iniciar sesión con GitHub</button><button type="button" className="secondary compact" disabled={creatorAccess === "checking"} onClick={() => void checkCreatorAccess()}><RefreshCw size={15} /> Comprobar cuenta</button></div></div></div>}
+              {creatorAccess === "granted" ? <><p>Las herramientas privadas y el historial de cambios solo aparecen al propietario verificado. Publicar sigue siendo una acción separada; esta compilación permanece local.</p><OverlayPreviewLab catalog={state.catalog} scale={state.settings.overlayScale} addonScale={state.settings.overlayAddonScale} whaleCounterScale={state.settings.overlayWhaleCounterScale} whaleCounterStyle={state.settings.overlayWhaleCounterStyle} shape={state.settings.overlayShape} counterStyle={state.settings.overlayCounterStyle} nameMode={state.settings.overlayNameMode} customName={state.settings.overlayCustomName} onScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(scale, .2, 1.5) } }))} onAddonScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(scale, .2, 1) } }))} onWhaleCounterScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterScale: clampNumber(scale, .2, 1.5) } }))} onWhaleCounterStyleChange={(style) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterStyle: style } }))} onAppearanceChange={(patch) => commitState((current) => ({ ...current, settings: { ...current.settings, ...(patch.shape ? { overlayShape: patch.shape } : {}), ...(patch.counterStyle ? { overlayCounterStyle: patch.counterStyle } : {}), ...(patch.nameMode ? { overlayNameMode: patch.nameMode } : {}), ...(patch.customName !== undefined ? { overlayCustomName: patch.customName.slice(0, 40) } : {}) } }))} onOpenRealOverlay={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: true } }))} /><CatalogEditor catalog={state.catalog} onSave={saveCatalog} onPublish={publishCatalog} /></> : <div className="creator-login-card"><div className="creator-lock"><LockKeyhole size={25} /></div><div><strong>Acceso privado del propietario</strong><span>{creatorMessage}</span><div className="creator-login-actions"><button type="button" className="primary compact" onClick={() => void startCreatorLogin()}><LogIn size={15} /> Iniciar sesión con GitHub</button><button type="button" className="secondary compact" disabled={creatorAccess === "checking"} onClick={() => void checkCreatorAccess()}><RefreshCw size={15} /> Comprobar cuenta</button></div></div></div>}
             </article>
           </section>
         )}
