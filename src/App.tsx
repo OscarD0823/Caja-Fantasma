@@ -124,6 +124,7 @@ const CHANGELOG = [
       "Todos los módulos normales muestran Nivel 0–17 y el estado especial se presenta como Brillante.",
       "La Ballena nada desde que entra, continúa moviéndose mientras dispara y conserva el movimiento al retirarse.",
       "El área transparente de la Ballena cambia de tamaño de forma independiente al contador y ya no usa el marco oscuro anterior.",
+      "Inicio incluye un botón que abre los controles de tamaño de la ventana y del área de la Ballena.",
     ],
   },
   {
@@ -367,6 +368,7 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState("Catálogo local listo");
   const [toast, setToast] = useState("");
   const [introVisible, setIntroVisible] = useState(true);
+  const [homeOverlayConfigOpen, setHomeOverlayConfigOpen] = useState(false);
   const [creatorAccess, setCreatorAccess] = useState<CreatorAccess>("checking");
   const [creatorMessage, setCreatorMessage] = useState("Comprobando la cuenta de GitHub…");
   const initialCycle = useRef(computeCycle(state.settings));
@@ -1107,11 +1109,16 @@ export default function App() {
               </article>
             </div>
 
-            <article className="home-overlay-controls panel">
-              <div><span className="eyebrow"><MonitorUp size={15} /> VENTANA FLOTANTE</span><h2>Tamaño rápido</h2><p>Ajusta el contador y el espacio de la Ballena desde el inicio. Los adicionales nunca superan el tamaño de la ventana.</p></div>
-              <label className="overlay-size-control"><span>Ventana <strong>{Math.round(state.settings.overlayScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
-              <label className="overlay-size-control"><span>Área de Ballena <strong>{Math.round(state.settings.overlayAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(state.settings.overlayAddonScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(Number(event.target.value) / 100, .2, 1) } }))} /></label>
-              <button type="button" className={`secondary overlay-home-button ${state.settings.overlayEnabled ? "enabled" : ""}`} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><Eye size={18} /> {state.settings.overlayEnabled ? "Quitar ventana" : "Agregar ventana"}</button>
+            <article className={`home-overlay-controls panel ${homeOverlayConfigOpen ? "expanded" : ""}`}>
+              <div><span className="eyebrow"><MonitorUp size={15} /> VENTANA FLOTANTE</span><h2>Tamaño rápido</h2><p>Abre los controles para ajustar por separado el contador y el espacio transparente de la Ballena.</p></div>
+              <div className="home-overlay-actions">
+                <button type="button" className="secondary" aria-expanded={homeOverlayConfigOpen} aria-controls="home-overlay-size-panel" onClick={() => setHomeOverlayConfigOpen((current) => !current)}><Settings2 size={17} /> {homeOverlayConfigOpen ? "Ocultar tamaños" : "Configurar tamaños"}</button>
+                <button type="button" className={`secondary overlay-home-button ${state.settings.overlayEnabled ? "enabled" : ""}`} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><Eye size={18} /> {state.settings.overlayEnabled ? "Quitar ventana" : "Agregar ventana"}</button>
+              </div>
+              {homeOverlayConfigOpen && <div id="home-overlay-size-panel" className="home-overlay-size-panel">
+                <label className="overlay-size-control"><span>Ventana <strong>{Math.round(state.settings.overlayScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
+                <label className="overlay-size-control"><span>Área de Ballena <strong>{Math.round(state.settings.overlayAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(state.settings.overlayAddonScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(Number(event.target.value) / 100, .2, 1) } }))} /></label>
+              </div>}
             </article>
 
             <div className="section-heading"><div><span className="eyebrow">RECOMPENSAS PRO</span><h2>Suma lo que reclames</h2></div><span>Solo las recompensas completadas cuentan</span></div>
