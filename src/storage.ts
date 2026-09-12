@@ -77,7 +77,13 @@ function sanitizePointRounds(value: unknown): PointRoundRecord[] {
         if (!item || typeof item !== "object") return [];
         const detail = item as { name?: unknown; count?: unknown; points?: unknown };
         if (typeof detail.name !== "string") return [];
-        return [{ name: detail.name.slice(0, 120), count: Math.max(0, Math.round(Number(detail.count) || 0)), points: Math.max(0, Math.round(Number(detail.points) || 0)) }];
+        return [{
+          activityId: typeof (detail as { activityId?: unknown }).activityId === "string" ? (detail as { activityId: string }).activityId.slice(0, 100) : undefined,
+          visionId: typeof (detail as { visionId?: unknown }).visionId === "string" ? (detail as { visionId: string }).visionId.slice(0, 100) : undefined,
+          name: detail.name.slice(0, 120),
+          count: Math.max(0, Math.round(Number(detail.count) || 0)),
+          points: Math.max(0, Math.round(Number(detail.points) || 0)),
+        }];
       }).slice(0, 200) : [],
     }];
   }).slice(0, 2_000);

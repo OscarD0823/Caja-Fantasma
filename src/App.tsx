@@ -54,7 +54,6 @@ import type { Activity, Catalog, CharacterProfile, OverlayCounterStyle, OverlayN
 import {
   APP_VERSION,
   AUTHOR,
-  BASELINE_BOX_POINTS,
   DEFAULT_CHARACTER_ID,
   REMOTE_CATALOG_URL,
   REPOSITORY_URL,
@@ -64,6 +63,7 @@ import {
   actionsForTeamSession,
   boxStatistics,
   buildBreakdown,
+  buildPointRoundBreakdown,
   clampNumber,
   computeCountdownTransition,
   computeCycle,
@@ -142,6 +142,17 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.14.1",
+    date: "12 de septiembre de 2026",
+    title: "Conteos por recompensa desde cero",
+    items: [
+      "Cada tarjeta muestra únicamente lo realizado en la ronda actual y vuelve visualmente a cero al guardarla.",
+      "Debajo del control aparece el acumulado guardado de esa recompensa: por ejemplo, 4 Plataformas y luego 3 muestran Lleva 7.",
+      "Las instalaciones nuevas ya no incluyen las 16 salidas de la hoja como historial ni como base estadística.",
+      "La estimación comienza en cero y aprende solo de valores manuales o cajas realmente registradas por cada persona.",
+    ],
+  },
   {
     version: "1.14.0",
     date: "12 de septiembre de 2026",
@@ -467,7 +478,7 @@ function archivePointRounds(state: PersistedState, trigger: PointRoundTrigger, e
       characterName: context.characterName,
       teamSessionId: context.teamSessionId,
       characterIds: context.characterIds,
-      breakdown: buildBreakdown(actions),
+      breakdown: buildPointRoundBreakdown(actions),
     });
   }
   return { ...state, pointRounds: [...records, ...state.pointRounds].slice(0, 2_000), pointRoundBoundaries: boundaries };
@@ -525,7 +536,7 @@ export default function App() {
   const SHINY_MOD_CATALOG_META = shinyCatalogModule?.SHINY_MOD_CATALOG_META ?? { sourceUrl: "", sourceCheckedAt: "", total: 0, legacy: 0, normal: 0, shiny: 0 };
   const defaultShinyMod = SHINY_MOD_CATALOG.find((item) => item.englishName === "Rush Hour <Downstar>" && !item.isCatalogShiny) ?? SHINY_MOD_CATALOG[0];
 
-  const referencePoints = useMemo(() => [...BASELINE_BOX_POINTS, ...state.manualBaselinePoints], [state.manualBaselinePoints]);
+  const referencePoints = useMemo(() => [...state.manualBaselinePoints], [state.manualBaselinePoints]);
   const target = clampNumber(state.catalog.boxTargetPoints, 1, 10_000);
   const activeCharacter = state.characters.find((character) => character.id === state.activeCharacterId) ?? state.characters[0];
   const isTeamMode = state.trackingMode === "team" && state.characters.length > 1;
@@ -539,6 +550,21 @@ export default function App() {
   const currentPointRoundPoints = useMemo(() => currentPointRoundActions.reduce((sum, action) => sum + action.points, 0), [currentPointRoundActions]);
   const visiblePointRounds = useMemo(() => state.pointRounds.filter((record) => isTeamMode ? record.trackingMode === "team" : record.trackingMode === "solo" && record.characterId === activeCharacter.id), [activeCharacter.id, isTeamMode, state.pointRounds]);
   const savedPointRoundTotal = useMemo(() => visiblePointRounds.reduce((sum, record) => sum + record.points, 0), [visiblePointRounds]);
+  const savedActivityCounts = useMemo(() => {
+    const totals = new Map<string, number>();
+    for (const record of visiblePointRounds) {
+      for (const item of record.breakdown) {
+        const key = item.activityId ? `${item.visionId ?? "pro"}:${item.activityId}` : `legacy:${item.name}`;
+        totals.set(key, (totals.get(key) ?? 0) + item.count);
+      }
+    }
+    return totals;
+  }, [visiblePointRounds]);
+  const savedActivityCount = (activity: Activity, vision?: Vision) => {
+    const current = savedActivityCounts.get(`${vision?.id ?? "pro"}:${activity.id}`) ?? 0;
+    const legacyName = vision ? `${vision.name} · ${activity.name}` : activity.name;
+    return current + (savedActivityCounts.get(`legacy:${legacyName}`) ?? 0);
+  };
   const breakdown = useMemo(() => buildBreakdown(currentActions), [currentActions]);
   const activeCharacterBoxes = useMemo(() => state.boxes.filter((box) => (box.characterId ?? DEFAULT_CHARACTER_ID) === activeCharacter.id), [state.boxes, activeCharacter.id]);
   const activeCharacterPoints = useMemo(() => activeCharacterActions.reduce((sum, action) => sum + action.points, 0), [activeCharacterActions]);
@@ -554,7 +580,6 @@ export default function App() {
     ? selectedTeamSummaries.reduce((sum, summary) => sum + summary.chance, 0) / selectedTeamSummaries.length
     : stats.currentChancePercent;
   const teamReady = !isTeamMode || state.teamMemberIds.length >= 2;
-  const baselineStats = useMemo(() => boxStatistics([], 0, referencePoints), [referencePoints]);
   const publicVisionId = sharedVisionId(state.catalog, state.settings.selectedVisionId);
   const selectedVision = state.catalog.visions.find((vision) => vision.id === publicVisionId) ?? state.catalog.visions.find((vision) => vision.enabled) ?? state.catalog.visions[0];
   const cycle = computeCycle(state.settings, now);
@@ -1272,7 +1297,7 @@ export default function App() {
               <article className="chance-card panel">
                 <span className="eyebrow"><BarChart3 size={14} /> ESTIMACIÓN OBSERVADA</span>
                 <strong className="chance-value">{displayedChance.toFixed(1)}%</strong>
-                <p>{isTeamMode ? "Promedio del porcentaje individual de los personajes seleccionados. Cada uno conserva su propio intento." : "Probabilidad acumulada estimada con la hoja base, valores manuales y las cajas de este personaje."}</p>
+                <p>{isTeamMode ? "Promedio del porcentaje individual de los personajes seleccionados. Cada uno conserva su propio intento." : "Probabilidad acumulada estimada únicamente con tus valores manuales y las cajas de este personaje."}</p>
                 <div className="mini-stats"><span><small>Promedio</small><strong>{stats.count ? stats.average.toFixed(1) : "—"}</strong></span><span><small>Muestras</small><strong>{stats.count}</strong></span></div>
               </article>
             </div>
@@ -1294,16 +1319,28 @@ export default function App() {
 
             <div className="section-heading"><div><span className="eyebrow">RECOMPENSAS PRO</span><h2>Suma lo que reclames</h2></div><span>Solo las recompensas completadas cuentan</span></div>
             <div className="activity-grid">
-              {state.catalog.proActivities.map((activity) => (
-                <ActivityCard key={activity.id} activity={activity} disabled={!teamReady} count={currentActions.filter((action) => !action.visionId && action.activityId === activity.id).length} onAdd={() => addActivity(activity)} onRemove={() => removeLastActivity(activity.id)} />
-              ))}
+              {state.catalog.proActivities.map((activity) => <ActivityCard
+                key={activity.id}
+                activity={activity}
+                disabled={!teamReady}
+                currentCount={currentPointRoundActions.filter((action) => !action.visionId && action.activityId === activity.id).length}
+                savedCount={savedActivityCount(activity)}
+                onAdd={() => addActivity(activity)}
+                onRemove={() => removeLastActivity(activity.id)}
+              />)}
             </div>
 
             <div className="section-heading"><div><span className="eyebrow">VISIÓN SELECCIONADA POR EL ADMINISTRADOR</span><h2>{selectedVision?.name ?? "Sin visión"}</h2></div><button type="button" className="link-button" onClick={() => setTab("vision")}>Ver contador <ChevronRight size={15} /></button></div>
             <div className="activity-grid">
-              {selectedVision?.activities.length ? selectedVision.activities.map((activity) => (
-                <ActivityCard key={activity.id} activity={activity} disabled={!selectedVision.enabled || !teamReady} count={currentActions.filter((action) => action.visionId === selectedVision.id && action.activityId === activity.id).length} onAdd={() => addActivity(activity, selectedVision)} onRemove={() => removeLastActivity(activity.id, selectedVision.id)} />
-              )) : <div className="empty-card"><Sparkles size={28} /><strong>Aún no hay recompensas para {selectedVision?.name}</strong><span>Puedes añadirlas en Configuración y publicarlas para todos.</span></div>}
+              {selectedVision?.activities.length ? selectedVision.activities.map((activity) => <ActivityCard
+                key={activity.id}
+                activity={activity}
+                disabled={!selectedVision.enabled || !teamReady}
+                currentCount={currentPointRoundActions.filter((action) => action.visionId === selectedVision.id && action.activityId === activity.id).length}
+                savedCount={savedActivityCount(activity, selectedVision)}
+                onAdd={() => addActivity(activity, selectedVision)}
+                onRemove={() => removeLastActivity(activity.id, selectedVision.id)}
+              />) : <div className="empty-card"><Sparkles size={28} /><strong>Aún no hay recompensas para {selectedVision?.name}</strong><span>Puedes añadirlas en Configuración y publicarlas para todos.</span></div>}
             </div>
 
             {breakdown.length > 0 && <article className="attempt-log panel">
@@ -1418,14 +1455,8 @@ export default function App() {
               <StatCard icon={BarChart3} label="Promedio" value={stats.count ? pointsLabel(Number(stats.average.toFixed(1))) : "—"} />
             </div>
             <article className="probability-explainer panel">
-              <div><span className="eyebrow">PROBABILIDAD OBSERVADA</span><strong>{stats.perPointPercent.toFixed(3)}%</strong><p>Una caja por cada {stats.perPointPercent ? (100 / stats.perPointPercent).toFixed(1) : "—"} puntos, usando la hoja base, el historial manual aproximado y tus cajas confirmadas. No es una tasa oficial del juego.</p></div>
+              <div><span className="eyebrow">PROBABILIDAD OBSERVADA</span><strong>{stats.perPointPercent.toFixed(3)}%</strong><p>Una caja por cada {stats.perPointPercent ? (100 / stats.perPointPercent).toFixed(1) : "—"} puntos, usando únicamente tu historial manual aproximado y tus cajas confirmadas. Una instalación nueva empieza en cero; no es una tasa oficial del juego.</p></div>
               <div className="probability-ring" style={{ "--value": `${Math.min(100, stats.currentChancePercent) * 3.6}deg` } as React.CSSProperties}><span>{stats.currentChancePercent.toFixed(0)}%</span></div>
-            </article>
-
-            <article className="baseline-panel panel">
-              <div><span className="eyebrow">BASE DE ESTIMACIÓN</span><h2>{baselineStats.count} salidas de referencia</h2><p>La columna A aporta 16 valores: 1209, 762, 966, 1143, 320, 797, 1180, 909, 1028, 1098, 408, 889, 1447, 1211, 1333 y 588. Has añadido {state.manualBaselinePoints.length} aproximados.</p></div>
-              <div className="baseline-ranges"><span><small>Zona baja</small><strong>{baselineStats.lowerAverage.toFixed(3)}</strong></span><span><small>Centro</small><strong>{baselineStats.average.toFixed(1)}</strong></span><span><small>Zona alta</small><strong>{baselineStats.upperAverage.toFixed(3)}</strong></span></div>
-              <p className="baseline-note">La hoja mostraba 935,0769 como promedio, pero 15.288 ÷ 16 da 955,5. Los valores manuales amplían la referencia y las cajas registradas se suman como muestras confirmadas.</p>
             </article>
 
             <article className="manual-history-panel panel">
@@ -1583,16 +1614,19 @@ function VisionAtmosphere({ visionId, active }: { visionId?: string; active: boo
   </div>;
 }
 
-function ActivityCard({ activity, count, disabled = false, onAdd, onRemove }: { activity: Activity; count: number; disabled?: boolean; onAdd: () => void; onRemove: () => void }) {
+function ActivityCard({ activity, currentCount, savedCount, disabled = false, onAdd, onRemove }: { activity: Activity; currentCount: number; savedCount: number; disabled?: boolean; onAdd: () => void; onRemove: () => void }) {
   const inactive = disabled || !activity.enabled || activity.points <= 0;
   return (
     <article className={`activity-card ${inactive ? "disabled" : ""}`}>
       <div className="activity-points"><strong>{activity.points}</strong><small>PTS</small></div>
       <div className="activity-copy"><strong>{activity.name}</strong><span>{activity.note ?? "Recompensa reclamada"}</span></div>
-      <div className="activity-counter">
-        {count > 0 && <button type="button" aria-label={`Quitar una de ${activity.name}`} onClick={onRemove}><Minus size={15} /></button>}
-        {count > 0 && <span>{count}</span>}
-        <button type="button" aria-label={`Sumar ${activity.name}`} disabled={inactive} onClick={onAdd}><Plus size={19} /></button>
+      <div className="activity-counts">
+        <div className="activity-counter">
+          {currentCount > 0 && <button type="button" aria-label={`Quitar una de ${activity.name}`} onClick={onRemove}><Minus size={15} /></button>}
+          <span aria-label={`${currentCount} en la ronda actual`}>{currentCount}</span>
+          <button type="button" aria-label={`Sumar ${activity.name}`} disabled={inactive} onClick={onAdd}><Plus size={19} /></button>
+        </div>
+        <small>Lleva {savedCount}</small>
       </div>
     </article>
   );

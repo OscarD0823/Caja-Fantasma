@@ -204,10 +204,12 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .activity-copy strong, .activity-copy span { display: block; }
 .activity-copy strong { font-size: 12px; }
 .activity-copy span { margin-top: 4px; overflow: hidden; color: #7e969e; font-size: 9px; white-space: nowrap; text-overflow: ellipsis; }
-.activity-counter { display: flex; align-items: center; gap: 7px; }
+.activity-counts { flex: none; display: grid; justify-items: center; gap: 4px; }
+.activity-counts > small { color: #78949a; font-size: 8px; font-weight: 700; letter-spacing: .02em; }
+.activity-counter { display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
 .activity-counter button { width: 30px; height: 30px; padding: 0; border: 1px solid rgba(96, 217, 208, .2); border-radius: 9px; display: grid; place-items: center; color: var(--cyan); background: rgba(74, 210, 200, .07); cursor: pointer; }
 .activity-counter button:last-child:not(:disabled) { color: #072225; background: var(--cyan); }
-.activity-counter span { min-width: 15px; text-align: center; font-size: 11px; font-weight: 800; }
+.activity-counter span { min-width: 15px; color: #dffcf8; text-align: center; font-size: 11px; font-weight: 800; }
 .empty-card { min-height: 103px; grid-column: 1/-1; border: 1px dashed rgba(119, 175, 181, .22); border-radius: 15px; display: grid; place-content: center; justify-items: center; gap: 5px; color: #6e8991; text-align: center; }
 .empty-card strong { color: #adbec3; font-size: 12px; }
 .empty-card span { font-size: 10px; }

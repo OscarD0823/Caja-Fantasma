@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import catalog from "../catalog/visions.json" with { type: "json" };
-import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, applyRemoteCatalog, boxStatistics, buildBreakdown, computeCountdownTransition, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, overlayVisionName, parseManualBaseline, pointActionsInRound, resolveTransitionDelayMilliseconds, sharedEventTimingFromSettings, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type Catalog, type PersistedState, type PointAction, type Settings } from "../src/model.ts";
+import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, applyRemoteCatalog, boxStatistics, buildBreakdown, buildPointRoundBreakdown, computeCountdownTransition, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, overlayVisionName, parseManualBaseline, pointActionsInRound, resolveTransitionDelayMilliseconds, sharedEventTimingFromSettings, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type Catalog, type PersistedState, type PointAction, type Settings } from "../src/model.ts";
 import { whaleCounterLayoutWithinWindow, whaleCounterScaleWithinWindow, whaleScaleWithinWindow } from "../src/overlayGeometry.ts";
 import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesModSearch, normalizeModSearch } from "../src/shinyModsCatalog.ts";
 
@@ -189,19 +189,19 @@ assert.equal(Number(statistics.average.toFixed(2)), 13.33);
 assert.ok(statistics.perPointPercent > 0 && statistics.currentChancePercent > 0);
 
 const baseline = boxStatistics([], 0);
-assert.equal(BASELINE_BOX_POINTS.reduce((sum, points) => sum + points, 0), 15_288);
-assert.equal(baseline.count, 16);
-assert.equal(baseline.minimum, 320);
-assert.equal(baseline.maximum, 1_447);
-assert.equal(baseline.average, 955.5);
-assert.equal(baseline.median, 997);
-assert.equal(baseline.lowerAverage, 704.875);
-assert.equal(baseline.upperAverage, 1_206.125);
+assert.deepEqual(BASELINE_BOX_POINTS, []);
+assert.equal(baseline.count, 0, "Una instalación nueva debe iniciar sin salidas precargadas.");
+assert.equal(baseline.currentChancePercent, 0);
 
 assert.deepEqual(parseManualBaseline("762, 966\n1143; no-valido 0 -4 10001"), [762, 966, 1_143]);
 const extendedBaseline = boxStatistics([], 0, [...BASELINE_BOX_POINTS, 500]);
-assert.equal(extendedBaseline.count, 17);
-assert.equal(extendedBaseline.baselineCount, 17);
+assert.equal(extendedBaseline.count, 1);
+assert.equal(extendedBaseline.baselineCount, 1);
+
+assert.deepEqual(buildPointRoundBreakdown(actions), [
+  { activityId: "gravity-platforms", visionId: "gravity", name: "Gravedad · Plataformas", count: 2, points: 8 },
+  { activityId: "gravity-whale", visionId: "gravity", name: "Gravedad · Ballena", count: 1, points: 1 },
+]);
 
 const platformActions: PointAction[] = [
   { id: "old", activityId: "pro-silo", activityName: "Silo", points: 1, occurredAt: "2026-09-10T10:00:00.000Z" },

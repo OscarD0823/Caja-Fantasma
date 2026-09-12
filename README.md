@@ -16,13 +16,13 @@ La carpeta [`Programa`](Programa/) reúne el instalador `.exe` de Windows, el es
 - Abismo de Gravedad incluye Ballena (1) y Plataformas (4).
 - Progenie Aberrante permanece desactivada con Araña, Antena y Grandulón; sus opciones no suman mientras el evento esté desactivado.
 - La caja puede marcarse en cualquier momento. Se guarda automáticamente fecha, hora, puntos, número de recompensas, origen y desglose.
-- Historial de rondas dentro del cuadro de puntos: conserva el total del intento, muestra el conteo parcial desde el último corte, permite guardarlo manualmente y registra fecha, motivo, recompensas, puntos y desglose. Cada inicio de evento archiva la ronda anterior y reinicia solo ese conteo parcial.
+- Historial de rondas dentro del cuadro de puntos: conserva el total del intento, muestra el conteo parcial desde el último corte, permite guardarlo manualmente y registra fecha, motivo, recompensas, puntos y desglose. Cada inicio de evento archiva la ronda anterior y reinicia solo ese conteo parcial. Cada tarjeta de recompensa también vuelve a cero y muestra debajo su acumulado guardado con “Lleva N”.
 - Menú principal Personajes para hasta 12 perfiles: cada uno conserva por separado su intento, porcentaje estimado e historial de cajas. Los datos existentes se mantienen en “Personaje principal” y la aplicación siempre abre en modo Solitario.
 - Modo Equipo para seleccionar dos o más personajes. Su contador propio comienza en cero y cada recompensa registrada suma simultáneamente al intento individual de todos los integrantes; cambiar o reiniciar el conteo del equipo no borra esos puntos personales.
 - Barra comparativa visible al tener más de un personaje, con los puntos, porcentaje estimado y progreso de cada uno.
 - Cuando una caja llega por correo de Plataformas, las actividades hechas durante la última hora no se atribuyen a la caja anterior: permanecen contadas en el intento nuevo.
-- Historial con una base inicial de 16 cajas tomada de la columna A: mínimo 320, máximo 1.447, promedio 955,5, mediana 997, zona baja 704,875 y zona alta 1.206,125.
-- Carga manual de valores históricos aproximados. Se combinan con la base estadística, pero permanecen separados de las cajas confirmadas y no inventan fechas.
+- Las estadísticas comienzan en cero: no se precargan las 16 salidas de la hoja ni se presentan como historial de una persona nueva.
+- Carga manual de valores históricos aproximados. Se combinan únicamente con las cajas confirmadas de esa persona, pero permanecen separados y no inventan fechas.
 - El administrador configura la espera y la duración de la Rueda Visional; el valor inicial es 30 minutos de espera y 30 minutos activa. También puede establecer un retraso visual de 0 a 300.000 milisegundos entre el cierre del evento y la presentación del contador siguiente sin modificar el horario real.
 - Ajuste directo del contador por fase, minutos y segundos. La sincronización inicial de Gravedad parte de su cierre a las 4:52:30 p. m. de Colombia del 10 de septiembre de 2026.
 - Gravedad emite un aviso de voz anticipado configurable. Las notificaciones de escritorio están desactivadas. La app funciona minimizada en la bandeja e inicia con Windows.

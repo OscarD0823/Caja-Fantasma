@@ -85,7 +85,7 @@ export type PointRoundRecord = {
   characterName?: string;
   teamSessionId?: string;
   characterIds?: string[];
-  breakdown: Array<{ name: string; count: number; points: number }>;
+  breakdown: Array<{ activityId?: string; visionId?: string; name: string; count: number; points: number }>;
 };
 
 export type CharacterProfile = {
@@ -176,14 +176,15 @@ export type CountdownTransitionSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.14.0";
+export const APP_VERSION = "1.14.1";
 export const AUTHOR = "OscarD0823";
 export const DEFAULT_CHARACTER_ID = "character-main";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
 export const REMOTE_CATALOG_URL = "https://raw.githubusercontent.com/OscarD0823/Caja-Fantasma/main/catalog/visions.json";
 // Gravedad terminó y comenzó su espera a las 16:52:30 de Colombia del 10/09/2026.
 export const VISION_CYCLE_WAIT_STARTED_AT = "2026-09-10T21:52:30.000Z";
-export const BASELINE_BOX_POINTS = [1209, 762, 966, 1143, 320, 797, 1180, 909, 1028, 1098, 408, 889, 1447, 1211, 1333, 588] as const;
+// Las instalaciones nuevas aprenden únicamente de los datos añadidos por la persona.
+export const BASELINE_BOX_POINTS: readonly number[] = [];
 
 export function createId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${crypto.getRandomValues(new Uint32Array(1))[0].toString(36)}`;
@@ -441,6 +442,24 @@ export function buildBreakdown(actions: PointAction[]) {
   for (const action of actions) {
     const key = `${action.visionId ?? "pro"}:${action.activityId}`;
     const current = groups.get(key) ?? { name: action.visionName ? `${action.visionName} · ${action.activityName}` : action.activityName, count: 0, points: 0 };
+    current.count += 1;
+    current.points += action.points;
+    groups.set(key, current);
+  }
+  return [...groups.values()].sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+}
+
+export function buildPointRoundBreakdown(actions: PointAction[]) {
+  const groups = new Map<string, { activityId: string; visionId?: string; name: string; count: number; points: number }>();
+  for (const action of actions) {
+    const key = `${action.visionId ?? "pro"}:${action.activityId}`;
+    const current = groups.get(key) ?? {
+      activityId: action.activityId,
+      visionId: action.visionId,
+      name: action.visionName ? `${action.visionName} · ${action.activityName}` : action.activityName,
+      count: 0,
+      points: 0,
+    };
     current.count += 1;
     current.points += action.points;
     groups.set(key, current);
