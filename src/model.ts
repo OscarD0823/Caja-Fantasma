@@ -272,6 +272,38 @@ export function sharedEventTimingFromSettings(settings: Settings, updatedAt: str
   };
 }
 
+export function applyRemoteCatalog(current: PersistedState, catalog: Catalog): PersistedState {
+  if (catalog.catalogVersion < current.catalog.catalogVersion) return current;
+  const hasNewCatalog = catalog.catalogVersion > current.catalog.catalogVersion;
+  const timing = catalog.eventTiming;
+  if (!timing) return hasNewCatalog ? { ...current, catalog } : current;
+
+  const appliedTiming = Date.parse(current.settings.sharedTimingUpdatedAt ?? "");
+  const remoteTiming = Date.parse(timing.updatedAt);
+  const selectedVisionId = sharedVisionId(catalog, current.settings.selectedVisionId);
+  const hasNewTiming = !Number.isFinite(appliedTiming) || remoteTiming > appliedTiming;
+  if (!hasNewCatalog && !hasNewTiming && current.settings.selectedVisionId === selectedVisionId) return current;
+
+  return {
+    ...current,
+    catalog: hasNewCatalog ? catalog : current.catalog,
+    settings: {
+      ...current.settings,
+      selectedVisionId,
+      ...(hasNewTiming ? {
+        waitMinutes: timing.waitMinutes,
+        activeMinutes: timing.activeMinutes,
+        transitionDelayMilliseconds: resolveTransitionDelayMilliseconds(timing, current.settings.transitionDelayMilliseconds),
+        phaseStartedAt: timing.phaseStartedAt,
+        phase: timing.phase,
+        lastNotificationPhaseStartedAt: undefined,
+        lastVoiceAlertPhaseStartedAt: undefined,
+        sharedTimingUpdatedAt: timing.updatedAt,
+      } : {}),
+    },
+  };
+}
+
 export function shouldShowGravityWhale(settings: Settings, now = Date.now()) {
   if (settings.selectedVisionId !== "gravity") return false;
   const cycle = computeCycle(settings, now);

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import catalog from "../catalog/visions.json" with { type: "json" };
-import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, boxStatistics, buildBreakdown, computeCountdownTransition, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, overlayVisionName, parseManualBaseline, resolveTransitionDelayMilliseconds, sharedEventTimingFromSettings, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type PointAction, type Settings } from "../src/model.ts";
+import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, applyRemoteCatalog, boxStatistics, buildBreakdown, computeCountdownTransition, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, overlayVisionName, parseManualBaseline, resolveTransitionDelayMilliseconds, sharedEventTimingFromSettings, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type Catalog, type PersistedState, type PointAction, type Settings } from "../src/model.ts";
+import { whaleCounterLayoutWithinWindow, whaleCounterScaleWithinWindow, whaleScaleWithinWindow } from "../src/overlayGeometry.ts";
 import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesModSearch, normalizeModSearch } from "../src/shinyModsCatalog.ts";
 
 const freshState = { ...createInitialCharacterTracking(Date.parse("2026-09-11T00:00:00Z")), actions: [] as PointAction[] };
@@ -73,6 +74,66 @@ const sharedTiming = sharedEventTimingFromSettings({ ...synchronizedSettings, tr
 assert.deepEqual({ phase: sharedTiming.phase, phaseStartedAt: sharedTiming.phaseStartedAt, waitMinutes: sharedTiming.waitMinutes, activeMinutes: sharedTiming.activeMinutes, transitionDelayMilliseconds: sharedTiming.transitionDelayMilliseconds, transitionDelaySeconds: sharedTiming.transitionDelaySeconds }, { phase: "waiting", phaseStartedAt: VISION_CYCLE_WAIT_STARTED_AT, waitMinutes: 30, activeMinutes: 30, transitionDelayMilliseconds: 2_750, transitionDelaySeconds: 2.75 }, "La sincronización global debe incluir fase, ancla, duraciones y transición en milisegundos.");
 assert.equal(computeCycle(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 60 * 60_000 + 3_001).remainingMs, 30 * 60_000 - 3_001, "El retraso visual no debe mover el ciclo real.");
 assert.equal(computeCycle(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 24 * 60 * 60_000).phase, "waiting", "El ciclo absoluto debe avanzar aunque el PC haya estado apagado.");
+
+const localState: PersistedState = {
+  schemaVersion: 1,
+  catalog: catalog as Catalog,
+  actions: [],
+  boxes: [],
+  manualBaselinePoints: [],
+  shinyMods: [],
+  ...createInitialCharacterTracking(Date.parse("2026-09-12T00:00:00Z")),
+  settings: synchronizedSettings,
+};
+const newerCatalog = structuredClone(catalog) as Catalog;
+newerCatalog.catalogVersion += 1;
+newerCatalog.visions.find((vision) => vision.id === "lunar")!.enabled = true;
+newerCatalog.eventTiming = {
+  ...newerCatalog.eventTiming!,
+  selectedVisionId: "lunar",
+  waitMinutes: 42,
+  activeMinutes: 18,
+  transitionDelayMilliseconds: 4_321,
+  transitionDelaySeconds: 4.321,
+  phase: "active",
+  phaseStartedAt: "2026-09-12T12:30:00.000Z",
+  updatedAt: "2026-09-12T12:31:00.000Z",
+};
+const remotelyUpdated = applyRemoteCatalog(localState, newerCatalog);
+assert.equal(remotelyUpdated.catalog.catalogVersion, newerCatalog.catalogVersion);
+assert.deepEqual({
+  selectedVisionId: remotelyUpdated.settings.selectedVisionId,
+  waitMinutes: remotelyUpdated.settings.waitMinutes,
+  activeMinutes: remotelyUpdated.settings.activeMinutes,
+  transitionDelayMilliseconds: remotelyUpdated.settings.transitionDelayMilliseconds,
+  phase: remotelyUpdated.settings.phase,
+  phaseStartedAt: remotelyUpdated.settings.phaseStartedAt,
+}, {
+  selectedVisionId: "lunar",
+  waitMinutes: 42,
+  activeMinutes: 18,
+  transitionDelayMilliseconds: 4_321,
+  phase: "active",
+  phaseStartedAt: "2026-09-12T12:30:00.000Z",
+}, "Un cliente debe aplicar en un solo paso la rueda y todos los tiempos publicados por el administrador.");
+const staleCatalog = structuredClone(catalog) as Catalog;
+staleCatalog.catalogVersion = Math.max(0, catalog.catalogVersion - 1);
+assert.strictEqual(applyRemoteCatalog(remotelyUpdated, staleCatalog), remotelyUpdated, "Una respuesta antigua o cacheada no debe devolver el contador a una configuración anterior.");
+
+for (const shape of ["event", "rectangle", "square", "vertical", "round"] as const) {
+  for (const style of ["digital", "compact", "ring"] as const) {
+    for (const requestedWhaleScale of [.2, .55, 1]) {
+      for (const requestedCounterScale of [.2, .85, 1.5]) {
+        const whaleScale = whaleScaleWithinWindow(requestedWhaleScale, shape);
+        const counterScale = whaleCounterScaleWithinWindow(requestedCounterScale, shape, style);
+        const layout = whaleCounterLayoutWithinWindow(whaleScale, counterScale, shape, style);
+        const horizontalOverlap = layout.counterBounds.left < layout.bossBounds.right && layout.counterBounds.right > layout.bossBounds.left;
+        const verticalOverlap = layout.counterBounds.top < layout.bossBounds.bottom && layout.counterBounds.bottom > layout.bossBounds.top;
+        assert.equal(horizontalOverlap && verticalOverlap, false, `El reloj ${style} no debe tapar la Ballena en ${shape} (${requestedWhaleScale}/${requestedCounterScale}).`);
+      }
+    }
+  }
+}
 assert.equal(shouldShowGravityWhale(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 44 * 60_000), false);
 assert.equal(shouldShowGravityWhale(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 45 * 60_000), true);
 assert.equal(shouldShowGravityWhale(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 65 * 60_000), true);
@@ -174,4 +235,4 @@ assert.equal(matchesModSearch(rushHourNormal!, normalizeModSearch("19500542")), 
 assert.equal(matchesModSearch(rushHourNormal!, normalizeModSearch("hora punta estrella descendente")), true);
 assert.equal(normalizeModSearch("Vórtice de escarcha"), "vortice de escarcha");
 
-console.log(JSON.stringify({ catalog: "OK", cycle: "OK", points: "OK", statistics: "OK", baseline: "OK", platformCarryover: "OK", shinyMods: "OK" }));
+console.log(JSON.stringify({ catalog: "OK", sharedSync: "OK", overlayGeometry: "OK", cycle: "OK", points: "OK", statistics: "OK", baseline: "OK", platformCarryover: "OK", shinyMods: "OK" }));

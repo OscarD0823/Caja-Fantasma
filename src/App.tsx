@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -59,6 +59,7 @@ import {
   REMOTE_CATALOG_URL,
   REPOSITORY_URL,
   actionCharacterIds,
+  applyRemoteCatalog,
   actionsForCharacter,
   actionsForTeamSession,
   boxStatistics,
@@ -105,6 +106,29 @@ function matchesModSearch(item: ShinyModCatalogItem, search: string) {
 
 type TabId = "progress" | "characters" | "vision" | "history" | "shiny" | "changes" | "settings";
 type CreatorAccess = "checking" | "locked" | "granted";
+
+const REMOTE_CATALOG_API_URL = "https://api.github.com/repos/OscarD0823/Caja-Fantasma/contents/catalog/visions.json?ref=main";
+let catalogApiFallbackAvailableAt = 0;
+
+async function fetchPublicCatalog(): Promise<unknown> {
+  try {
+    const response = await fetch(`${REMOTE_CATALOG_URL}?v=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`GitHub Raw HTTP ${response.status}`);
+    return await response.json() as unknown;
+  } catch (rawError) {
+    if (Date.now() < catalogApiFallbackAvailableAt) throw rawError;
+    catalogApiFallbackAvailableAt = Date.now() + 120_000;
+    const response = await fetch(REMOTE_CATALOG_API_URL, {
+      cache: "no-store",
+      headers: { Accept: "application/vnd.github+json" },
+    });
+    if (!response.ok) throw new Error(`GitHub API HTTP ${response.status}`);
+    const payload = await response.json() as { content?: string; encoding?: string };
+    if (payload.encoding !== "base64" || typeof payload.content !== "string") throw new Error("GitHub API no devolvió el catálogo esperado");
+    const bytes = Uint8Array.from(atob(payload.content.replace(/\s/g, "")), (character) => character.charCodeAt(0));
+    return JSON.parse(new TextDecoder().decode(bytes)) as unknown;
+  }
+}
 
 const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
   { id: "progress", label: "Caja", icon: Box },
@@ -405,6 +429,11 @@ export default function App() {
   const importRef = useRef<HTMLInputElement>(null);
   const voiceAlertRef = useRef("");
 
+  const setHomeOverlayEditing = useCallback((enabled: boolean) => {
+    setHomeOverlayConfigOpen(enabled);
+    if (isTauri()) void emit("caja-fantasma-overlay-edit-mode", { enabled });
+  }, []);
+
   const SHINY_MOD_CATALOG = shinyCatalogModule?.SHINY_MOD_CATALOG ?? EMPTY_SHINY_CATALOG;
   const SHINY_MOD_GROUPS = shinyCatalogModule?.SHINY_MOD_GROUPS ?? EMPTY_SHINY_GROUPS;
   const SHINY_MOD_CATALOG_META = shinyCatalogModule?.SHINY_MOD_CATALOG_META ?? { sourceUrl: "", sourceCheckedAt: "", total: 0, legacy: 0, normal: 0, shiny: 0 };
@@ -568,6 +597,14 @@ export default function App() {
   }, [creatorAccess, tab]);
 
   useEffect(() => {
+    if (tab !== "progress" && homeOverlayConfigOpen) setHomeOverlayEditing(false);
+  }, [homeOverlayConfigOpen, setHomeOverlayEditing, tab]);
+
+  useEffect(() => () => {
+    if (isTauri()) void emit("caja-fantasma-overlay-edit-mode", { enabled: false });
+  }, []);
+
+  useEffect(() => {
     void showOverlay(state.settings.overlayEnabled);
   }, [state.settings.overlayEnabled]);
 
@@ -591,39 +628,9 @@ export default function App() {
   const syncCatalog = useCallback(async (silent = false) => {
     if (!silent) setSyncStatus("Buscando catálogo público…");
     try {
-      const response = await fetch(`${REMOTE_CATALOG_URL}?v=${Date.now()}`, { cache: "no-store" });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const catalog = await response.json() as unknown;
+      const catalog = await fetchPublicCatalog();
       if (!validateCatalog(catalog)) throw new Error("formato no válido");
-      setState((current) => {
-        if (catalog.catalogVersion < current.catalog.catalogVersion) return current;
-        const hasNewCatalog = catalog.catalogVersion > current.catalog.catalogVersion;
-        const timing = catalog.eventTiming;
-        const appliedTiming = Date.parse(current.settings.sharedTimingUpdatedAt ?? "");
-        const remoteTiming = Date.parse(timing?.updatedAt ?? "");
-        if (!timing) return hasNewCatalog ? { ...current, catalog } : current;
-        const selectedVisionId = sharedVisionId(catalog, current.settings.selectedVisionId);
-        const hasNewTiming = !Number.isFinite(appliedTiming) || remoteTiming > appliedTiming;
-        if (!hasNewCatalog && !hasNewTiming && current.settings.selectedVisionId === selectedVisionId) return current;
-        return {
-          ...current,
-          catalog: hasNewCatalog ? catalog : current.catalog,
-          settings: {
-            ...current.settings,
-            selectedVisionId,
-            ...(hasNewTiming ? {
-              waitMinutes: timing.waitMinutes,
-              activeMinutes: timing.activeMinutes,
-              transitionDelayMilliseconds: resolveTransitionDelayMilliseconds(timing, current.settings.transitionDelayMilliseconds),
-              phaseStartedAt: timing.phaseStartedAt,
-              phase: timing.phase,
-              lastNotificationPhaseStartedAt: undefined,
-              lastVoiceAlertPhaseStartedAt: undefined,
-              sharedTimingUpdatedAt: timing.updatedAt,
-            } : {}),
-          },
-        };
-      });
+      setState((current) => applyRemoteCatalog(current, catalog));
       setSyncStatus("Catálogo público comprobado");
     } catch (error) {
       setSyncStatus(`Sin conexión · usando catálogo local`);
@@ -634,8 +641,8 @@ export default function App() {
   useEffect(() => {
     void syncCatalog(true);
     const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void syncCatalog(true);
-    }, 60_000);
+      void syncCatalog(true);
+    }, 30_000);
     const refresh = () => void syncCatalog(true);
     const refreshWhenVisible = () => { if (document.visibilityState === "visible") refresh(); };
     window.addEventListener("online", refresh);
@@ -1137,7 +1144,7 @@ export default function App() {
             <article className={`home-overlay-controls panel ${homeOverlayConfigOpen ? "expanded" : ""}`}>
               <div><span className="eyebrow"><MonitorUp size={15} /> VENTANA FLOTANTE</span><h2>Tamaño rápido</h2><p>Ajusta por separado la ventana, la Ballena y el reloj que aparece sobre su rayo.</p></div>
               <div className="home-overlay-actions">
-                <button type="button" className="secondary" aria-expanded={homeOverlayConfigOpen} aria-controls="home-overlay-size-panel" onClick={() => setHomeOverlayConfigOpen((current) => !current)}><Settings2 size={17} /> {homeOverlayConfigOpen ? "Ocultar tamaños" : "Configurar tamaños"}</button>
+                <button type="button" className="secondary" aria-expanded={homeOverlayConfigOpen} aria-controls="home-overlay-size-panel" onClick={() => setHomeOverlayEditing(!homeOverlayConfigOpen)}><Settings2 size={17} /> {homeOverlayConfigOpen ? "Terminar ajuste" : "Configurar tamaños"}</button>
                 <button type="button" className={`secondary overlay-home-button ${state.settings.overlayEnabled ? "enabled" : ""}`} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><Eye size={18} /> {state.settings.overlayEnabled ? "Quitar ventana" : "Agregar ventana"}</button>
               </div>
               {homeOverlayConfigOpen && <div id="home-overlay-size-panel" className="home-overlay-size-panel">

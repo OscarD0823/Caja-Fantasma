@@ -4,7 +4,7 @@ import { VISION_CYCLE_WAIT_STARTED_AT, clampNumber, createInitialCharacterTracki
 
 const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
 const OVERLAY_POSITION_KEY = "caja-fantasma.once-human.overlay-position.v1";
-const CURRENT_DATA_RESET_VERSION = 1;
+const CURRENT_DATA_RESET_VERSION = 2;
 const OVERLAY_SHAPES = new Set<OverlayShape>(["event", "rectangle", "square", "vertical", "round"]);
 const OVERLAY_COUNTER_STYLES = new Set<OverlayCounterStyle>(["digital", "compact", "ring"]);
 const OVERLAY_NAME_MODES = new Set<OverlayNameMode>(["spanish", "english", "custom"]);
@@ -118,7 +118,9 @@ export function loadState(): PersistedState {
       settings.sharedTimingUpdatedAt = timing?.updatedAt;
       settings.timingPresetVersion = 4;
     }
-    const mustClearPreviousRecords = (parsed.settings?.dataResetVersion ?? 0) < CURRENT_DATA_RESET_VERSION;
+    const previousResetVersion = parsed.settings?.dataResetVersion ?? 0;
+    const mustClearPreviousRecords = previousResetVersion < 1;
+    const mustClearBoxHistory = previousResetVersion < CURRENT_DATA_RESET_VERSION;
     settings.dataResetVersion = CURRENT_DATA_RESET_VERSION;
     const catalog = parsed.catalog.catalogVersion >= fresh.catalog.catalogVersion ? parsed.catalog : fresh.catalog;
     settings.selectedVisionId = sharedVisionId(catalog, settings.selectedVisionId);
@@ -138,7 +140,7 @@ export function loadState(): PersistedState {
       ...parsed,
       catalog,
       actions: mustClearPreviousRecords ? [] : Array.isArray(parsed.actions) ? parsed.actions : [],
-      boxes: mustClearPreviousRecords ? [] : Array.isArray(parsed.boxes) ? parsed.boxes : [],
+      boxes: mustClearBoxHistory ? [] : Array.isArray(parsed.boxes) ? parsed.boxes : [],
       manualBaselinePoints: mustClearPreviousRecords ? [] : Array.isArray(parsed.manualBaselinePoints)
         ? parsed.manualBaselinePoints.filter((value) => Number.isFinite(value) && value > 0 && value <= 10_000).map(Math.round).slice(0, 500)
         : [],

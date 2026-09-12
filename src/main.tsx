@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import App from "./App";
 import Overlay from "./Overlay";
+import WhaleVisualHarness from "./WhaleVisualHarness";
 import "./styles.css";
 
 const label = (() => {
@@ -13,6 +14,8 @@ const label = (() => {
   }
 })();
 
+const visualWhaleTest = import.meta.env.DEV && new URLSearchParams(window.location.search).has("whale-visual-test");
+
 createRoot(document.getElementById("root")!).render(
-  <StrictMode>{label === "overlay" ? <Overlay /> : <App />}</StrictMode>,
+  <StrictMode>{visualWhaleTest ? <WhaleVisualHarness /> : label === "overlay" ? <Overlay /> : <App />}</StrictMode>,
 );

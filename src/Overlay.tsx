@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { LogicalSize, PhysicalPosition } from "@tauri-apps/api/dpi";
-import { emit } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, Window } from "@tauri-apps/api/window";
 import type { PersistedState } from "./model";
 import { clampNumber, computeCountdownTransition, computeCycle, computeGravityWhale } from "./model";
@@ -10,7 +10,8 @@ import { loadOverlayPosition, loadState, saveOverlayPosition, saveState } from "
 export default function Overlay() {
   const [state, setState] = useState<PersistedState>(() => loadState());
   const [now, setNow] = useState(Date.now());
-  const [interactive, setInteractive] = useState(true);
+  const [editMode, setEditMode] = useState(false);
+  const [interactive, setInteractive] = useState(false);
   const cycle = computeCycle(state.settings, now);
   const transition = computeCountdownTransition(state.settings, now);
   const whale = computeGravityWhale(state.settings, now);
@@ -37,17 +38,31 @@ export default function Overlay() {
   }, []);
 
   useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen<{ enabled?: boolean }>("caja-fantasma-overlay-edit-mode", ({ payload }) => {
+      setEditMode(payload?.enabled === true);
+    }).then((stop) => { unlisten = stop; });
+    return () => unlisten?.();
+  }, []);
+
+  useEffect(() => {
     const overlayWindow = getCurrentWindow();
     let stopped = false;
-    let timer = 0;
-    let lastInteractive: boolean | undefined;
+    let fallbackTimer = 0;
+    let queuedRefresh = 0;
+    let lastInteractive = false;
+    const unlisteners: Array<() => void> = [];
     const updateInteraction = async () => {
       if (stopped) return;
       try {
         const mainWindow = await Window.getByLabel("main");
-        const visible = await mainWindow?.isVisible() ?? false;
-        const minimized = visible ? await mainWindow?.isMinimized() ?? false : false;
-        const nextInteractive = visible && !minimized;
+        const [visible, minimized, mainFocused, overlayFocused] = await Promise.all([
+          mainWindow?.isVisible() ?? Promise.resolve(false),
+          mainWindow?.isMinimized() ?? Promise.resolve(true),
+          mainWindow?.isFocused() ?? Promise.resolve(false),
+          overlayWindow.isFocused(),
+        ]);
+        const nextInteractive = editMode && visible && !minimized && (mainFocused || overlayFocused);
         if (nextInteractive !== lastInteractive) {
           lastInteractive = nextInteractive;
           setInteractive(nextInteractive);
@@ -59,17 +74,30 @@ export default function Overlay() {
           setInteractive(false);
           await overlayWindow.setIgnoreCursorEvents(true).catch(() => undefined);
         }
-      } finally {
-        if (!stopped) timer = window.setTimeout(updateInteraction, 1_000);
       }
     };
-    void updateInteraction();
+    const queueRefresh = (delay = 20) => {
+      window.clearTimeout(queuedRefresh);
+      queuedRefresh = window.setTimeout(() => void updateInteraction(), delay);
+    };
+    const start = async () => {
+      await overlayWindow.setIgnoreCursorEvents(true).catch(() => undefined);
+      await updateInteraction();
+      if (stopped) return;
+      const mainWindow = await Window.getByLabel("main");
+      if (mainWindow) unlisteners.push(await mainWindow.onFocusChanged(() => queueRefresh()));
+      unlisteners.push(await overlayWindow.onFocusChanged(() => queueRefresh()));
+      fallbackTimer = window.setInterval(() => void updateInteraction(), 2_000);
+    };
+    void start();
     return () => {
       stopped = true;
-      window.clearTimeout(timer);
-      void overlayWindow.setIgnoreCursorEvents(false);
+      window.clearInterval(fallbackTimer);
+      window.clearTimeout(queuedRefresh);
+      unlisteners.forEach((unlisten) => unlisten());
+      void overlayWindow.setIgnoreCursorEvents(true);
     };
-  }, []);
+  }, [editMode]);
 
   useEffect(() => {
     const onStorage = () => setState(loadState());
