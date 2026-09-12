@@ -30,13 +30,18 @@ type Props = {
   preview?: boolean;
 };
 
-export function overlayDesignSize(showWhale: boolean, shape: OverlayShape = "event") {
+export function overlayDesignSize(showWhale: boolean, shape: OverlayShape = "event", addonScale = 1) {
   const base = OVERLAY_SHAPE_SIZES[shape] ?? OVERLAY_SHAPE_SIZES.event;
-  return showWhale ? { width: Math.max(base.width, OVERLAY_WHALE_WIDTH), height: base.height + OVERLAY_WHALE_HEIGHT } : base;
+  const normalizedAddonScale = clampAddonScale(addonScale);
+  return showWhale ? {
+    width: Math.max(base.width, Math.round(OVERLAY_WHALE_WIDTH * normalizedAddonScale)),
+    height: base.height + Math.round(OVERLAY_WHALE_HEIGHT * normalizedAddonScale),
+  } : base;
 }
 
 export default function OverlayVisual({ vision, phase, remainingMs, progress, transitionRemainingMs = 0, whale, addonScale, shape, counterStyle, nameMode, customName, onClose, preview = false }: Props) {
   const remainingWhalePercent = Math.max(0, Math.min(100, Math.round((1 - whale.progress) * 100)));
+  const normalizedAddonScale = clampAddonScale(addonScale);
   const eventName = overlayVisionName(vision, nameMode, customName);
   const designSize = OVERLAY_SHAPE_SIZES[shape] ?? OVERLAY_SHAPE_SIZES.event;
   const transitionActive = transitionRemainingMs > 0;
@@ -64,18 +69,20 @@ export default function OverlayVisual({ vision, phase, remainingMs, progress, tr
       </div>
     </section>
 
-    {whale.visible && <section style={{ "--overlay-addon-scale": clampAddonScale(addonScale) } as CSSProperties} className={`overlay-whale-stage ${whale.departing ? "departing" : "engaged"}`} aria-label={whale.departing ? "El Riftwalker se retira" : `Riftwalker activo durante ${formatDuration(whale.remainingMs)}`}>
-      <div className="overlay-whale-motion">
-        <div className="overlay-whale-scale">
-          <div className="overlay-whale-boss" aria-hidden="true">
-            <span className="boss-segment tail"><img src={GRAVITY_WHALE_BOSS_IMAGE} alt="" /></span>
-            <span className="boss-segment body"><img src={GRAVITY_WHALE_BOSS_IMAGE} alt="" /></span>
-            <span className="boss-segment head"><img src={GRAVITY_WHALE_BOSS_IMAGE} alt="" /></span>
-            <span className="boss-energy"><i /><i /><i /></span>
-          </div>
-          <div className="overlay-whale-beam">
-            <span style={{ width: `${remainingWhalePercent}%` }} />
-            {!whale.departing && <strong>{formatDuration(whale.remainingMs)}</strong>}
+    {whale.visible && <section style={{ width: (OVERLAY_WHALE_WIDTH - 8) * normalizedAddonScale, height: (OVERLAY_WHALE_HEIGHT - 4) * normalizedAddonScale } as CSSProperties} className={`overlay-whale-stage ${whale.departing ? "departing" : "engaged"}`} aria-label={whale.departing ? "El Riftwalker se retira" : `Riftwalker activo durante ${formatDuration(whale.remainingMs)}`}>
+      <div className="overlay-whale-canvas" style={{ transform: `translateX(-50%) scale(${normalizedAddonScale})` }}>
+        <div className="overlay-whale-motion">
+          <div className="overlay-whale-swimmer">
+            <div className="overlay-whale-boss" aria-hidden="true">
+              <span className="boss-segment tail"><img src={GRAVITY_WHALE_BOSS_IMAGE} alt="" /></span>
+              <span className="boss-segment body"><img src={GRAVITY_WHALE_BOSS_IMAGE} alt="" /></span>
+              <span className="boss-segment head"><img src={GRAVITY_WHALE_BOSS_IMAGE} alt="" /></span>
+              <span className="boss-energy"><i /><i /><i /></span>
+            </div>
+            <div className="overlay-whale-beam">
+              <span style={{ width: `${remainingWhalePercent}%` }} />
+              {!whale.departing && <strong>{formatDuration(whale.remainingMs)}</strong>}
+            </div>
           </div>
         </div>
       </div>
@@ -84,5 +91,5 @@ export default function OverlayVisual({ vision, phase, remainingMs, progress, tr
 }
 
 function clampAddonScale(value: number) {
-  return String(Math.max(.2, Math.min(1, Number.isFinite(value) ? value : 1)));
+  return Math.max(.2, Math.min(1, Number.isFinite(value) ? value : 1));
 }

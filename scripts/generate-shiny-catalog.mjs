@@ -94,7 +94,7 @@ function normalizeEntry(entry, index) {
     baseName: String(entry.base_name ?? entry.name),
     baseEnglishName,
     variant: entry.family ? String(entry.family) : "Sin variante",
-    levelLabel: isCatalogShiny ? "Nivel 17 brillante" : "Nivel 1–17",
+    levelLabel: isCatalogShiny ? "Brillante" : "Nivel 0–17",
     applyRange: canonicalRange(entry.apply_range_desc),
     modType: entry.mod_type ? String(entry.mod_type) : "",
     system,

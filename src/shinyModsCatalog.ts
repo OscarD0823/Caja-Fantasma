@@ -10,7 +10,7 @@ export type ShinyModCatalogItem = {
   baseName: string;
   baseEnglishName: string;
   variant: string;
-  levelLabel: "Nivel 1–17" | "Nivel 17 brillante";
+  levelLabel: "Nivel 0–17" | "Brillante";
   applyRange: string;
   modType: string;
   system: ShinyModSystem;

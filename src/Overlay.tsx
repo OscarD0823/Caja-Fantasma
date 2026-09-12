@@ -15,7 +15,7 @@ export default function Overlay() {
   const whale = computeGravityWhale(state.settings, now);
   const selectedVision = useMemo(() => state.catalog.visions.find((vision) => vision.id === state.settings.selectedVisionId), [state.catalog.visions, state.settings.selectedVisionId]);
   const overlayScale = clampNumber(state.settings.overlayScale, .2, 1.5);
-  const designSize = overlayDesignSize(whale.visible, state.settings.overlayShape);
+  const designSize = overlayDesignSize(whale.visible, state.settings.overlayShape, state.settings.overlayAddonScale);
 
   const hideOverlay = () => {
     const next = { ...state, settings: { ...state.settings, overlayEnabled: false } };

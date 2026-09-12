@@ -565,20 +565,22 @@ html.overlay-document, body.overlay-document, body.overlay-document #root { over
 .overlay-grip { flex: none; color: rgba(188, 219, 222, .45); filter: drop-shadow(0 1px 3px #000); }
 .overlay-visual button { flex: none; width: 27px; height: 27px; padding: 0; border: 1px solid rgba(173, 215, 220, .12); border-radius: 8px; display: grid; place-items: center; color: #9cb4b9; background: rgba(3, 15, 23, .62); cursor: pointer; }
 .overlay-visual.preview button { pointer-events: none; }
-.overlay-whale-stage { position: relative; z-index: 2; flex: none; width: 512px; height: 146px; margin-top: -2px; pointer-events: none; }
-.overlay-whale-motion { position: absolute; inset: 0; overflow: hidden; contain: layout paint style; isolation: isolate; border: 1px solid rgba(99, 210, 255, .34); border-radius: 17px 17px 29px 13px; background: radial-gradient(circle at 71% 48%, rgba(45, 154, 224, .17), transparent 24%), linear-gradient(160deg, rgba(3, 21, 37, .96), rgba(4, 12, 23, .9)); box-shadow: 0 12px 30px rgba(0, 5, 15, .45), inset 0 0 28px rgba(67, 184, 255, .11); -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 7%, #000 94%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0, #000 7%, #000 94%, transparent 100%); }
+.overlay-whale-stage { position: relative; z-index: 2; flex: none; margin-top: -2px; pointer-events: none; transition: width .3s ease, height .3s ease; }
+.overlay-whale-canvas { position: absolute; left: 50%; top: 0; width: 512px; height: 146px; transform-origin: top center; transition: transform .3s ease; }
+.overlay-whale-motion { position: absolute; inset: 0; overflow: hidden; contain: layout paint style; isolation: isolate; }
 .overlay-whale-stage.engaged .overlay-whale-motion { animation: overlay-whale-arrive 2.4s cubic-bezier(.18, .74, .22, 1) both; }
 .overlay-whale-stage.departing .overlay-whale-motion { animation: overlay-whale-depart 4s cubic-bezier(.35, 0, .55, 1) forwards; }
-.overlay-whale-scale { position: absolute; inset: 0; transform: scale(var(--overlay-addon-scale, 1)); transform-origin: center; transition: transform .3s ease; }
+.overlay-whale-swimmer { position: absolute; inset: 0; }
 .overlay-whale-boss { position: absolute; z-index: 2; left: 3%; top: 5px; width: 76%; height: 125px; filter: drop-shadow(0 8px 13px rgba(0, 0, 0, .72)) drop-shadow(0 0 8px rgba(44, 163, 255, .2)); }
 .boss-segment { position: absolute; inset: 0; }
 .boss-segment img { width: 100%; height: 100%; display: block; object-fit: contain; }
 .boss-segment.tail { clip-path: polygon(0 0, 55% 0, 58% 100%, 0 100%); transform-origin: 56% 57%; }
 .boss-segment.body { clip-path: polygon(42% 0, 81% 0, 82% 100%, 39% 100%); transform-origin: 60% 54%; }
 .boss-segment.head { clip-path: polygon(70% 0, 100% 0, 100% 100%, 68% 100%); transform-origin: 72% 54%; }
-.overlay-whale-stage.engaged .boss-segment.tail { will-change: transform; animation: riftwalker-tail-swim 3.1s 2.2s ease-in-out infinite alternate; }
-.overlay-whale-stage.engaged .boss-segment.body { will-change: transform, filter; animation: riftwalker-core-breathe 2.35s 2.15s ease-in-out infinite alternate; }
-.overlay-whale-stage.engaged .boss-segment.head { will-change: transform; animation: riftwalker-head-aim 1.8s 2.05s ease-in-out infinite alternate; }
+.overlay-whale-stage.engaged .overlay-whale-swimmer, .overlay-whale-stage.departing .overlay-whale-swimmer { will-change: transform; animation: riftwalker-swim-drift 2.7s ease-in-out infinite alternate; }
+.overlay-whale-stage.engaged .boss-segment.tail, .overlay-whale-stage.departing .boss-segment.tail { will-change: transform; animation: riftwalker-tail-swim 1.55s ease-in-out infinite alternate; }
+.overlay-whale-stage.engaged .boss-segment.body, .overlay-whale-stage.departing .boss-segment.body { will-change: transform, filter; animation: riftwalker-core-breathe 1.85s ease-in-out infinite alternate; }
+.overlay-whale-stage.engaged .boss-segment.head, .overlay-whale-stage.departing .boss-segment.head { will-change: transform; animation: riftwalker-head-aim 1.2s ease-in-out infinite alternate; }
 .boss-energy { position: absolute; z-index: 4; left: 66%; top: 48%; width: 24px; height: 24px; border-radius: 50%; background: radial-gradient(circle, #f2feff 0 12%, #5ad5ff 28%, rgba(39, 128, 255, .35) 52%, transparent 72%); filter: drop-shadow(0 0 7px #54cfff); animation: riftwalker-energy-pulse .85s ease-in-out infinite alternate; }
 .boss-energy i { position: absolute; left: 50%; top: 50%; width: 3px; height: 34px; border-radius: 50%; background: linear-gradient(#dffaff, transparent); transform-origin: 50% 0; }
 .boss-energy i:nth-child(1) { transform: rotate(70deg) translateY(-2px); }
@@ -636,6 +638,7 @@ html.overlay-document, body.overlay-document, body.overlay-document #root { over
 @keyframes gravity-scene-crossfade { 0%, 8% { opacity: 0; transform: scale(1.035); } 18%, 48% { opacity: .72; } 58%, 100% { opacity: 0; transform: scale(1); } }
 @keyframes overlay-gravity-scenes { 0%, 8% { opacity: 0; transform: scale(1.045); } 18%, 48% { opacity: .58; transform: scale(1.02); } 58%, 100% { opacity: 0; transform: scale(1); } }
 @keyframes overlay-whale-arrive { 0% { opacity: 0; transform: translate(-125%, -78px) scale(.68) rotate(-3deg); } 16% { opacity: .9; } 52% { opacity: 1; transform: translate(28%, -66px) scale(.84) rotate(2deg); } 78% { transform: translate(4%, -6px) scale(1.02) rotate(-.5deg); } 100% { opacity: 1; transform: translate(0, 0) scale(1) rotate(0); } }
+@keyframes riftwalker-swim-drift { from { transform: translateY(2px) rotate(-.35deg); } to { transform: translateY(-4px) rotate(.45deg); } }
 @keyframes riftwalker-tail-swim { from { transform: rotate(-1.4deg) translateY(1px); } to { transform: rotate(2.1deg) translateY(-3px); } }
 @keyframes riftwalker-core-breathe { from { transform: translateY(1px) scale(1); filter: brightness(.96); } to { transform: translateY(-2px) scale(1.008); filter: brightness(1.12); } }
 @keyframes riftwalker-head-aim { from { transform: rotate(.7deg) translateY(1px); } to { transform: rotate(-1deg) translate(2px, -2px); } }
@@ -707,7 +710,7 @@ html.overlay-document, body.overlay-document, body.overlay-document #root { over
   .intro-title { opacity: 1; }
   .intro-progress i { transform: none; }
   .overlay-whale-stage.engaged .overlay-whale-motion { animation: none; }
-  .overlay-whale-stage.engaged .boss-segment, .overlay-whale-stage.engaged .boss-energy { animation: none; }
+  .overlay-whale-stage.engaged .overlay-whale-swimmer, .overlay-whale-stage.departing .overlay-whale-swimmer, .overlay-whale-stage.engaged .boss-segment, .overlay-whale-stage.departing .boss-segment, .overlay-whale-stage.engaged .boss-energy, .overlay-whale-stage.departing .boss-energy { animation: none; }
   .overlay-whale-stage.engaged .overlay-whale-beam { opacity: 1; animation: none; }
 }
 

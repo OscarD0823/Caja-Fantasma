@@ -34,7 +34,7 @@ export default function OverlayPreviewLab({ catalog, scale, addonScale, shape, c
     remainingMs: whaleMode === "departing" ? 0 : 12 * 60_000 + 34_000,
     progress: whaleMode === "departing" ? 1 : .38,
   }), [vision?.id, whaleMode]);
-  const designSize = overlayDesignSize(whale.visible, shape);
+  const designSize = overlayDesignSize(whale.visible, shape, normalizedAddonScale);
 
   return <section className="overlay-lab">
     <div className="overlay-lab-heading">
@@ -51,7 +51,7 @@ export default function OverlayPreviewLab({ catalog, scale, addonScale, shape, c
       <div><span>Fase</span><div className="preview-choice"><button type="button" className={phase === "waiting" ? "selected" : ""} onClick={() => setPhase("waiting")}><Radio size={14} /> Espera</button><button type="button" className={phase === "active" ? "selected" : ""} onClick={() => setPhase("active")}><Radio size={14} /> Activa</button><button type="button" className={phase === "transition" ? "selected" : ""} onClick={() => setPhase("transition")}><Radio size={14} /> Retraso</button></div></div>
       <div><span>Ballena</span><div className="preview-choice"><button type="button" className={whaleMode === "hidden" ? "selected" : ""} onClick={() => setWhaleMode("hidden")}>Oculta</button><button type="button" disabled={vision?.id !== "gravity"} className={whaleMode === "active" ? "selected" : ""} onClick={() => setWhaleMode("active")}><Waves size={14} /> Disparando</button><button type="button" disabled={vision?.id !== "gravity"} className={whaleMode === "departing" ? "selected" : ""} onClick={() => setWhaleMode("departing")}>Salida</button></div></div>
       <label className="overlay-size-control"><span>Tamaño de ventana <strong>{Math.round(normalizedScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(normalizedScale * 100)} onChange={(event) => onScaleChange(Number(event.target.value) / 100)} /></label>
-      <label className="overlay-size-control"><span>Ballena y adicionales <strong>{Math.round(normalizedAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(normalizedAddonScale * 100)} onChange={(event) => onAddonScaleChange(Number(event.target.value) / 100)} /></label>
+      <label className="overlay-size-control"><span>Área de Ballena <strong>{Math.round(normalizedAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(normalizedAddonScale * 100)} onChange={(event) => onAddonScaleChange(Number(event.target.value) / 100)} /></label>
     </div>
 
     <div className="overlay-lab-canvas" style={{ minHeight: Math.round(designSize.height * normalizedScale) + 28 }}>

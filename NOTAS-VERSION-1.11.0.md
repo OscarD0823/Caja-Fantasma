@@ -11,7 +11,7 @@ Versión preparada localmente el 11 de septiembre de 2026. Todavía no está pub
 - Retraso visual configurable de 0 a 300 segundos después del evento, sin modificar la hora real del ciclo.
 - Personajes deja Configuración y pasa a su propio menú principal.
 - Cambios y las herramientas de desarrollo quedan reservados para OscarD0823 después de verificar GitHub.
-- Nombres bilingües del juego: Jolgorio Lunar / Lunar Revelry, Abismo de Gravedad / Gravity Abyss y Progenie Aberrante / Aberrant Progeny. El tercer modo de nombre sigue siendo personalizado.
+- Nombres bilingües del juego: Lunar / Lunar Revelry, Abismo de Gravedad / Gravity Abyss y Progenie Aberrante / Aberrant Progeny. El tercer modo de nombre sigue siendo personalizado.
 - Temporizadores y sondeos adaptativos cuando la aplicación o el contador están ocultos, y sincronización pública pausada mientras la ventana principal no es visible.
 
 ## Estado

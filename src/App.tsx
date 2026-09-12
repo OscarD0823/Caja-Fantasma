@@ -109,12 +109,23 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
   { id: "characters", label: "Personajes", icon: Users },
   { id: "vision", label: "Visión", icon: Eye },
   { id: "history", label: "Historial", icon: History },
-  { id: "shiny", label: "Mods Shiny", icon: Gem },
+  { id: "shiny", label: "Mods Brillantes", icon: Gem },
   { id: "changes", label: "Cambios", icon: FileClock },
   { id: "settings", label: "Configuración", icon: Settings2 },
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.12.0",
+    date: "11 de septiembre de 2026",
+    title: "Ballena sin marco y módulos desde nivel cero",
+    items: [
+      "Lunar vuelve a mostrarse como Lunar en español; el nombre inglés permanece como Lunar Revelry.",
+      "Todos los módulos normales muestran Nivel 0–17 y el estado especial se presenta como Brillante.",
+      "La Ballena nada desde que entra, continúa moviéndose mientras dispara y conserva el movimiento al retirarse.",
+      "El área transparente de la Ballena cambia de tamaño de forma independiente al contador y ya no usa el marco oscuro anterior.",
+    ],
+  },
   {
     version: "1.11.0",
     date: "11 de septiembre de 2026",
@@ -218,7 +229,7 @@ const CHANGELOG = [
     items: [
       "Las armas aparecen agrupadas por estilo y las armaduras por casco, máscara, parte superior, guantes, pantalones y zapatos.",
       "Cada grupo tiene su propio encabezado y el selector separa claramente ARMAS de ARMADURA.",
-      "Los módulos normales muestran Nivel 1–17 y las versiones Shiny muestran Nivel 17 brillante.",
+      "Los módulos normales muestran Nivel 0–17 y las versiones especiales se muestran como Brillante.",
       "El nivel antiguo de la fuente dejó de mostrarse como si fuera el nivel actual del módulo.",
       "El objetivo global cambió a 1.000 puntos y el Desafío de Manibus de Endless Dream ahora suma 1 punto.",
       "El propietario puede publicar el tiempo exacto de la rueda para que todos los equipos adopten el mismo ciclo absoluto, incluso tras apagar el PC.",
@@ -233,19 +244,19 @@ const CHANGELOG = [
     date: "10 de septiembre de 2026",
     title: "Catálogo completo de módulos",
     items: [
-      "El buscador ahora cubre los 1.825 registros exactos: 207 del sistema anterior, 809 normales 2.0 y 809 Shiny 2.0.",
+      "El buscador ahora cubre los 1.825 registros exactos: 207 del sistema anterior, 809 normales 2.0 y 809 Brillantes 2.0.",
       "Cada combinación de nombre, variante, ranura, estilo e ID se puede buscar y añadir al seguimiento.",
-      "Todos los registros se pueden controlar como objetivo Shiny, sin restricciones por su clasificación de origen.",
-      "Nuevo buscador para localizar objetivos activos y módulos Shiny ya conseguidos dentro del historial personal.",
+      "Todos los registros se pueden controlar como objetivo Brillante, sin restricciones por su clasificación de origen.",
+      "Nuevo buscador para localizar objetivos activos y módulos Brillantes ya conseguidos dentro del historial personal.",
     ],
   },
   {
     version: "1.4.0",
     date: "10 de septiembre de 2026",
-    title: "Control de módulos Shiny",
+    title: "Control de módulos Brillantes",
     items: [
       "Nuevo seguimiento de intentos fallidos con duplicados nivel 17 para cada módulo y variante.",
-      "Colección separada para marcar los módulos que ya se convirtieron en Shiny y conservar su fecha.",
+      "Colección separada para marcar los módulos que ya se convirtieron en Brillantes y conservar su fecha.",
       "Catálogo bilingüe con 100 módulos base actuales: 36 de arma y 64 de armadura.",
       "Hora punta · Estrella descendente está disponible como combinación del catálogo.",
     ],
@@ -895,7 +906,7 @@ export default function App() {
 
   const setShinyObtained = (id: string, obtained: boolean) => {
     updateShinyRecord(id, (record) => ({ ...record, isShiny: obtained, obtainedAt: obtained ? new Date().toISOString() : undefined }));
-    setToast(obtained ? "Módulo marcado como Shiny" : "Módulo devuelto a la lista de búsqueda");
+    setToast(obtained ? "Módulo marcado como Brillante" : "Módulo devuelto a la lista de búsqueda");
     window.setTimeout(() => setToast(""), 2200);
   };
 
@@ -1099,7 +1110,7 @@ export default function App() {
             <article className="home-overlay-controls panel">
               <div><span className="eyebrow"><MonitorUp size={15} /> VENTANA FLOTANTE</span><h2>Tamaño rápido</h2><p>Ajusta el contador y el espacio de la Ballena desde el inicio. Los adicionales nunca superan el tamaño de la ventana.</p></div>
               <label className="overlay-size-control"><span>Ventana <strong>{Math.round(state.settings.overlayScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
-              <label className="overlay-size-control"><span>Ballena y futuros <strong>{Math.round(state.settings.overlayAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(state.settings.overlayAddonScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(Number(event.target.value) / 100, .2, 1) } }))} /></label>
+              <label className="overlay-size-control"><span>Área de Ballena <strong>{Math.round(state.settings.overlayAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(state.settings.overlayAddonScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(Number(event.target.value) / 100, .2, 1) } }))} /></label>
               <button type="button" className={`secondary overlay-home-button ${state.settings.overlayEnabled ? "enabled" : ""}`} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><Eye size={18} /> {state.settings.overlayEnabled ? "Quitar ventana" : "Agregar ventana"}</button>
             </article>
 
@@ -1151,8 +1162,8 @@ export default function App() {
                   {state.settings.overlayNameMode === "custom" && <label>Tu nombre<input maxLength={40} value={state.settings.overlayCustomName} placeholder="Ej. Gravedad azul" onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayCustomName: event.target.value.slice(0, 40) } }))} /></label>}
                 </div>
                 <label className="overlay-size-control"><span>Tamaño de ventana <strong>{Math.round(state.settings.overlayScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
-                <label className="overlay-size-control"><span>Ballena y adicionales <strong>{Math.round(state.settings.overlayAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(state.settings.overlayAddonScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(Number(event.target.value) / 100, .2, 1) } }))} /></label>
-                <p>Arrástrala a cualquier zona de la pantalla. La ventana baja hasta 20 %; la Ballena y futuros adicionales nunca superan su espacio.</p>
+                <label className="overlay-size-control"><span>Área de Ballena <strong>{Math.round(state.settings.overlayAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(state.settings.overlayAddonScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(Number(event.target.value) / 100, .2, 1) } }))} /></label>
+                <p>Arrástrala a cualquier zona de la pantalla. El tamaño del contador y el espacio transparente de la Ballena se configuran por separado.</p>
               </article>
             </div>
 
@@ -1268,14 +1279,14 @@ export default function App() {
           <section className="page shiny-page">
             <div className="stats-grid shiny-stats">
               <StatCard icon={Search} label="Buscando convertir" value={String(allActiveShinyGoals.length)} />
-              <StatCard icon={Gem} label="Shiny conseguidos" value={String(allObtainedShinyMods.length)} />
+              <StatCard icon={Gem} label="Brillantes conseguidos" value={String(allObtainedShinyMods.length)} />
               <StatCard icon={RotateCcw} label="Duplicados +17 fallidos" value={String(totalShinyAttempts)} />
               <StatCard icon={Trophy} label="Colección del catálogo" value={`${shinyCollectionPercent.toFixed(1)}%`} />
             </div>
 
             <article className="shiny-rule panel">
               <div className="shiny-rule-icon"><Gem /></div>
-              <div><span className="eyebrow">CÓMO FUNCIONA</span><h2>Del nivel 1 al 17, después brillante</h2><p>Todos los módulos progresan del nivel 1 al 17. Cuando ya tienes uno en nivel 17, otro igual puede convertirse en su versión Shiny, mostrada como “Nivel 17 brillante”. Pulsa “Otro +17 no se convirtió” después de cada fallo; cuando salga, márcalo como conseguido.</p></div>
+              <div><span className="eyebrow">CÓMO FUNCIONA</span><h2>Del nivel 0 al 17, después Brillante</h2><p>Todos los módulos progresan del nivel 0 al 17. Cuando ya tienes uno en nivel 17, otro igual puede convertirse en Brillante. Pulsa “Otro +17 no se convirtió” después de cada fallo; cuando salga, márcalo como conseguido.</p></div>
             </article>
 
             <article className="shiny-catalog-panel panel">
@@ -1283,7 +1294,7 @@ export default function App() {
               <div className="shiny-search-controls">
                 <label className="shiny-search-field">Buscar nombre, variante, estilo o ID<div><Search size={16} /><input value={shinySearch} onChange={(event) => setShinySearch(event.target.value)} placeholder="Ejemplo: Hora punta, Downstar o 19500542" /></div></label>
                 <label>Estilo o pieza<select value={shinyGroupFilter} onChange={(event) => setShinyGroupFilter(event.target.value)}><option value="all">Todas las armas y armaduras</option><optgroup label="ARMAS">{SHINY_MOD_GROUPS.filter((entry) => entry.category === "weapon").map((entry) => <option key={entry.id} value={entry.id}>{entry.name.replace("Arma · ", "")} ({entry.count})</option>)}</optgroup><optgroup label="ARMADURA">{SHINY_MOD_GROUPS.filter((entry) => entry.category === "armor").map((entry) => <option key={entry.id} value={entry.id}>{entry.name.replace("Armadura · ", "")} ({entry.count})</option>)}</optgroup></select></label>
-                <label>Nivel y sistema<select value={shinySystemFilter} onChange={(event) => setShinySystemFilter(event.target.value)}><option value="all">Todos ({SHINY_MOD_CATALOG_META.total.toLocaleString("es-CO")})</option><option value="legacy">Nivel 1–17 · anterior ({SHINY_MOD_CATALOG_META.legacy})</option><option value="normal">Nivel 1–17 · sistema 2.0 ({SHINY_MOD_CATALOG_META.normal})</option><option value="shiny">Nivel 17 brillante ({SHINY_MOD_CATALOG_META.shiny})</option></select></label>
+                <label>Nivel y sistema<select value={shinySystemFilter} onChange={(event) => setShinySystemFilter(event.target.value)}><option value="all">Todos ({SHINY_MOD_CATALOG_META.total.toLocaleString("es-CO")})</option><option value="legacy">Nivel 0–17 · anterior ({SHINY_MOD_CATALOG_META.legacy})</option><option value="normal">Nivel 0–17 · sistema 2.0 ({SHINY_MOD_CATALOG_META.normal})</option><option value="shiny">Brillante ({SHINY_MOD_CATALOG_META.shiny})</option></select></label>
               </div>
               <div className="shiny-result-summary"><span>{filteredShinyCatalog.length.toLocaleString("es-CO")} coincidencias en {groupedVisibleShinyCatalog.length} grupos</span>{filteredShinyCatalog.length > visibleShinyCatalogCount && <small>Se muestran {visibleShinyCatalogCount}. Elige una pieza, estilo o escribe una búsqueda para ver más.</small>}</div>
               <div className="shiny-catalog-results">
@@ -1296,16 +1307,16 @@ export default function App() {
                 <button type="button" className="primary" onClick={() => addShinyTracker()}><Plus size={17} /> Empezar en 0</button>
                 <button type="button" className="secondary" disabled={!shinySearch.trim()} onClick={() => addShinyTracker(shinySearch)}><Plus size={17} /> Agregar nombre escrito</button>
               </div>
-              <p className="catalog-source-note">Los {SHINY_MOD_CATALOG_META.total.toLocaleString("es-CO")} registros están ordenados por tipo de arma o pieza de armadura. Los normales cubren niveles 1–17; los {SHINY_MOD_CATALOG_META.shiny} registros brillantes representan el estado Shiny de nivel 17.</p>
+              <p className="catalog-source-note">Los {SHINY_MOD_CATALOG_META.total.toLocaleString("es-CO")} registros están ordenados por tipo de arma o pieza de armadura. Todos progresan de nivel 0 a 17; los {SHINY_MOD_CATALOG_META.shiny} registros especiales representan el estado Brillante.</p>
             </article>
 
-            <label className="shiny-search-field shiny-record-search">Buscar en mi registro<div><Search size={16} /><input value={shinyRecordSearch} onChange={(event) => setShinyRecordSearch(event.target.value)} placeholder="Buscar entre objetivos e historial Shiny" /></div></label>
+            <label className="shiny-search-field shiny-record-search">Buscar en mi registro<div><Search size={16} /><input value={shinyRecordSearch} onChange={(event) => setShinyRecordSearch(event.target.value)} placeholder="Buscar entre objetivos e historial Brillante" /></div></label>
 
             <div className="section-heading shiny-heading"><div><span className="eyebrow">EN PROCESO</span><h2>Intentos de conversión</h2></div><span>{activeShinyGoals.length}{normalizedRecordSearch ? ` de ${allActiveShinyGoals.length}` : ""} activos</span></div>
             {activeShinyGoals.length === 0 ? <div className="empty-card shiny-empty"><Gem size={30} /><strong>{normalizedRecordSearch ? "No hay coincidencias en los objetivos" : "No estás siguiendo ningún módulo"}</strong><span>{normalizedRecordSearch ? "Prueba con otro nombre, variante o estilo." : "Busca uno arriba, elige el registro exacto y pulsa “Empezar en 0”."}</span></div> : <div className="shiny-tracker-grid">{activeShinyGoals.map((record) => <ShinyTrackerCard key={record.id} record={record} onDecrease={() => adjustShinyAttempts(record.id, -1)} onIncrease={() => adjustShinyAttempts(record.id, 1)} onToggle={() => setShinyObtained(record.id, true)} onDelete={() => commitState((current) => ({ ...current, shinyMods: current.shinyMods.filter((item) => item.id !== record.id) }))} />)}</div>}
 
-            <div className="section-heading shiny-heading"><div><span className="eyebrow">COLECCIÓN SHINY</span><h2>Módulos conseguidos</h2></div><span>{obtainedShinyMods.length}{normalizedRecordSearch ? ` de ${allObtainedShinyMods.length}` : ""} marcados</span></div>
-            {obtainedShinyMods.length === 0 ? <div className="empty-card shiny-empty obtained"><Trophy size={30} /><strong>{normalizedRecordSearch ? "No hay coincidencias en los conseguidos" : "Aún no has marcado ningún Shiny"}</strong><span>{normalizedRecordSearch ? "La búsqueda también revisa nombre, variante y estilo." : "También puedes agregar un módulo y marcarlo directamente si ya lo tenías."}</span></div> : <div className="shiny-tracker-grid">{obtainedShinyMods.map((record) => <ShinyTrackerCard key={record.id} record={record} onDecrease={() => adjustShinyAttempts(record.id, -1)} onIncrease={() => adjustShinyAttempts(record.id, 1)} onToggle={() => setShinyObtained(record.id, false)} onDelete={() => commitState((current) => ({ ...current, shinyMods: current.shinyMods.filter((item) => item.id !== record.id) }))} />)}</div>}
+            <div className="section-heading shiny-heading"><div><span className="eyebrow">COLECCIÓN BRILLANTE</span><h2>Módulos conseguidos</h2></div><span>{obtainedShinyMods.length}{normalizedRecordSearch ? ` de ${allObtainedShinyMods.length}` : ""} marcados</span></div>
+            {obtainedShinyMods.length === 0 ? <div className="empty-card shiny-empty obtained"><Trophy size={30} /><strong>{normalizedRecordSearch ? "No hay coincidencias en los conseguidos" : "Aún no has marcado ningún Brillante"}</strong><span>{normalizedRecordSearch ? "La búsqueda también revisa nombre, variante y estilo." : "También puedes agregar un módulo y marcarlo directamente si ya lo tenías."}</span></div> : <div className="shiny-tracker-grid">{obtainedShinyMods.map((record) => <ShinyTrackerCard key={record.id} record={record} onDecrease={() => adjustShinyAttempts(record.id, -1)} onIncrease={() => adjustShinyAttempts(record.id, 1)} onToggle={() => setShinyObtained(record.id, false)} onDelete={() => commitState((current) => ({ ...current, shinyMods: current.shinyMods.filter((item) => item.id !== record.id) }))} />)}</div>}
           </section>
         ))}
 
@@ -1355,7 +1366,7 @@ function ShinyTrackerCard({ record, onDecrease, onIncrease, onToggle, onDelete }
     <div className="shiny-variant"><span>VARIANTE</span><strong>{record.variant}</strong></div>
     <div className="shiny-attempt-count"><span>Duplicados +17 que no se convirtieron</span><strong>{record.attempts}</strong></div>
     {!record.isShiny && <div className="shiny-attempt-actions"><button type="button" aria-label="Restar un intento" disabled={record.attempts === 0} onClick={onDecrease}><Minus size={17} /></button><button type="button" className="primary" onClick={onIncrease}><Plus size={17} /> Otro +17 no se convirtió</button></div>}
-    <button type="button" className={`shiny-obtained-button ${record.isShiny ? "active" : ""}`} onClick={onToggle}>{record.isShiny ? <><Check size={17} /> Shiny conseguido · {record.obtainedAt ? formatDate(record.obtainedAt) : "sin fecha"}</> : <><Sparkles size={17} /> Marcar como Shiny</>}</button>
+    <button type="button" className={`shiny-obtained-button ${record.isShiny ? "active" : ""}`} onClick={onToggle}>{record.isShiny ? <><Check size={17} /> Brillante conseguido · {record.obtainedAt ? formatDate(record.obtainedAt) : "sin fecha"}</> : <><Sparkles size={17} /> Marcar como Brillante</>}</button>
   </article>;
 }
 
