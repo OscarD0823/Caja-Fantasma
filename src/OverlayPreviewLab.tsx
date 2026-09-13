@@ -10,6 +10,7 @@ type Props = {
   addonScale: number;
   whaleCounterScale: number;
   whaleCounterStyle: OverlayCounterStyle;
+  whaleShowTime: boolean;
   shape: OverlayShape;
   counterStyle: OverlayCounterStyle;
   nameMode: OverlayNameMode;
@@ -24,7 +25,7 @@ type Props = {
 
 type WhaleMode = "hidden" | "active" | "departing";
 
-export default function OverlayPreviewLab({ catalog, scale, addonScale, whaleCounterScale, whaleCounterStyle, shape, counterStyle, nameMode, customName, onScaleChange, onAddonScaleChange, onWhaleCounterScaleChange, onWhaleCounterStyleChange, onAppearanceChange, onOpenRealOverlay }: Props) {
+export default function OverlayPreviewLab({ catalog, scale, addonScale, whaleCounterScale, whaleCounterStyle, whaleShowTime, shape, counterStyle, nameMode, customName, onScaleChange, onAddonScaleChange, onWhaleCounterScaleChange, onWhaleCounterStyleChange, onAppearanceChange, onOpenRealOverlay }: Props) {
   const publicVisionId = catalog.eventTiming?.selectedVisionId ?? catalog.visions.find((vision) => vision.enabled)?.id ?? catalog.visions[0]?.id;
   const [visionId, setVisionId] = useState(publicVisionId);
   const [phase, setPhase] = useState<"waiting" | "active" | "transition">("active");
@@ -39,7 +40,7 @@ export default function OverlayPreviewLab({ catalog, scale, addonScale, whaleCou
     remainingMs: whaleMode === "departing" ? 0 : 12 * 60_000 + 34_000,
     progress: whaleMode === "departing" ? 1 : .38,
   }), [vision?.id, whaleMode]);
-  const designSize = overlayDesignSize(whale.visible, shape, normalizedAddonScale, normalizedWhaleCounterScale, whaleCounterStyle);
+  const designSize = overlayDesignSize(whale.visible, shape, normalizedAddonScale, normalizedWhaleCounterScale, whaleCounterStyle, whaleShowTime);
 
   return <section className="overlay-lab">
     <div className="overlay-lab-heading">
@@ -63,7 +64,7 @@ export default function OverlayPreviewLab({ catalog, scale, addonScale, whaleCou
 
     <div className="overlay-lab-canvas" style={{ minHeight: Math.round(designSize.height * normalizedScale) + 28 }}>
       <div className="overlay-scale-stage" style={{ width: designSize.width, height: designSize.height, transform: `scale(${normalizedScale})` }}>
-        <OverlayVisual vision={vision} phase={phase === "active" ? "active" : "waiting"} remainingMs={phase === "active" ? 12 * 60_000 + 34_000 : 17 * 60_000 + 8_000} progress={.58} transitionRemainingMs={phase === "transition" ? 2_800 : 0} whale={whale} addonScale={normalizedAddonScale} whaleCounterScale={normalizedWhaleCounterScale} whaleCounterStyle={whaleCounterStyle} shape={shape} counterStyle={counterStyle} nameMode={nameMode} customName={customName} preview />
+        <OverlayVisual vision={vision} phase={phase === "active" ? "active" : "waiting"} remainingMs={phase === "active" ? 12 * 60_000 + 34_000 : 17 * 60_000 + 8_000} progress={.58} transitionRemainingMs={phase === "transition" ? 2_800 : 0} whale={whale} addonScale={normalizedAddonScale} whaleCounterScale={normalizedWhaleCounterScale} whaleCounterStyle={whaleCounterStyle} whaleShowTime={whaleShowTime} shape={shape} counterStyle={counterStyle} nameMode={nameMode} customName={customName} preview />
       </div>
     </div>
   </section>;

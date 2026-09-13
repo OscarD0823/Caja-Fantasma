@@ -1,0 +1,496 @@
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::io::{Read, Write};
+use std::net::{IpAddr, SocketAddr, TcpStream};
+use std::time::Duration;
+#[cfg(desktop)]
+use std::time::{SystemTime, UNIX_EPOCH};
+
+const LOCAL_SYNC_PROTOCOL: u8 = 1;
+const DEFAULT_LOCAL_SYNC_PORT: u16 = 47_183;
+const MAX_SYNC_BYTES: usize = 8 * 1024 * 1024;
+
+#[cfg(desktop)]
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalSyncSnapshot {
+    pub enabled: bool,
+    pub revision: u64,
+    pub updated_at: String,
+    pub data_json: String,
+    pub last_exchange_at: u64,
+}
+
+#[cfg(desktop)]
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalSyncInfo {
+    pub enabled: bool,
+    pub address: String,
+    pub port: u16,
+    pub pairing_code: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LocalSyncRequest {
+    protocol: u8,
+    pairing_code: String,
+    updated_at: String,
+    data_json: String,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalSyncExchange {
+    pub ok: bool,
+    pub message: String,
+    pub revision: u64,
+    pub updated_at: String,
+    pub data_json: String,
+    pub last_exchange_at: u64,
+}
+
+fn validate_pairing_code(code: &str) -> Result<(), String> {
+    if code.len() == 6 && code.bytes().all(|byte| byte.is_ascii_digit()) {
+        Ok(())
+    } else {
+        Err("El código de conexión debe tener exactamente 6 números.".into())
+    }
+}
+
+fn validate_sync_payload(data_json: &str, updated_at: &str) -> Result<(), String> {
+    if data_json.len() > MAX_SYNC_BYTES {
+        return Err("Los datos personales superan el límite de 8 MB.".into());
+    }
+    let timestamp = updated_at.as_bytes();
+    let valid_timestamp = timestamp.len() == 24
+        && timestamp[4] == b'-'
+        && timestamp[7] == b'-'
+        && timestamp[10] == b'T'
+        && timestamp[13] == b':'
+        && timestamp[16] == b':'
+        && timestamp[19] == b'.'
+        && timestamp[23] == b'Z'
+        && timestamp.iter().enumerate().all(|(index, byte)| {
+            matches!(index, 4 | 7 | 10 | 13 | 16 | 19 | 23) || byte.is_ascii_digit()
+        });
+    if !valid_timestamp {
+        return Err("La fecha de sincronización no es válida.".into());
+    }
+    let value: Value = serde_json::from_str(data_json)
+        .map_err(|_| "Los datos personales no contienen JSON válido.".to_string())?;
+    if !value.is_object() {
+        return Err("Los datos personales deben ser un objeto JSON.".into());
+    }
+    Ok(())
+}
+
+fn read_json_line(stream: &mut TcpStream) -> Result<String, String> {
+    let mut result = Vec::new();
+    let mut chunk = [0_u8; 8_192];
+    loop {
+        let read = stream
+            .read(&mut chunk)
+            .map_err(|error| format!("No se pudieron leer los datos: {error}"))?;
+        if read == 0 {
+            break;
+        }
+        let bytes = &chunk[..read];
+        if let Some(end) = bytes.iter().position(|byte| *byte == b'\n') {
+            result.extend_from_slice(&bytes[..end]);
+            break;
+        }
+        result.extend_from_slice(bytes);
+        if result.len() > MAX_SYNC_BYTES {
+            return Err("La solicitud de sincronización supera el límite permitido.".into());
+        }
+    }
+    String::from_utf8(result).map_err(|_| "La solicitud no usa texto UTF-8 válido.".into())
+}
+
+fn write_json_line<T: Serialize>(stream: &mut TcpStream, value: &T) -> Result<(), String> {
+    let mut body = serde_json::to_vec(value).map_err(|error| error.to_string())?;
+    body.push(b'\n');
+    stream
+        .write_all(&body)
+        .map_err(|error| format!("No se pudo enviar la respuesta: {error}"))?;
+    stream.flush().map_err(|error| error.to_string())
+}
+
+fn is_local_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => ip.is_private() || ip.is_loopback() || ip.is_link_local(),
+        IpAddr::V6(ip) => ip.is_loopback() || ip.is_unique_local() || ip.is_unicast_link_local(),
+    }
+}
+
+fn local_socket_address(address: &str) -> Result<SocketAddr, String> {
+    let cleaned = address
+        .trim()
+        .trim_start_matches("http://")
+        .trim_start_matches("https://")
+        .trim_end_matches('/');
+    let socket = if let Ok(socket) = cleaned.parse::<SocketAddr>() {
+        socket
+    } else if let Ok(ip) = cleaned.parse::<IpAddr>() {
+        SocketAddr::new(ip, DEFAULT_LOCAL_SYNC_PORT)
+    } else {
+        return Err(
+            "Escribe la dirección IP mostrada en el PC, por ejemplo 192.168.1.20:47183.".into(),
+        );
+    };
+    if !is_local_ip(socket.ip()) {
+        return Err(
+            "Por seguridad, la sincronización solo acepta direcciones de la red local.".into(),
+        );
+    }
+    Ok(socket)
+}
+
+fn mobile_sync_exchange_blocking(
+    address: String,
+    pairing_code: String,
+    data_json: String,
+    updated_at: String,
+) -> Result<LocalSyncExchange, String> {
+    validate_pairing_code(&pairing_code)?;
+    validate_sync_payload(&data_json, &updated_at)?;
+    let socket = local_socket_address(&address)?;
+    let timeout = Duration::from_secs(4);
+    let mut stream = TcpStream::connect_timeout(&socket, timeout)
+        .map_err(|_| "No se encontró el PC. Comprueba la IP, el código y que ambas aplicaciones estén abiertas.".to_string())?;
+    stream
+        .set_read_timeout(Some(timeout))
+        .map_err(|error| error.to_string())?;
+    stream
+        .set_write_timeout(Some(timeout))
+        .map_err(|error| error.to_string())?;
+    write_json_line(
+        &mut stream,
+        &LocalSyncRequest {
+            protocol: LOCAL_SYNC_PROTOCOL,
+            pairing_code,
+            updated_at,
+            data_json,
+        },
+    )?;
+    let response = read_json_line(&mut stream)?;
+    let exchange: LocalSyncExchange = serde_json::from_str(&response)
+        .map_err(|_| "El PC devolvió una respuesta de sincronización inválida.".to_string())?;
+    if !exchange.ok {
+        return Err(exchange.message);
+    }
+    validate_sync_payload(&exchange.data_json, &exchange.updated_at)?;
+    Ok(exchange)
+}
+
+#[tauri::command]
+pub async fn mobile_sync_exchange(
+    address: String,
+    pairing_code: String,
+    data_json: String,
+    updated_at: String,
+) -> Result<LocalSyncExchange, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        mobile_sync_exchange_blocking(address, pairing_code, data_json, updated_at)
+    })
+    .await
+    .map_err(|error| format!("La conexión local se interrumpió: {error}"))?
+}
+
+#[cfg(desktop)]
+mod desktop {
+    use super::*;
+    use std::net::{TcpListener, UdpSocket};
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, OnceLock,
+    };
+    use std::thread;
+
+    #[derive(Clone)]
+    struct ServerState {
+        enabled: Arc<AtomicBool>,
+        pairing_code: Arc<Mutex<String>>,
+        snapshot: Arc<Mutex<LocalSyncSnapshot>>,
+        address: String,
+        port: u16,
+    }
+
+    static LOCAL_SYNC_SERVER: OnceLock<ServerState> = OnceLock::new();
+
+    fn local_ip_address() -> String {
+        UdpSocket::bind("0.0.0.0:0")
+            .and_then(|socket| {
+                socket.connect("192.0.2.1:80")?;
+                socket.local_addr()
+            })
+            .map(|address| address.ip().to_string())
+            .unwrap_or_else(|_| "127.0.0.1".into())
+    }
+
+    fn bind_listener() -> Result<(TcpListener, u16), String> {
+        for port in DEFAULT_LOCAL_SYNC_PORT..=DEFAULT_LOCAL_SYNC_PORT + 10 {
+            if let Ok(listener) = TcpListener::bind(("0.0.0.0", port)) {
+                listener
+                    .set_nonblocking(true)
+                    .map_err(|error| error.to_string())?;
+                return Ok((listener, port));
+            }
+        }
+        Err("No se encontró un puerto disponible para conectar el celular.".into())
+    }
+
+    fn error_exchange(message: String) -> LocalSyncExchange {
+        LocalSyncExchange {
+            ok: false,
+            message,
+            revision: 0,
+            updated_at: "1970-01-01T00:00:00.000Z".into(),
+            data_json: "{}".into(),
+            last_exchange_at: 0,
+        }
+    }
+
+    fn process_client(mut stream: TcpStream, peer_address: SocketAddr, state: &ServerState) {
+        let timeout = Some(Duration::from_secs(4));
+        let _ = stream.set_read_timeout(timeout);
+        let _ = stream.set_write_timeout(timeout);
+        let response = (|| -> Result<LocalSyncExchange, String> {
+            if !is_local_ip(peer_address.ip()) {
+                return Err("La sincronización solo acepta equipos de la red local.".into());
+            }
+            if !state.enabled.load(Ordering::Relaxed) {
+                return Err("La sincronización está desactivada en el PC.".into());
+            }
+            let body = read_json_line(&mut stream)?;
+            let request: LocalSyncRequest = serde_json::from_str(&body)
+                .map_err(|_| "La solicitud del celular no es válida.".to_string())?;
+            if request.protocol != LOCAL_SYNC_PROTOCOL {
+                return Err(
+                    "La versión de sincronización no coincide. Actualiza ambas aplicaciones."
+                        .into(),
+                );
+            }
+            validate_pairing_code(&request.pairing_code)?;
+            let expected_code = state
+                .pairing_code
+                .lock()
+                .map_err(|_| "No se pudo comprobar el código.".to_string())?
+                .clone();
+            if request.pairing_code != expected_code {
+                return Err("El código de conexión no coincide con el del PC.".into());
+            }
+            validate_sync_payload(&request.data_json, &request.updated_at)?;
+            let mut snapshot = state
+                .snapshot
+                .lock()
+                .map_err(|_| "No se pudieron abrir los datos compartidos.".to_string())?;
+            snapshot.last_exchange_at = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|duration| duration.as_millis() as u64)
+                .unwrap_or(0);
+            if request.updated_at > snapshot.updated_at {
+                snapshot.updated_at = request.updated_at;
+                snapshot.data_json = request.data_json;
+                snapshot.revision = snapshot.revision.saturating_add(1);
+            }
+            Ok(LocalSyncExchange {
+                ok: true,
+                message: "Datos sincronizados directamente con el PC.".into(),
+                revision: snapshot.revision,
+                updated_at: snapshot.updated_at.clone(),
+                data_json: snapshot.data_json.clone(),
+                last_exchange_at: snapshot.last_exchange_at,
+            })
+        })()
+        .unwrap_or_else(error_exchange);
+        let _ = write_json_line(&mut stream, &response);
+    }
+
+    fn create_server(
+        pairing_code: String,
+        data_json: String,
+        updated_at: String,
+    ) -> Result<ServerState, String> {
+        let (listener, port) = bind_listener()?;
+        let state = ServerState {
+            enabled: Arc::new(AtomicBool::new(true)),
+            pairing_code: Arc::new(Mutex::new(pairing_code)),
+            snapshot: Arc::new(Mutex::new(LocalSyncSnapshot {
+                enabled: true,
+                revision: 1,
+                updated_at,
+                data_json,
+                last_exchange_at: 0,
+            })),
+            address: local_ip_address(),
+            port,
+        };
+        let thread_state = state.clone();
+        thread::Builder::new()
+            .name("caja-fantasma-local-sync".into())
+            .spawn(move || loop {
+                if !thread_state.enabled.load(Ordering::Relaxed) {
+                    thread::sleep(Duration::from_millis(250));
+                    continue;
+                }
+                match listener.accept() {
+                    Ok((stream, peer_address)) => {
+                        process_client(stream, peer_address, &thread_state)
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(90));
+                    }
+                    Err(_) => thread::sleep(Duration::from_millis(250)),
+                }
+            })
+            .map_err(|error| format!("No se pudo iniciar la conexión local: {error}"))?;
+        Ok(state)
+    }
+
+    fn info(state: &ServerState) -> Result<LocalSyncInfo, String> {
+        Ok(LocalSyncInfo {
+            enabled: state.enabled.load(Ordering::Relaxed),
+            address: format!("{}:{}", state.address, state.port),
+            port: state.port,
+            pairing_code: state
+                .pairing_code
+                .lock()
+                .map_err(|_| "No se pudo leer el código de conexión.".to_string())?
+                .clone(),
+        })
+    }
+
+    pub fn start(
+        pairing_code: String,
+        data_json: String,
+        updated_at: String,
+    ) -> Result<LocalSyncInfo, String> {
+        validate_pairing_code(&pairing_code)?;
+        validate_sync_payload(&data_json, &updated_at)?;
+        if LOCAL_SYNC_SERVER.get().is_none() {
+            let server =
+                create_server(pairing_code.clone(), data_json.clone(), updated_at.clone())?;
+            let _ = LOCAL_SYNC_SERVER.set(server);
+        }
+        let state = LOCAL_SYNC_SERVER
+            .get()
+            .ok_or_else(|| "No se pudo iniciar el servidor local.".to_string())?;
+        state.enabled.store(true, Ordering::Relaxed);
+        *state
+            .pairing_code
+            .lock()
+            .map_err(|_| "No se pudo guardar el código de conexión.".to_string())? = pairing_code;
+        update(data_json, updated_at)?;
+        info(state)
+    }
+
+    pub fn stop() -> Result<(), String> {
+        if let Some(state) = LOCAL_SYNC_SERVER.get() {
+            state.enabled.store(false, Ordering::Relaxed);
+            if let Ok(mut snapshot) = state.snapshot.lock() {
+                snapshot.enabled = false;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn update(data_json: String, updated_at: String) -> Result<(), String> {
+        validate_sync_payload(&data_json, &updated_at)?;
+        let state = LOCAL_SYNC_SERVER
+            .get()
+            .ok_or_else(|| "La sincronización local todavía no está iniciada.".to_string())?;
+        let mut snapshot = state
+            .snapshot
+            .lock()
+            .map_err(|_| "No se pudieron actualizar los datos compartidos.".to_string())?;
+        if updated_at >= snapshot.updated_at {
+            if updated_at != snapshot.updated_at || data_json != snapshot.data_json {
+                snapshot.revision = snapshot.revision.saturating_add(1);
+            }
+            snapshot.updated_at = updated_at;
+            snapshot.data_json = data_json;
+        }
+        snapshot.enabled = state.enabled.load(Ordering::Relaxed);
+        Ok(())
+    }
+
+    pub fn read() -> Result<LocalSyncSnapshot, String> {
+        let state = LOCAL_SYNC_SERVER
+            .get()
+            .ok_or_else(|| "La sincronización local todavía no está iniciada.".to_string())?;
+        let mut snapshot = state
+            .snapshot
+            .lock()
+            .map_err(|_| "No se pudieron leer los datos compartidos.".to_string())?
+            .clone();
+        snapshot.enabled = state.enabled.load(Ordering::Relaxed);
+        Ok(snapshot)
+    }
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub fn start_local_sync(
+    pairing_code: String,
+    data_json: String,
+    updated_at: String,
+) -> Result<LocalSyncInfo, String> {
+    desktop::start(pairing_code, data_json, updated_at)
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub fn stop_local_sync() -> Result<(), String> {
+    desktop::stop()
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub fn update_local_sync_state(data_json: String, updated_at: String) -> Result<(), String> {
+    desktop::update(data_json, updated_at)
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+pub fn read_local_sync_state() -> Result<LocalSyncSnapshot, String> {
+    desktop::read()
+}
+
+#[cfg(all(test, desktop))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exchanges_the_newest_payload_over_loopback() {
+        let code = "482731".to_string();
+        let initial_date = "2026-09-13T10:00:00.000Z".to_string();
+        let latest_date = "2026-09-13T10:01:00.000Z".to_string();
+        let info = desktop::start(code.clone(), "{\"points\":1}".into(), initial_date)
+            .expect("the local server should start");
+        let exchange = mobile_sync_exchange_blocking(
+            format!("127.0.0.1:{}", info.port),
+            code,
+            "{\"points\":2}".into(),
+            latest_date.clone(),
+        )
+        .expect("the paired device should exchange data");
+        assert_eq!(exchange.updated_at, latest_date);
+        assert_eq!(exchange.data_json, "{\"points\":2}");
+        let snapshot = desktop::read().expect("the desktop should receive the mobile payload");
+        assert_eq!(snapshot.data_json, exchange.data_json);
+        desktop::stop().expect("the test server should stop");
+    }
+
+    #[test]
+    fn rejects_public_internet_addresses() {
+        let error = local_socket_address("8.8.8.8:47183").expect_err("public IPs must be rejected");
+        assert!(error.contains("red local"));
+        assert!(!is_local_ip("8.8.8.8".parse().expect("valid public IP")));
+        assert!(is_local_ip(
+            "192.168.1.20".parse().expect("valid private IP")
+        ));
+    }
+}

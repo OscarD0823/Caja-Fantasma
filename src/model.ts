@@ -120,6 +120,7 @@ export type Settings = {
   overlayScale: number;
   overlayAddonScale: number;
   overlayWhaleEnabled: boolean;
+  overlayWhaleShowTime: boolean;
   overlayWhaleCounterScale: number;
   overlayWhaleCounterStyle: OverlayCounterStyle;
   overlayShape: OverlayShape;
@@ -134,6 +135,9 @@ export type Settings = {
   voiceLeadMinutes: number;
   timingPresetVersion: number;
   autoStartEnabled: boolean;
+  localSyncEnabled: boolean;
+  localSyncAddress: string;
+  localSyncCode: string;
   lastNotificationPhaseStartedAt?: string;
   lastVoiceAlertPhaseStartedAt?: string;
   sharedTimingUpdatedAt?: string;
@@ -179,10 +183,11 @@ export type CountdownTransitionSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.15.0";
+export const APP_VERSION = "1.16.0";
 export const AUTHOR = "OscarD0823";
 export const DEFAULT_CHARACTER_ID = "character-main";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
+export const ANDROID_APK_URL = `${REPOSITORY_URL}/releases/download/v${APP_VERSION}/Caja-Fantasma-Android-${APP_VERSION}.apk`;
 export const REMOTE_CATALOG_URL = "https://raw.githubusercontent.com/OscarD0823/Caja-Fantasma/main/catalog/visions.json";
 // Gravedad terminó y comenzó su espera a las 16:52:30 de Colombia del 10/09/2026.
 export const VISION_CYCLE_WAIT_STARTED_AT = "2026-09-10T21:52:30.000Z";

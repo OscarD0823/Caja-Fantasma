@@ -6,9 +6,9 @@ Caja Fantasma puede reutilizar su interfaz React y su núcleo Tauri para generar
 
 La sincronización de Caja Fantasma no usará Firebase, servicios en la nube, cuentas ni servidores externos. Solo funcionará cuando la aplicación esté abierta simultáneamente en el PC y en el celular y exista una conexión local entre ambos. Los datos personales nunca se enviarán a GitHub.
 
-## Conexión local elegida
+## Conexión local implementada
 
-El PC actuará como anfitrión temporal. Al pulsar **Conectar celular**, abrirá un servicio local y mostrará un código QR de vinculación. La APK escaneará ese código y establecerá una sesión cifrada directamente con el PC. Al cerrar cualquiera de las dos aplicaciones, la sesión termina.
+El PC actúa como anfitrión temporal. Al pulsar **Compartir con el celular**, abre un servicio TCP local y muestra su dirección y un código de seis números. En la APK se escriben ambos valores y se pulsa **Conectar con el PC**. Al desactivar la función o cerrar el programa, el servicio deja de aceptar conexiones.
 
 La ruta principal será una red local, sin necesitar Internet:
 
@@ -18,43 +18,40 @@ La ruta principal será una red local, sin necesitar Internet:
 
 Un cable USB en modo normal de carga o transferencia de archivos no crea por sí solo un canal entre aplicaciones. Hacer comunicación USB directa exigiría un complemento nativo basado en Android Open Accessory, permiso del usuario y compatibilidad del hardware. No se usará ADB ni se obligará a activar opciones de desarrollador. La primera versión empleará red local o USB tethering, que son más compatibles y siguen siendo completamente locales.
 
-## Protocolo de vinculación
+## Protocolo de vinculación actual
 
-1. El PC abre un puerto aleatorio únicamente mientras está visible la pantalla de conexión.
-2. Genera un identificador de sesión y un secreto aleatorio de 256 bits que caduca a los dos minutos.
-3. El QR contiene dirección local, puerto, sesión y secreto. No contiene historiales ni contraseñas.
-4. El teléfono demuestra que leyó el secreto y ambos derivan una clave de sesión.
-5. Cada mensaje se cifra con AES-GCM, usa un nonce único y lleva número de secuencia para impedir repeticiones.
-6. El PC acepta un solo teléfono por sesión y cierra el puerto al desconectar o cerrar la aplicación.
+1. El PC intenta abrir el puerto `47183` y, si está ocupado, prueba los diez siguientes.
+2. La aplicación genera un código aleatorio de seis números que puede cambiarse desde Windows.
+3. El cliente solo acepta direcciones privadas, de enlace local o de bucle local; no permite enviar el historial a una IP pública.
+4. Cada intercambio valida código, versión del protocolo, fecha, JSON y un límite máximo de 8 MB.
+5. La instantánea con fecha más reciente se devuelve a ambos dispositivos. Los ajustes exclusivos de pantalla, el catálogo y las credenciales del administrador no forman parte de ella.
+6. La APK comprueba cambios cada tres segundos y el PC cada segundo y medio mientras la opción siga activa.
 
-El descubrimiento automático mediante NSD/mDNS puede añadirse después del primer emparejamiento. El QR será el mecanismo inicial porque permite elegir el PC correcto sin explorar todos los dispositivos de la red.
+El canal no se publica en Internet ni utiliza Firebase. En esta versión el contenido viaja dentro de la red local sin cifrado adicional, por lo que debe usarse únicamente en una red Wi-Fi de confianza o mediante USB tethering. El código evita accesos accidentales de otros dispositivos, pero no sustituye el cifrado de una red segura.
 
 ## Qué se sincroniza
 
-El PC conserva la copia autoritativa durante la sesión y transmite los cambios confirmados al teléfono:
+Cada equipo mantiene su copia local y, durante la conexión, comparte la instantánea personal con fecha más reciente:
 
 - recompensas y puntos;
 - personajes y equipos;
 - cajas e historial manual;
 - mods y estado Brillante;
-- preferencias personales compatibles con móvil;
-- catálogo, rueda seleccionada y horario que el PC ya tenga descargados.
+- límites de ronda y sesión de equipo necesarios para continuar el conteo.
 
 El acceso de administrador, GitHub CLI, claves de publicación, bandeja de Windows, autoinicio y posición de la ventana flotante nunca se envían al teléfono.
 
-Cada operación tendrá `operationId`, `deviceId`, `createdAt` y un tipo explícito. PC y celular intercambiarán primero las operaciones que les falten y luego comprobarán un resumen del estado. Este registro evita perder sumas simultáneas y permite sincronizar borrados mediante operaciones de reversión en lugar de comparar dos archivos completos.
-
-Mientras no haya conexión, cada dispositivo conserva su copia local. La sincronización pendiente solo se ejecuta la próxima vez que ambas aplicaciones estén abiertas y vinculadas; no existe ningún proceso ni servidor funcionando en Internet.
+Mientras no haya conexión, cada dispositivo conserva su copia local. Al reconectar, la última modificación personal reemplaza la copia anterior. Para evitar conflictos, conviene terminar de registrar en un dispositivo antes de continuar en el otro; esta primera implementación no fusiona dos ediciones simultáneas independientes.
 
 ## Configuración pública
 
-`catalog/visions.json` continúa en GitHub como fuente pública de recompensas y horario para las aplicaciones de PC. El administrador sigue publicando allí la rueda general. Cuando el teléfono se conecta, recibe directamente del PC la última copia disponible, por lo que la APK puede funcionar sin acceso a GitHub.
+`catalog/visions.json` continúa en GitHub como fuente pública de recompensas y horario tanto para PC como para Android. El administrador sigue publicando allí la rueda general. La conexión local no sustituye ni modifica ese catálogo.
 
 La app de PC consulta GitHub Raw sin caché y usa la API pública de contenido como respaldo controlado. Las respuestas con una versión anterior nunca reemplazan una configuración más nueva.
 
 ## Estado comprobado del equipo
 
-La primera APK se generó y verificó para la versión 1.15.0:
+La APK con sincronización local se genera y verifica para la versión 1.16.0:
 
 - Android SDK 35/36, Build Tools 35/36 y NDK 29 están instalados y las licencias fueron aceptadas.
 - El destino Rust `aarch64-linux-android` compila la biblioteca nativa optimizada.
@@ -62,28 +59,27 @@ La primera APK se generó y verificó para la versión 1.15.0:
 - Android usa una sola ventana, navegación inferior adaptable y guarda los datos personales localmente.
 - La APK ARM64 de distribución está alineada, firmada con un certificado propio de OscarD0823 y verificada con `apksigner`.
 - El teléfono no estaba conectado por ADB durante la compilación, por lo que todavía corresponde realizar una prueba física de instalación, navegación y persistencia.
-- La sincronización directa y cifrada PC–celular descrita arriba sigue siendo la próxima etapa; la versión 1.15.0 solo comparte la configuración pública mediante GitHub.
+- El anfitrión local, el cliente Android, el código de emparejamiento, la restricción a IP privadas y el intercambio bidireccional cuentan con pruebas automáticas por bucle local.
 
 ## Trabajo por etapas
 
 1. Completado: interfaz adaptable a pantallas verticales y separación de opciones exclusivas de Windows.
 2. Completado: entrada móvil de Tauri, proyecto Android generado y compilación Rust ARM64.
 3. Completado: SDK, Platform Tools, Build Tools, NDK y firma privada de distribución.
-4. Pendiente: validar la APK en un teléfono físico compatible.
-5. Pendiente: implementar en Rust el anfitrión local del PC y el cliente móvil, además del QR y el registro de operaciones pendientes.
-6. Pendiente: probar Wi-Fi, punto de acceso de Windows y USB tethering sin Internet.
-7. Futuro: generar un AAB firmado si se decide distribuir mediante Google Play.
+4. Completado: anfitrión TCP local en Rust, cliente móvil, código de conexión, validación y sincronización automática bidireccional.
+5. Completado: pruebas de intercambio por bucle local, rechazo de IP pública y compilación ARM64.
+6. Pendiente: validar la APK en un teléfono físico mediante Wi-Fi y USB tethering.
+7. Futuro: cifrado de aplicación punto a punto, descubrimiento automático y fusión de operaciones simultáneas.
+8. Futuro: generar un AAB firmado si se decide distribuir mediante Google Play.
 
 ## Pruebas obligatorias
 
 - Ningún dato se transmite cuando una de las dos aplicaciones está cerrada.
 - El PC no deja ningún puerto abierto después de desconectar.
-- Un teléfono sin el secreto vigente no puede leer ni modificar datos.
-- Una recompensa registrada en el teléfono aparece una sola vez en el PC, incluso después de reconectar.
-- Dos operaciones distintas creadas sin conexión sobreviven a la fusión.
-- Editar, revertir o borrar en un dispositivo se refleja en el otro sin resucitar versiones antiguas.
+- Un teléfono sin el código vigente no puede leer ni modificar datos.
+- Una recompensa registrada en el teléfono aparece en el PC y no se duplica al volver a intercambiar la misma instantánea.
+- Editar, revertir o borrar en un dispositivo actualiza el otro cuando esa copia es la más reciente.
 - Las configuraciones exclusivas del PC y el modo administrador nunca llegan al teléfono.
-- La rueda, la fase y todos sus tiempos se transfieren como una sola instantánea.
 - La conexión funciona sin Internet usando el punto de acceso local o USB tethering.
 
 ## Referencias oficiales

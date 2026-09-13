@@ -271,6 +271,8 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .home-overlay-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
 .home-overlay-actions button { white-space: nowrap; }
 .home-overlay-size-panel { grid-column: 1/-1; padding: 17px 2px 0; border-top: 1px solid rgba(133, 175, 182, .1); display: grid; grid-template-columns: repeat(2, minmax(170px, 1fr)); gap: 22px; animation: home-overlay-panel-in .22s ease both; }
+.home-overlay-size-panel > .mock-overlay { grid-column: 1/-1; width: min(430px, 100%); margin: 0 auto; }
+.home-overlay-size-panel > .overlay-style-config { grid-column: 1/-1; width: 100%; margin: 0; }
 .overlay-addon-option { min-height: 54px; margin: 0 0 15px; padding: 10px 12px; border: 1px solid rgba(83, 188, 255, .16); border-radius: 11px; display: flex; align-items: center; justify-content: space-between; gap: 15px; background: rgba(11, 39, 55, .48); }
 .overlay-addon-option > span { min-width: 0; }
 .overlay-addon-option strong, .overlay-addon-option small { display: block; }
@@ -476,6 +478,26 @@ input { width: 100%; min-height: 34px; margin-top: 5px; padding: 0 10px; border:
 .backup-panel h2, .owner-panel h2 { margin: 6px 0 4px; font: 700 19px "Space Grotesk", sans-serif; }
 .backup-panel p, .owner-panel > p { margin: 0; color: #7d969d; font-size: 10px; line-height: 1.55; }
 .backup-panel > div:last-child { display: flex; gap: 8px; }
+.local-device-sync { margin-top: 15px; padding: 24px; overflow: hidden; background: radial-gradient(circle at 92% 0, rgba(39, 198, 205, .1), transparent 35%), rgba(7, 24, 33, .88); }
+.local-device-sync.enabled { border-color: rgba(92, 225, 210, .28); box-shadow: inset 0 0 34px rgba(45, 205, 194, .035); }
+.local-sync-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.local-sync-heading h2, .android-download-panel h2 { margin: 6px 0 5px; font: 700 19px "Space Grotesk", sans-serif; }
+.local-sync-heading p, .android-download-panel p { max-width: 680px; margin: 0; color: #7d969d; font-size: 10px; line-height: 1.55; }
+.local-sync-state { flex: 0 0 auto; padding: 6px 9px; border: 1px solid rgba(127, 156, 164, .2); border-radius: 999px; color: #718a92; font-size: 7px; font-weight: 900; letter-spacing: .12em; }
+.local-sync-state.online { border-color: rgba(92, 225, 210, .35); color: var(--cyan); background: rgba(92, 225, 210, .08); }
+.local-sync-desktop-grid, .local-sync-mobile-fields { margin-top: 19px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.local-sync-desktop-grid > div { min-height: 72px; padding: 13px 15px; border: 1px solid rgba(133, 175, 182, .12); border-radius: 12px; display: flex; flex-direction: column; justify-content: center; gap: 5px; background: rgba(1, 12, 19, .55); }
+.local-sync-desktop-grid small { color: #718b92; font-size: 7px; font-weight: 800; letter-spacing: .1em; }
+.local-sync-desktop-grid strong { color: #ddf7f5; font: 700 14px "Space Grotesk", sans-serif; overflow-wrap: anywhere; }
+.local-sync-desktop-grid .pairing-code { color: var(--cyan); font-size: 24px; letter-spacing: .22em; }
+.local-sync-mobile-fields label { color: #7e989f; font-size: 8px; }
+.local-sync-mobile-fields input { width: 100%; min-height: 42px; margin-top: 6px; padding: 0 12px; border: 1px solid rgba(133, 175, 182, .18); border-radius: 10px; color: #e6f5f4; background: #061721; font-size: 13px; }
+.local-sync-actions { margin-top: 13px; display: flex; flex-wrap: wrap; gap: 8px; }
+.local-sync-message { margin: 13px 0 4px; color: #a4c2c6; font-size: 10px; }
+.local-device-sync > small { color: #668087; font-size: 8px; line-height: 1.5; }
+.android-download-panel { min-height: 126px; margin-top: 15px; padding: 23px; display: flex; align-items: center; justify-content: space-between; gap: 18px; background: radial-gradient(circle at 90% 50%, rgba(93, 220, 204, .09), transparent 33%), rgba(7, 24, 33, .86); }
+.android-download-panel button { flex: 0 0 auto; }
+.spin { animation: spin 1s linear infinite; }
 .character-manager { margin-top: 15px; padding: 23px; }
 .characters-page .character-manager { margin-top: 0; }
 .characters-page .character-dashboard { margin-top: 15px; }
@@ -781,7 +803,9 @@ html.overlay-document, body.overlay-document, body.overlay-document #root { over
   .activity-grid, .vision-cards, .public-vision-grid, .settings-grid, .stats-grid, .shiny-tracker-grid { grid-template-columns: 1fr; }
   .history-record { grid-template-columns: 43px 1fr; }
   .history-record details { grid-column: 2; }
-  .catalog-toolbar, .backup-panel { align-items: stretch; flex-direction: column; }
+  .catalog-toolbar, .backup-panel, .android-download-panel { align-items: stretch; flex-direction: column; }
+  .local-sync-heading { flex-direction: column; }
+  .local-sync-desktop-grid, .local-sync-mobile-fields { grid-template-columns: 1fr; }
   .character-dashboard-top, .team-guidance { align-items: stretch; flex-direction: column; }
   .tracking-mode-switch button { flex: 1; justify-content: center; }
   .character-add { grid-template-columns: 1fr; }

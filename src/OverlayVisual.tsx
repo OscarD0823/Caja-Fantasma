@@ -17,6 +17,7 @@ type Props = {
   addonScale: number;
   whaleCounterScale: number;
   whaleCounterStyle: OverlayCounterStyle;
+  whaleShowTime: boolean;
   shape: OverlayShape;
   counterStyle: OverlayCounterStyle;
   nameMode: OverlayNameMode;
@@ -26,7 +27,7 @@ type Props = {
   interactive?: boolean;
 };
 
-export default function OverlayVisual({ vision, phase, remainingMs, progress, transitionRemainingMs = 0, whale, addonScale, whaleCounterScale, whaleCounterStyle, shape, counterStyle, nameMode, customName, onClose, preview = false, interactive = true }: Props) {
+export default function OverlayVisual({ vision, phase, remainingMs, progress, transitionRemainingMs = 0, whale, addonScale, whaleCounterScale, whaleCounterStyle, whaleShowTime, shape, counterStyle, nameMode, customName, onClose, preview = false, interactive = true }: Props) {
   const remainingWhalePercent = Math.max(0, Math.min(100, Math.round((1 - whale.progress) * 100)));
   const normalizedAddonScale = whaleScaleWithinWindow(addonScale, shape);
   const normalizedWhaleCounterScale = whaleCounterScaleWithinWindow(whaleCounterScale, shape, whaleCounterStyle);
@@ -60,7 +61,7 @@ export default function OverlayVisual({ vision, phase, remainingMs, progress, tr
       </div>
     </section>
 
-    {whale.visible && <section style={{ width: (OVERLAY_WHALE_WIDTH - 8) * normalizedAddonScale, height: whaleLayout.stageHeight } as CSSProperties} className={`overlay-whale-stage whale-counter-${whaleCounterStyle} counter-placement-${whaleLayout.placement} ${whale.departing ? "departing" : "engaged"}`} aria-label={whale.departing ? "El Riftwalker se retira" : `Riftwalker activo durante ${formatDuration(whale.remainingMs)}`}>
+    {whale.visible && <section style={{ width: (OVERLAY_WHALE_WIDTH - 8) * normalizedAddonScale, height: whaleShowTime ? whaleLayout.stageHeight : Math.ceil((150 - 4) * normalizedAddonScale) } as CSSProperties} className={`overlay-whale-stage whale-counter-${whaleCounterStyle} counter-placement-${whaleLayout.placement} ${whaleShowTime ? "with-time" : "beam-only"} ${whale.departing ? "departing" : "engaged"}`} aria-label={whale.departing ? "El Riftwalker se retira" : whaleShowTime ? `Riftwalker activo durante ${formatDuration(whale.remainingMs)}` : "Riftwalker activo con rayo de progreso"}>
       <div className="overlay-whale-canvas" style={{ top: whaleLayout.canvasOffset, transform: `translateX(-50%) scale(${normalizedAddonScale})` }}>
         <div className="overlay-whale-motion">
           <div className="overlay-whale-swimmer">
@@ -75,7 +76,7 @@ export default function OverlayVisual({ vision, phase, remainingMs, progress, tr
             </div>
           </div>
         </div>
-        {!whale.departing && <div className={`overlay-whale-countdown ${whaleCounterStyle} placement-${whaleLayout.placement}`} style={{ "--whale-counter-compensation": counterCompensation, "--whale-counter-progress": `${remainingWhalePercent * 3.6}deg`, "--whale-counter-left": `${whaleLayout.left}px`, "--whale-counter-top": `${whaleLayout.top}px` } as CSSProperties}>
+        {whaleShowTime && !whale.departing && <div className={`overlay-whale-countdown ${whaleCounterStyle} placement-${whaleLayout.placement}`} style={{ "--whale-counter-compensation": counterCompensation, "--whale-counter-progress": `${remainingWhalePercent * 3.6}deg`, "--whale-counter-left": `${whaleLayout.left}px`, "--whale-counter-top": `${whaleLayout.top}px` } as CSSProperties}>
           <small>RIFTWALKER</small>
           <strong>{whaleTimer}</strong>
         </div>}

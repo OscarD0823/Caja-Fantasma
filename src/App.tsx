@@ -54,6 +54,7 @@ import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, PHANTO
 import type { Activity, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, PointRoundRecord, PointRoundTrigger, Settings, ShinyModRecord, Vision } from "./model";
 import {
   APP_VERSION,
+  ANDROID_APK_URL,
   AUTHOR,
   DEFAULT_CHARACTER_ID,
   REMOTE_CATALOG_URL,
@@ -81,7 +82,7 @@ import {
   splitPlatformCarryover,
   validateCatalog,
 } from "./model";
-import { exportState, importState, loadState, saveState } from "./storage";
+import { applyPersonalSyncPayload, exportState, importState, loadPersonalSyncUpdatedAt, loadState, personalSyncPayload, savePersonalSyncUpdatedAt, saveState } from "./storage";
 import type { ShinyModCatalogItem } from "./shinyModsCatalog";
 
 type ShinyCatalogModule = typeof import("./shinyModsCatalog");
@@ -109,9 +110,17 @@ function matchesModSearch(item: ShinyModCatalogItem, search: string) {
 type TabId = "progress" | "characters" | "vision" | "history" | "shiny" | "changes" | "settings";
 type CreatorAccess = "checking" | "locked" | "granted";
 
+type LocalSyncInfo = { enabled: boolean; address: string; port: number; pairingCode: string };
+type LocalSyncSnapshot = { enabled: boolean; revision: number; updatedAt: string; dataJson: string; lastExchangeAt: number };
+type LocalSyncExchange = Omit<LocalSyncSnapshot, "enabled"> & { ok: boolean; message: string };
+
 const REMOTE_CATALOG_API_URL = "https://api.github.com/repos/OscarD0823/Caja-Fantasma/contents/catalog/visions.json?ref=main";
 const IS_ANDROID = /Android/i.test(navigator.userAgent);
 let catalogApiFallbackAvailableAt = 0;
+
+function createPairingCode() {
+  return String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
+}
 
 async function fetchPublicCatalog(): Promise<unknown> {
   try {
@@ -144,6 +153,17 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.16.0",
+    date: "13 de septiembre de 2026",
+    title: "Sincronización directa entre PC y Android",
+    items: [
+      "El historial, puntos, personajes, rondas y módulos Brillantes se sincronizan directamente entre el PC y la APK mediante la red local, sin Firebase ni nube personal.",
+      "La configuración completa de la ventana flotante se concentra ahora en Caja para mantener limpia la pestaña Visión.",
+      "El Riftwalker puede conservar el rayo de progreso ocultando únicamente el texto y reloj del tiempo.",
+      "La aplicación de Windows incluye un botón directo para descargar la APK firmada correspondiente a esta versión.",
+    ],
+  },
   {
     version: "1.15.0",
     date: "12 de septiembre de 2026",
@@ -519,6 +539,9 @@ export default function App() {
   const [toast, setToast] = useState("");
   const [introVisible, setIntroVisible] = useState(true);
   const [homeOverlayConfigOpen, setHomeOverlayConfigOpen] = useState(false);
+  const [localSyncInfo, setLocalSyncInfo] = useState<LocalSyncInfo>();
+  const [localSyncStatus, setLocalSyncStatus] = useState("Sin conexión local");
+  const [localSyncBusy, setLocalSyncBusy] = useState(false);
   const [creatorAccess, setCreatorAccess] = useState<CreatorAccess>("checking");
   const [creatorMessage, setCreatorMessage] = useState("Comprobando la cuenta de GitHub…");
   const initialCycle = useRef(computeCycle(state.settings));
@@ -538,6 +561,10 @@ export default function App() {
   const [selectedShinyModId, setSelectedShinyModId] = useState("");
   const importRef = useRef<HTMLInputElement>(null);
   const voiceAlertRef = useRef("");
+  const personalSyncUpdatedAtRef = useRef(loadPersonalSyncUpdatedAt());
+  const personalSyncJsonRef = useRef(JSON.stringify(personalSyncPayload(state)));
+  const localSyncInFlightRef = useRef(false);
+  const lastLocalExchangeRef = useRef(0);
 
   const setHomeOverlayEditing = useCallback((enabled: boolean) => {
     setHomeOverlayConfigOpen(enabled);
@@ -550,6 +577,7 @@ export default function App() {
   const defaultShinyMod = SHINY_MOD_CATALOG.find((item) => item.englishName === "Rush Hour <Downstar>" && !item.isCatalogShiny) ?? SHINY_MOD_CATALOG[0];
 
   const referencePoints = useMemo(() => [...state.manualBaselinePoints], [state.manualBaselinePoints]);
+  const personalSyncJson = useMemo(() => JSON.stringify(personalSyncPayload(state)), [state.actions, state.boxes, state.pointRounds, state.pointRoundBoundaries, state.manualBaselinePoints, state.shinyMods, state.characters, state.activeCharacterId, state.trackingMode, state.teamMemberIds, state.activeTeamSessionId]);
   const target = clampNumber(state.catalog.boxTargetPoints, 1, 10_000);
   const activeCharacter = state.characters.find((character) => character.id === state.activeCharacterId) ?? state.characters[0];
   const isTeamMode = state.trackingMode === "team" && state.characters.length > 1;
@@ -632,6 +660,110 @@ export default function App() {
   const commitState = useCallback((update: PersistedState | ((current: PersistedState) => PersistedState)) => {
     setState((current) => typeof update === "function" ? update(current) : update);
   }, []);
+
+  const acceptLocalSyncSnapshot = useCallback((snapshot: Pick<LocalSyncSnapshot, "updatedAt" | "dataJson">) => {
+    const remoteUpdatedAt = Date.parse(snapshot.updatedAt);
+    const localUpdatedAt = Date.parse(personalSyncUpdatedAtRef.current);
+    if (!Number.isFinite(remoteUpdatedAt) || (Number.isFinite(localUpdatedAt) && remoteUpdatedAt <= localUpdatedAt)) return false;
+    const value = JSON.parse(snapshot.dataJson) as unknown;
+    setState((current) => {
+      const synchronized = applyPersonalSyncPayload(current, value);
+      personalSyncJsonRef.current = JSON.stringify(personalSyncPayload(synchronized));
+      personalSyncUpdatedAtRef.current = snapshot.updatedAt;
+      savePersonalSyncUpdatedAt(snapshot.updatedAt);
+      return synchronized;
+    });
+    return true;
+  }, []);
+
+  const exchangeWithComputer = useCallback(async () => {
+    if (!IS_ANDROID || !isTauri() || localSyncInFlightRef.current) return;
+    const address = state.settings.localSyncAddress.trim();
+    const pairingCode = state.settings.localSyncCode.trim();
+    if (!address || !/^\d{6}$/.test(pairingCode)) {
+      setLocalSyncStatus("Escribe la IP y el código de 6 números que muestra el PC");
+      return;
+    }
+    localSyncInFlightRef.current = true;
+    setLocalSyncBusy(true);
+    try {
+      const exchange = await invoke<LocalSyncExchange>("mobile_sync_exchange", {
+        address,
+        pairingCode,
+        dataJson: personalSyncJson,
+        updatedAt: personalSyncUpdatedAtRef.current,
+      });
+      const receivedChanges = acceptLocalSyncSnapshot(exchange);
+      setLocalSyncStatus(receivedChanges ? "Datos nuevos recibidos del PC" : "PC y celular sincronizados");
+    } catch (error) {
+      setLocalSyncStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      localSyncInFlightRef.current = false;
+      setLocalSyncBusy(false);
+    }
+  }, [acceptLocalSyncSnapshot, personalSyncJson, state.settings.localSyncAddress, state.settings.localSyncCode]);
+
+  useEffect(() => {
+    if (personalSyncJsonRef.current === personalSyncJson) return;
+    personalSyncJsonRef.current = personalSyncJson;
+    const updatedAt = new Date().toISOString();
+    personalSyncUpdatedAtRef.current = updatedAt;
+    savePersonalSyncUpdatedAt(updatedAt);
+    if (!IS_ANDROID && isTauri() && state.settings.localSyncEnabled) {
+      void invoke("update_local_sync_state", { dataJson: personalSyncJson, updatedAt }).catch(() => undefined);
+    }
+  }, [personalSyncJson, state.settings.localSyncEnabled]);
+
+  useEffect(() => {
+    if (IS_ANDROID || !isTauri() || !state.settings.localSyncEnabled) {
+      setLocalSyncInfo(undefined);
+      return;
+    }
+    let active = true;
+    const pairingCode = /^\d{6}$/.test(state.settings.localSyncCode) ? state.settings.localSyncCode : createPairingCode();
+    if (pairingCode !== state.settings.localSyncCode) {
+      commitState((current) => ({ ...current, settings: { ...current.settings, localSyncCode: pairingCode } }));
+    }
+    const start = async () => {
+      try {
+        const info = await invoke<LocalSyncInfo>("start_local_sync", {
+          pairingCode,
+          dataJson: personalSyncJsonRef.current,
+          updatedAt: personalSyncUpdatedAtRef.current,
+        });
+        if (!active) return;
+        setLocalSyncInfo(info);
+        setLocalSyncStatus(`Esperando al celular en ${info.address}`);
+      } catch (error) {
+        if (active) setLocalSyncStatus(error instanceof Error ? error.message : String(error));
+      }
+    };
+    void start();
+    const timer = window.setInterval(() => {
+      if (!active) return;
+      void invoke<LocalSyncSnapshot>("read_local_sync_state")
+        .then((snapshot) => {
+          if (!active) return;
+          const receivedChanges = acceptLocalSyncSnapshot(snapshot);
+          if (receivedChanges) setLocalSyncStatus("Datos nuevos recibidos del celular");
+          else if (snapshot.lastExchangeAt > lastLocalExchangeRef.current) setLocalSyncStatus("Celular conectado · datos al día");
+          lastLocalExchangeRef.current = Math.max(lastLocalExchangeRef.current, snapshot.lastExchangeAt);
+        })
+        .catch(() => undefined);
+    }, 1_500);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      void invoke("stop_local_sync").catch(() => undefined);
+    };
+  }, [acceptLocalSyncSnapshot, commitState, state.settings.localSyncCode, state.settings.localSyncEnabled]);
+
+  useEffect(() => {
+    if (!IS_ANDROID || !state.settings.localSyncEnabled) return;
+    void exchangeWithComputer();
+    const timer = window.setInterval(() => void exchangeWithComputer(), 3_000);
+    return () => window.clearInterval(timer);
+  }, [exchangeWithComputer, state.settings.localSyncEnabled]);
 
   const checkCreatorAccess = useCallback(async () => {
     if (IS_ANDROID) {
@@ -1194,6 +1326,11 @@ export default function App() {
     else window.open(REPOSITORY_URL, "_blank", "noopener,noreferrer");
   };
 
+  const openAndroidDownload = () => {
+    if (isTauri() && !IS_ANDROID) void openUrl(ANDROID_APK_URL);
+    else window.open(ANDROID_APK_URL, "_blank", "noopener,noreferrer");
+  };
+
   const onImport = async (file?: File) => {
     if (!file) return;
     try {
@@ -1320,20 +1457,28 @@ export default function App() {
               </article>
             </div>
 
-            <article className={`home-overlay-controls panel ${homeOverlayConfigOpen ? "expanded" : ""}`}>
-              <div><span className="eyebrow"><MonitorUp size={15} /> VENTANA FLOTANTE</span><h2>Tamaño rápido</h2><p>Ajusta por separado la ventana, la Ballena y el reloj que aparece sobre su rayo.</p></div>
+            {!IS_ANDROID && <article className={`home-overlay-controls panel ${homeOverlayConfigOpen ? "expanded" : ""}`}>
+              <div><span className="eyebrow"><MonitorUp size={15} /> VENTANA FLOTANTE</span><h2>Configurar ventana</h2><p>Todos los tamaños y estilos están aquí en Caja para que la pestaña Visión muestre solamente las ruedas publicadas.</p></div>
               <div className="home-overlay-actions">
-                <button type="button" className="secondary" aria-expanded={homeOverlayConfigOpen} aria-controls="home-overlay-size-panel" onClick={() => setHomeOverlayEditing(!homeOverlayConfigOpen)}><Settings2 size={17} /> {homeOverlayConfigOpen ? "Terminar ajuste" : "Configurar tamaños"}</button>
+                <button type="button" className="secondary" aria-expanded={homeOverlayConfigOpen} aria-controls="home-overlay-size-panel" onClick={() => setHomeOverlayEditing(!homeOverlayConfigOpen)}><Settings2 size={17} /> {homeOverlayConfigOpen ? "Terminar ajuste" : "Abrir configuración"}</button>
                 <button type="button" className={`secondary overlay-home-button ${state.settings.overlayEnabled ? "enabled" : ""}`} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><Eye size={18} /> {state.settings.overlayEnabled ? "Quitar ventana" : "Agregar ventana"}</button>
               </div>
               {homeOverlayConfigOpen && <div id="home-overlay-size-panel" className="home-overlay-size-panel">
+                <div className={`mock-overlay ${cycle.phase} vision-${selectedVision?.id ?? "none"} shape-${state.settings.overlayShape} counter-${state.settings.overlayCounterStyle}`}><span>{transition.active ? "Preparando próximo contador" : cycle.phase === "active" ? `${overlayDisplayName} activa` : `Próxima ${overlayDisplayName}`}</span><strong>{overlayDisplayTimer}</strong></div>
+                <div className="overlay-style-config">
+                  <label>Forma<select value={state.settings.overlayShape} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayShape: event.target.value as OverlayShape } }))}><option value="event">Automática por evento</option><option value="rectangle">Rectangular</option><option value="square">Cuadrada</option><option value="vertical">Vertical</option><option value="round">Redonda</option></select></label>
+                  <label>Estilo del contador<select value={state.settings.overlayCounterStyle} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayCounterStyle: event.target.value as OverlayCounterStyle } }))}><option value="digital">Digital</option><option value="compact">Compacto</option><option value="ring">Anillo de progreso</option></select></label>
+                  <label>Nombre del evento<select value={state.settings.overlayNameMode} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayNameMode: event.target.value as OverlayNameMode } }))}><option value="spanish">Español</option><option value="english">Inglés</option><option value="custom">Personalizado</option></select></label>
+                  {state.settings.overlayNameMode === "custom" && <label>Tu nombre<input maxLength={40} value={state.settings.overlayCustomName} placeholder="Ej. Gravedad azul" onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayCustomName: event.target.value.slice(0, 40) } }))} /></label>}
+                </div>
                 <label className="overlay-size-control"><span>Ventana <strong>{Math.round(state.settings.overlayScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
                 <label className="overlay-size-control"><span>Área de Ballena <strong>{Math.round(state.settings.overlayAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(state.settings.overlayAddonScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(Number(event.target.value) / 100, .2, 1) } }))} /></label>
-                <label className="overlay-size-control"><span>Reloj de Ballena <strong>{Math.round(state.settings.overlayWhaleCounterScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayWhaleCounterScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
-                <label className="overlay-size-control"><span>Estilo del reloj</span><select value={state.settings.overlayWhaleCounterStyle} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterStyle: event.target.value as OverlayCounterStyle } }))}><option value="digital">Digital</option><option value="compact">Compacto</option><option value="ring">Anillo</option></select></label>
-                <div className="overlay-addon-option"><span><strong>Contador de Ballena</strong><small>Muéstralo durante Gravedad. Su 100% equivale como máximo al ancho de la ventana.</small></span><button type="button" className={`switch ${state.settings.overlayWhaleEnabled ? "on" : ""}`} aria-label="Mostrar contador de Ballena" aria-pressed={state.settings.overlayWhaleEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleEnabled: !current.settings.overlayWhaleEnabled } }))}><span /></button></div>
+                {state.settings.overlayWhaleShowTime && <><label className="overlay-size-control"><span>Tiempo sobre el rayo <strong>{Math.round(state.settings.overlayWhaleCounterScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayWhaleCounterScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
+                <label className="overlay-size-control"><span>Estilo del tiempo</span><select value={state.settings.overlayWhaleCounterStyle} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterStyle: event.target.value as OverlayCounterStyle } }))}><option value="digital">Digital</option><option value="compact">Compacto</option><option value="ring">Anillo</option></select></label></>}
+                <div className="overlay-addon-option"><span><strong>Mostrar tiempo de Ballena</strong><small>Si lo desactivas, permanece solamente el Riftwalker con su rayo de progreso.</small></span><button type="button" className={`switch ${state.settings.overlayWhaleShowTime ? "on" : ""}`} aria-label="Mostrar tiempo sobre el rayo de Ballena" aria-pressed={state.settings.overlayWhaleShowTime} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleShowTime: !current.settings.overlayWhaleShowTime } }))}><span /></button></div>
+                <div className="overlay-addon-option"><span><strong>Ballena y rayo</strong><small>Puede ocultarse por completo sin desactivar el contador principal.</small></span><button type="button" className={`switch ${state.settings.overlayWhaleEnabled ? "on" : ""}`} aria-label="Mostrar Ballena y rayo" aria-pressed={state.settings.overlayWhaleEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleEnabled: !current.settings.overlayWhaleEnabled } }))}><span /></button></div>
               </div>}
-            </article>
+            </article>}
 
             <div className="section-heading"><div><span className="eyebrow">RECOMPENSAS PRO</span><h2>Suma lo que reclames</h2></div><span>Solo las recompensas completadas cuentan</span></div>
             <div className="activity-grid">
@@ -1370,23 +1515,6 @@ export default function App() {
 
         {tab === "vision" && (
           <section className="page vision-page">
-            {!IS_ANDROID && <article className="overlay-preview panel public-overlay-preview">
-                <div className="panel-title"><div><span className="eyebrow">VENTANA FLOTANTE</span><h3>Siempre visible</h3></div><button type="button" className={`switch ${state.settings.overlayEnabled ? "on" : ""}`} aria-pressed={state.settings.overlayEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><span /></button></div>
-                <div className={`mock-overlay ${cycle.phase} vision-${selectedVision?.id ?? "none"} shape-${state.settings.overlayShape} counter-${state.settings.overlayCounterStyle}`}><span>{transition.active ? "Preparando próximo contador" : cycle.phase === "active" ? `${overlayDisplayName} activa` : `Próxima ${overlayDisplayName}`}</span><strong>{overlayDisplayTimer}</strong></div>
-                <div className="overlay-style-config">
-                  <label>Forma<select value={state.settings.overlayShape} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayShape: event.target.value as OverlayShape } }))}><option value="event">Automática por evento</option><option value="rectangle">Rectangular</option><option value="square">Cuadrada</option><option value="vertical">Vertical</option><option value="round">Redonda</option></select></label>
-                  <label>Estilo del contador<select value={state.settings.overlayCounterStyle} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayCounterStyle: event.target.value as OverlayCounterStyle } }))}><option value="digital">Digital</option><option value="compact">Compacto</option><option value="ring">Anillo de progreso</option></select></label>
-                  <label>Nombre del evento<select value={state.settings.overlayNameMode} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayNameMode: event.target.value as OverlayNameMode } }))}><option value="spanish">Español</option><option value="english">Inglés</option><option value="custom">Personalizado</option></select></label>
-                  {state.settings.overlayNameMode === "custom" && <label>Tu nombre<input maxLength={40} value={state.settings.overlayCustomName} placeholder="Ej. Gravedad azul" onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayCustomName: event.target.value.slice(0, 40) } }))} /></label>}
-                </div>
-                <label className="overlay-size-control"><span>Tamaño de ventana <strong>{Math.round(state.settings.overlayScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
-                <label className="overlay-size-control"><span>Área de Ballena <strong>{Math.round(state.settings.overlayAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(state.settings.overlayAddonScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(Number(event.target.value) / 100, .2, 1) } }))} /></label>
-                <label className="overlay-size-control"><span>Tamaño del reloj de Ballena <strong>{Math.round(state.settings.overlayWhaleCounterScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayWhaleCounterScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
-                <label className="overlay-size-control"><span>Estilo del reloj de Ballena</span><select value={state.settings.overlayWhaleCounterStyle} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterStyle: event.target.value as OverlayCounterStyle } }))}><option value="digital">Digital</option><option value="compact">Compacto</option><option value="ring">Anillo</option></select></label>
-                <div className="overlay-addon-option"><span><strong>Contador de Ballena</strong><small>Puede ocultarse sin desactivar el contador principal. Nunca supera el ancho de la ventana.</small></span><button type="button" className={`switch ${state.settings.overlayWhaleEnabled ? "on" : ""}`} aria-label="Mostrar contador de Ballena" aria-pressed={state.settings.overlayWhaleEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleEnabled: !current.settings.overlayWhaleEnabled } }))}><span /></button></div>
-                <p>Arrástrala a cualquier zona de la pantalla. La ventana, la Ballena y el reloj luminoso del rayo se configuran por separado.</p>
-              </article>}
-
             <div className="section-heading public-wheels-heading"><div><span className="eyebrow"><RadioTower size={15} /> RUEDAS PUBLICADAS</span><h2>Ruedas Visionales</h2><p>OscarD0823 selecciona la rueda y sincroniza su estado para todos.</p></div></div>
             <div className="public-vision-grid">
               {state.catalog.visions.map((vision) => {
@@ -1545,6 +1673,24 @@ export default function App() {
 
             <article className="backup-panel panel"><div><span className="eyebrow">DATOS PERSONALES</span><h2>Respaldo local</h2><p>El historial permanece en este equipo y no se sube al repositorio público.</p></div><div><button type="button" className="secondary" onClick={() => exportState(state)}><Download size={17} /> Exportar</button><button type="button" className="secondary" onClick={() => importRef.current?.click()}><Upload size={17} /> Importar</button><input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(event) => void onImport(event.target.files?.[0])} /></div></article>
 
+            <article className={`local-device-sync panel ${state.settings.localSyncEnabled ? "enabled" : ""}`}>
+              <div className="local-sync-heading"><div><span className="eyebrow"><Wifi size={15} /> SIN NUBE NI FIREBASE</span><h2>Sincronizar PC ↔ Android</h2><p>Transfiere puntos, cajas, rondas, personajes, historial y módulos Brillantes directamente por tu red local. Las dos aplicaciones deben estar abiertas.</p></div><span className={`local-sync-state ${state.settings.localSyncEnabled ? "online" : "offline"}`}>{state.settings.localSyncEnabled ? "ACTIVA" : "APAGADA"}</span></div>
+              {!IS_ANDROID ? <>
+                <div className="local-sync-desktop-grid">
+                  <div><small>DIRECCIÓN DEL PC</small><strong>{localSyncInfo?.address ?? "Se mostrará al activar"}</strong></div>
+                  <div><small>CÓDIGO DE CONEXIÓN</small><strong className="pairing-code">{state.settings.localSyncCode || "—— —— ——"}</strong></div>
+                </div>
+                <div className="local-sync-actions"><button type="button" className={state.settings.localSyncEnabled ? "secondary" : "primary"} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncEnabled: !current.settings.localSyncEnabled } }))}>{state.settings.localSyncEnabled ? <WifiOff size={17} /> : <Wifi size={17} />}{state.settings.localSyncEnabled ? "Detener conexión" : "Compartir con el celular"}</button>{state.settings.localSyncEnabled && <button type="button" className="secondary" onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncCode: createPairingCode() } }))}><RefreshCw size={16} /> Cambiar código</button>}</div>
+              </> : <>
+                <div className="local-sync-mobile-fields"><label>Dirección mostrada en el PC<input inputMode="decimal" value={state.settings.localSyncAddress} placeholder="192.168.1.20:47183" onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncAddress: event.target.value.slice(0, 80) } }))} /></label><label>Código de 6 números<input inputMode="numeric" maxLength={6} value={state.settings.localSyncCode} placeholder="000000" onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncCode: event.target.value.replace(/\D/g, "").slice(0, 6) } }))} /></label></div>
+                <div className="local-sync-actions"><button type="button" disabled={localSyncBusy} className={state.settings.localSyncEnabled ? "secondary" : "primary"} onClick={() => { const enabling = !state.settings.localSyncEnabled; if (enabling && (!state.settings.localSyncAddress.trim() || !/^\d{6}$/.test(state.settings.localSyncCode))) { setLocalSyncStatus("Escribe la dirección y el código que aparecen en el PC"); return; } commitState((current) => ({ ...current, settings: { ...current.settings, localSyncEnabled: enabling } })); if (enabling) window.setTimeout(() => void exchangeWithComputer(), 0); }}>{state.settings.localSyncEnabled ? <WifiOff size={17} /> : <Wifi size={17} />}{state.settings.localSyncEnabled ? "Desconectar" : "Conectar con el PC"}</button>{state.settings.localSyncEnabled && <button type="button" className="secondary" disabled={localSyncBusy} onClick={() => void exchangeWithComputer()}><RefreshCw className={localSyncBusy ? "spin" : ""} size={16} /> Sincronizar ahora</button>}</div>
+              </>}
+              <p className="local-sync-message" role="status">{localSyncStatus}</p>
+              <small>Usa una red Wi‑Fi de confianza o el anclaje USB del teléfono. Si Windows solicita acceso, permite solo redes privadas. El código evita conexiones accidentales de otros dispositivos.</small>
+            </article>
+
+            {!IS_ANDROID && <article className="android-download-panel panel"><div><span className="eyebrow"><Download size={15} /> APLICACIÓN COMPAÑERA</span><h2>Instalar en Android</h2><p>Descarga la APK firmada de esta misma versión y úsala con la sincronización directa.</p></div><button type="button" className="primary" onClick={openAndroidDownload}><Download size={18} /> Descargar APK v{APP_VERSION}</button></article>}
+
             <article className="owner-panel panel">
               <div className="panel-title"><div><span className="eyebrow">{creatorAccess === "granted" ? "MODO DESARROLLADOR" : "CUENTA PROPIETARIA"}</span><h2>{creatorAccess === "granted" ? "Editor de OscarD0823" : "Acceso privado"}</h2></div><span className={`creator-access-badge ${creatorAccess}`}>{creatorAccess === "granted" ? <UserCheck size={15} /> : <LockKeyhole size={15} />}{creatorAccess === "granted" ? "Propietario verificado" : creatorAccess === "checking" ? "Comprobando" : "Bloqueado"}</span></div>
               {creatorAccess === "granted" ? <>
@@ -1557,7 +1703,7 @@ export default function App() {
                   </div>
                   <small className="counter-anchor-note">La sincronización pública envía fase, hora absoluta, espera, duración activa y transición al cierre en milisegundos.</small>
                 </section>
-                <OverlayPreviewLab catalog={state.catalog} scale={state.settings.overlayScale} addonScale={state.settings.overlayAddonScale} whaleCounterScale={state.settings.overlayWhaleCounterScale} whaleCounterStyle={state.settings.overlayWhaleCounterStyle} shape={state.settings.overlayShape} counterStyle={state.settings.overlayCounterStyle} nameMode={state.settings.overlayNameMode} customName={state.settings.overlayCustomName} onScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(scale, .2, 1.5) } }))} onAddonScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(scale, .2, 1) } }))} onWhaleCounterScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterScale: clampNumber(scale, .2, 1.5) } }))} onWhaleCounterStyleChange={(style) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterStyle: style } }))} onAppearanceChange={(patch) => commitState((current) => ({ ...current, settings: { ...current.settings, ...(patch.shape ? { overlayShape: patch.shape } : {}), ...(patch.counterStyle ? { overlayCounterStyle: patch.counterStyle } : {}), ...(patch.nameMode ? { overlayNameMode: patch.nameMode } : {}), ...(patch.customName !== undefined ? { overlayCustomName: patch.customName.slice(0, 40) } : {}) } }))} onOpenRealOverlay={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: true } }))} />
+                <OverlayPreviewLab catalog={state.catalog} scale={state.settings.overlayScale} addonScale={state.settings.overlayAddonScale} whaleCounterScale={state.settings.overlayWhaleCounterScale} whaleCounterStyle={state.settings.overlayWhaleCounterStyle} whaleShowTime={state.settings.overlayWhaleShowTime} shape={state.settings.overlayShape} counterStyle={state.settings.overlayCounterStyle} nameMode={state.settings.overlayNameMode} customName={state.settings.overlayCustomName} onScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(scale, .2, 1.5) } }))} onAddonScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(scale, .2, 1) } }))} onWhaleCounterScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterScale: clampNumber(scale, .2, 1.5) } }))} onWhaleCounterStyleChange={(style) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterStyle: style } }))} onAppearanceChange={(patch) => commitState((current) => ({ ...current, settings: { ...current.settings, ...(patch.shape ? { overlayShape: patch.shape } : {}), ...(patch.counterStyle ? { overlayCounterStyle: patch.counterStyle } : {}), ...(patch.nameMode ? { overlayNameMode: patch.nameMode } : {}), ...(patch.customName !== undefined ? { overlayCustomName: patch.customName.slice(0, 40) } : {}) } }))} onOpenRealOverlay={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: true } }))} />
                 <CatalogEditor catalog={state.catalog} onSave={saveCatalog} onPublish={publishCatalog} />
               </> : <div className="creator-login-card"><div className="creator-lock"><LockKeyhole size={25} /></div><div><strong>Acceso privado del propietario</strong><span>{creatorMessage}</span>{!IS_ANDROID && <div className="creator-login-actions"><button type="button" className="primary compact" onClick={() => void startCreatorLogin()}><LogIn size={15} /> Iniciar sesión con GitHub</button><button type="button" className="secondary compact" disabled={creatorAccess === "checking"} onClick={() => void checkCreatorAccess()}><RefreshCw size={15} /> Comprobar cuenta</button></div>}</div></div>}
             </article>

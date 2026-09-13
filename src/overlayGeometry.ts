@@ -80,10 +80,11 @@ export function whaleCounterLayoutWithinWindow(addonScale: number, counterScale:
   };
 }
 
-export function overlayDesignSize(showWhale: boolean, shape: OverlayShape = "event", addonScale = 1, whaleCounterScale = 1, whaleCounterStyle: OverlayCounterStyle = "digital") {
+export function overlayDesignSize(showWhale: boolean, shape: OverlayShape = "event", addonScale = 1, whaleCounterScale = 1, whaleCounterStyle: OverlayCounterStyle = "digital", showWhaleTime = true) {
   const base = OVERLAY_SHAPE_SIZES[shape] ?? OVERLAY_SHAPE_SIZES.event;
   const normalizedAddonScale = whaleScaleWithinWindow(addonScale, shape);
   const normalizedCounterScale = whaleCounterScaleWithinWindow(whaleCounterScale, shape, whaleCounterStyle);
   const layout = whaleCounterLayoutWithinWindow(normalizedAddonScale, normalizedCounterScale, shape, whaleCounterStyle);
-  return showWhale ? { width: base.width, height: base.height + layout.stageHeight } : base;
+  const whaleStageHeight = showWhaleTime ? layout.stageHeight : Math.ceil((OVERLAY_WHALE_HEIGHT - 4) * normalizedAddonScale);
+  return showWhale ? { width: base.width, height: base.height + whaleStageHeight } : base;
 }

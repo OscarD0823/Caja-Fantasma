@@ -4,6 +4,7 @@ import { VISION_CYCLE_WAIT_STARTED_AT, clampNumber, createInitialCharacterTracki
 
 const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
 const OVERLAY_POSITION_KEY = "caja-fantasma.once-human.overlay-position.v1";
+const PERSONAL_SYNC_UPDATED_AT_KEY = "caja-fantasma.once-human.personal-sync-updated-at.v1";
 const CURRENT_DATA_RESET_VERSION = 2;
 const OVERLAY_SHAPES = new Set<OverlayShape>(["event", "rectangle", "square", "vertical", "round"]);
 const OVERLAY_COUNTER_STYLES = new Set<OverlayCounterStyle>(["digital", "compact", "ring"]);
@@ -134,6 +135,7 @@ export function initialState(): PersistedState {
       overlayScale: 1,
       overlayAddonScale: 1,
       overlayWhaleEnabled: true,
+      overlayWhaleShowTime: true,
       overlayWhaleCounterScale: 1,
       overlayWhaleCounterStyle: "digital",
       overlayShape: "event",
@@ -146,6 +148,9 @@ export function initialState(): PersistedState {
       voiceLeadMinutes: 5,
       timingPresetVersion: 4,
       autoStartEnabled: true,
+      localSyncEnabled: false,
+      localSyncAddress: "",
+      localSyncCode: "",
       sharedTimingUpdatedAt: (defaultCatalog as Catalog).eventTiming?.updatedAt,
       dataResetVersion: CURRENT_DATA_RESET_VERSION,
     },
@@ -179,12 +184,16 @@ export function loadState(): PersistedState {
     settings.overlayScale = clampNumber(Number(settings.overlayScale) || 1, .2, 1.5);
     settings.overlayAddonScale = clampNumber(Number(settings.overlayAddonScale) || 1, .2, 1);
     settings.overlayWhaleEnabled = settings.overlayWhaleEnabled !== false;
+    settings.overlayWhaleShowTime = settings.overlayWhaleShowTime !== false;
     settings.overlayWhaleCounterScale = clampNumber(Number(settings.overlayWhaleCounterScale) || 1, .2, 1.5);
     settings.overlayWhaleCounterStyle = OVERLAY_COUNTER_STYLES.has(settings.overlayWhaleCounterStyle) ? settings.overlayWhaleCounterStyle : "digital";
     settings.overlayShape = OVERLAY_SHAPES.has(settings.overlayShape) ? settings.overlayShape : "event";
     settings.overlayCounterStyle = OVERLAY_COUNTER_STYLES.has(settings.overlayCounterStyle) ? settings.overlayCounterStyle : "digital";
     settings.overlayNameMode = OVERLAY_NAME_MODES.has(settings.overlayNameMode) ? settings.overlayNameMode : "spanish";
     settings.overlayCustomName = typeof settings.overlayCustomName === "string" ? settings.overlayCustomName.trim().slice(0, 40) : "";
+    settings.localSyncEnabled = settings.localSyncEnabled === true;
+    settings.localSyncAddress = typeof settings.localSyncAddress === "string" ? settings.localSyncAddress.trim().slice(0, 80) : "";
+    settings.localSyncCode = typeof settings.localSyncCode === "string" && /^\d{6}$/.test(settings.localSyncCode) ? settings.localSyncCode : "";
     settings.transitionDelayMilliseconds = resolveTransitionDelayMilliseconds(parsed.settings, fresh.settings.transitionDelayMilliseconds);
     const characters = characterState(parsed, fresh);
     return {
@@ -264,15 +273,77 @@ export function importState(text: string) {
       overlayScale: clampNumber(Number(parsed.settings?.overlayScale) || 1, .2, 1.5),
       overlayAddonScale: clampNumber(Number(parsed.settings?.overlayAddonScale) || 1, .2, 1),
       overlayWhaleEnabled: parsed.settings?.overlayWhaleEnabled !== false,
+      overlayWhaleShowTime: parsed.settings?.overlayWhaleShowTime !== false,
       overlayWhaleCounterScale: clampNumber(Number(parsed.settings?.overlayWhaleCounterScale) || 1, .2, 1.5),
       overlayWhaleCounterStyle: OVERLAY_COUNTER_STYLES.has(parsed.settings?.overlayWhaleCounterStyle as OverlayCounterStyle) ? parsed.settings!.overlayWhaleCounterStyle! : "digital",
       overlayShape: OVERLAY_SHAPES.has(parsed.settings?.overlayShape as OverlayShape) ? parsed.settings!.overlayShape! : "event",
       overlayCounterStyle: OVERLAY_COUNTER_STYLES.has(parsed.settings?.overlayCounterStyle as OverlayCounterStyle) ? parsed.settings!.overlayCounterStyle! : "digital",
       overlayNameMode: OVERLAY_NAME_MODES.has(parsed.settings?.overlayNameMode as OverlayNameMode) ? parsed.settings!.overlayNameMode! : "spanish",
       overlayCustomName: typeof parsed.settings?.overlayCustomName === "string" ? parsed.settings.overlayCustomName.trim().slice(0, 40) : "",
+      localSyncEnabled: parsed.settings?.localSyncEnabled === true,
+      localSyncAddress: typeof parsed.settings?.localSyncAddress === "string" ? parsed.settings.localSyncAddress.trim().slice(0, 80) : "",
+      localSyncCode: typeof parsed.settings?.localSyncCode === "string" && /^\d{6}$/.test(parsed.settings.localSyncCode) ? parsed.settings.localSyncCode : "",
       transitionDelayMilliseconds: resolveTransitionDelayMilliseconds(parsed.settings, fresh.settings.transitionDelayMilliseconds),
       notificationsEnabled: false,
       dataResetVersion: CURRENT_DATA_RESET_VERSION,
     },
   };
+}
+
+export type PersonalSyncPayload = Pick<PersistedState,
+  | "actions"
+  | "boxes"
+  | "pointRounds"
+  | "pointRoundBoundaries"
+  | "manualBaselinePoints"
+  | "shinyMods"
+  | "characters"
+  | "activeCharacterId"
+  | "trackingMode"
+  | "teamMemberIds"
+  | "activeTeamSessionId"
+>;
+
+export function personalSyncPayload(state: PersistedState): PersonalSyncPayload {
+  return {
+    actions: state.actions,
+    boxes: state.boxes,
+    pointRounds: state.pointRounds,
+    pointRoundBoundaries: state.pointRoundBoundaries,
+    manualBaselinePoints: state.manualBaselinePoints,
+    shinyMods: state.shinyMods,
+    characters: state.characters,
+    activeCharacterId: state.activeCharacterId,
+    trackingMode: state.trackingMode,
+    teamMemberIds: state.teamMemberIds,
+    activeTeamSessionId: state.activeTeamSessionId,
+  };
+}
+
+export function applyPersonalSyncPayload(current: PersistedState, value: unknown): PersistedState {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("El PC devolvió datos personales inválidos.");
+  const imported = importState(JSON.stringify({
+    ...current,
+    ...(value as Partial<PersonalSyncPayload>),
+    schemaVersion: 1,
+    catalog: current.catalog,
+    settings: current.settings,
+  }));
+  return {
+    ...current,
+    ...personalSyncPayload(imported),
+  };
+}
+
+export function loadPersonalSyncUpdatedAt() {
+  const saved = localStorage.getItem(PERSONAL_SYNC_UPDATED_AT_KEY) ?? "";
+  if (Number.isFinite(Date.parse(saved))) return saved;
+  const createdAt = new Date().toISOString();
+  localStorage.setItem(PERSONAL_SYNC_UPDATED_AT_KEY, createdAt);
+  return createdAt;
+}
+
+export function savePersonalSyncUpdatedAt(updatedAt: string) {
+  if (!Number.isFinite(Date.parse(updatedAt))) return;
+  localStorage.setItem(PERSONAL_SYNC_UPDATED_AT_KEY, updatedAt);
 }

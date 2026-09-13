@@ -1,5 +1,13 @@
 #![cfg_attr(target_env = "msvc", allow(linker_messages))]
 
+mod local_sync;
+
+use local_sync::mobile_sync_exchange;
+#[cfg(desktop)]
+use local_sync::{
+    read_local_sync_state, start_local_sync, stop_local_sync, update_local_sync_state,
+};
+
 #[cfg(desktop)]
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 #[cfg(desktop)]
@@ -188,7 +196,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             publish_catalog,
             verify_github_owner,
-            start_github_login
+            start_github_login,
+            mobile_sync_exchange,
+            start_local_sync,
+            stop_local_sync,
+            update_local_sync_state,
+            read_local_sync_state
         ])
         .setup(|app| {
             let open = MenuItem::with_id(app, "open", "Abrir Caja Fantasma", true, None::<&str>)?;
@@ -269,6 +282,7 @@ pub fn run() {
 #[tauri::mobile_entry_point]
 pub fn run() {
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![mobile_sync_exchange])
         .run(tauri::generate_context!())
         .expect("no se pudo iniciar Caja Fantasma en Android");
 }

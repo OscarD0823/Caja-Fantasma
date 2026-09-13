@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import catalog from "../catalog/visions.json" with { type: "json" };
 import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, applyRemoteCatalog, boxStatistics, buildBreakdown, buildPointRoundBreakdown, computeCountdownTransition, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, overlayVisionName, parseManualBaseline, pointActionsInRound, resolveTransitionDelayMilliseconds, sharedEventTimingFromSettings, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type Catalog, type PersistedState, type PointAction, type Settings } from "../src/model.ts";
-import { whaleCounterLayoutWithinWindow, whaleCounterScaleWithinWindow, whaleScaleWithinWindow } from "../src/overlayGeometry.ts";
+import { overlayDesignSize, whaleCounterLayoutWithinWindow, whaleCounterScaleWithinWindow, whaleScaleWithinWindow } from "../src/overlayGeometry.ts";
 import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesModSearch, normalizeModSearch } from "../src/shinyModsCatalog.ts";
 
 const freshState = { ...createInitialCharacterTracking(Date.parse("2026-09-11T00:00:00Z")), actions: [] as PointAction[] };
@@ -37,6 +37,7 @@ const settings: Settings = {
   overlayScale: 1,
   overlayAddonScale: 1,
   overlayWhaleEnabled: true,
+  overlayWhaleShowTime: true,
   overlayWhaleCounterScale: 1,
   overlayWhaleCounterStyle: "digital",
   overlayShape: "event",
@@ -49,6 +50,9 @@ const settings: Settings = {
   voiceLeadMinutes: 5,
   timingPresetVersion: 4,
   autoStartEnabled: true,
+  localSyncEnabled: false,
+  localSyncAddress: "",
+  localSyncCode: "",
   dataResetVersion: 1,
   sharedTimingUpdatedAt: "2026-09-10T21:52:30.000Z",
 };
@@ -136,6 +140,7 @@ for (const shape of ["event", "rectangle", "square", "vertical", "round"] as con
     }
   }
 }
+assert.ok(overlayDesignSize(true, "event", 1, 1, "digital", false).height < overlayDesignSize(true, "event", 1, 1, "digital", true).height, "Ocultar el tiempo debe retirar su espacio y dejar la Ballena con el rayo.");
 assert.equal(shouldShowGravityWhale(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 44 * 60_000), false);
 assert.equal(shouldShowGravityWhale(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 45 * 60_000), true);
 assert.equal(shouldShowGravityWhale(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 65 * 60_000), true);

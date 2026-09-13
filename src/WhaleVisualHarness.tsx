@@ -27,7 +27,7 @@ export default function WhaleVisualHarness() {
         return <article key={item.title}>
           <span>{item.title}</span>
           <section style={{ width: size.width, height: size.height } as CSSProperties}>
-            <OverlayVisual vision={GRAVITY_VISION} phase="active" remainingMs={12 * 60_000 + 34_000} progress={.58} whale={{ visible: true, departing: false, remainingMs: 12 * 60_000 + 34_000, progress: .37 }} addonScale={item.addonScale} whaleCounterScale={item.counterScale} whaleCounterStyle={item.style} shape="event" counterStyle="digital" nameMode="spanish" customName="" preview />
+            <OverlayVisual vision={GRAVITY_VISION} phase="active" remainingMs={12 * 60_000 + 34_000} progress={.58} whale={{ visible: true, departing: false, remainingMs: 12 * 60_000 + 34_000, progress: .37 }} addonScale={item.addonScale} whaleCounterScale={item.counterScale} whaleCounterStyle={item.style} whaleShowTime shape="event" counterStyle="digital" nameMode="spanish" customName="" preview />
           </section>
         </article>;
       })}
