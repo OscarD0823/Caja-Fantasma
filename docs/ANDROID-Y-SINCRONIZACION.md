@@ -49,9 +49,15 @@ Mientras no haya conexión, cada dispositivo conserva su copia local. Al reconec
 
 La app de PC consulta GitHub Raw sin caché y usa la API pública de contenido como respaldo controlado. Las respuestas con una versión anterior nunca reemplazan una configuración más nueva.
 
+## Actualización de la APK
+
+Desde la versión 1.16.1, la APK consulta el mismo manifiesto de GitHub Releases que Windows. Cuando existe una versión superior, la aplicación descarga el paquete oficial en su caché privada, limita su tamaño y verifica la suma SHA-256 publicada antes de abrir el instalador de Android. El sistema vuelve a validar que la firma del paquete coincida con la firma de la app instalada.
+
+Android no permite que una aplicación distribuida fuera de Google Play se reemplace silenciosamente: la persona debe confirmar la pantalla de instalación y, la primera vez, permitir que Caja Fantasma instale su propia actualización. Después no es necesario buscar, descargar ni abrir manualmente el archivo. El manifiesto común solo se publica cuando existen juntos el instalador Windows y la APK de la misma versión.
+
 ## Estado comprobado del equipo
 
-La APK con sincronización local se genera y verifica para la versión 1.16.0:
+La APK con sincronización local y actualización integrada se genera y verifica para la versión 1.16.1:
 
 - Android SDK 35/36, Build Tools 35/36 y NDK 29 están instalados y las licencias fueron aceptadas.
 - El destino Rust `aarch64-linux-android` compila la biblioteca nativa optimizada.
@@ -68,7 +74,7 @@ La APK con sincronización local se genera y verifica para la versión 1.16.0:
 3. Completado: SDK, Platform Tools, Build Tools, NDK y firma privada de distribución.
 4. Completado: anfitrión TCP local en Rust, cliente móvil, código de conexión, validación y sincronización automática bidireccional.
 5. Completado: pruebas de intercambio por bucle local, rechazo de IP pública y compilación ARM64.
-6. Pendiente: validar la APK en un teléfono físico mediante Wi-Fi y USB tethering.
+6. Pendiente: validar la APK y el flujo del instalador del sistema en un teléfono físico mediante Wi-Fi y USB tethering.
 7. Futuro: cifrado de aplicación punto a punto, descubrimiento automático y fusión de operaciones simultáneas.
 8. Futuro: generar un AAB firmado si se decide distribuir mediante Google Play.
 

@@ -2,16 +2,16 @@
 
 ## APK disponible
 
-- Archivo: [`Caja-Fantasma-Android-1.16.0.apk`](Caja-Fantasma-Android-1.16.0.apk)
+- Archivo: [`Caja-Fantasma-Android-1.16.1.apk`](Caja-Fantasma-Android-1.16.1.apk)
 - Arquitectura: ARM64 (`arm64-v8a`).
 - Android mínimo: Android 8.0 / API 26.
-- Versión: 1.16.0 (`versionCode` 1016000).
-- Tamaño: 19.445.224 bytes.
-- SHA-256: `41754D11865DF5FD908E63A88FEA90EA14CDF5A9E7D42DDCF1C0F9B4A2786CFC`.
+- Versión: 1.16.1 (`versionCode` 1016001).
+- Tamaño: 19.578.430 bytes.
+- SHA-256: `0CE76FC8A2BFBFFF0C84E1629A8EE547C059EF982820D050FC065C86BB509F3D`.
 - Firma: RSA 4096 propia de `OscarD0823`; APK Signature Scheme v2 y v3 verificadas.
 
-Descarga el archivo en el teléfono, permite la instalación desde esa fuente cuando Android lo solicite y abre **Caja Fantasma · Once Human**. Esta APK usa el permiso de Internet para consultar la rueda pública y comunicarse directamente con el PC dentro de la red local; no incluye Firebase, publicidad ni telemetría.
+Descarga esta versión una vez, permite la instalación desde esa fuente cuando Android lo solicite y abre **Caja Fantasma · Once Human**. Las versiones siguientes se descargarán y verificarán dentro de la app; Android seguirá mostrando su confirmación de seguridad antes de reemplazarla. Esta APK usa el permiso de Internet para consultar la rueda pública, buscar actualizaciones y comunicarse directamente con el PC dentro de la red local; no incluye Firebase, publicidad ni telemetría.
 
 Para sincronizar, abre la aplicación en ambos dispositivos. En Windows pulsa **Compartir con el celular** y escribe en Android la dirección local y el código de seis números que aparecen. El intercambio funciona por Wi-Fi privado o anclaje USB, solo mientras ambos programas estén abiertos, sin Firebase ni nube. El funcionamiento y sus límites están en [`../../docs/ANDROID-Y-SINCRONIZACION.md`](../../docs/ANDROID-Y-SINCRONIZACION.md).
 
-La compilación, alineación y firma v2/v3 fueron verificadas en el PC. Falta completar la prueba de conexión en un teléfono físico porque no había un dispositivo autorizado por ADB durante esta versión.
+La compilación, alineación, firma v2/v3, certificado compatible con la versión anterior y contenido del manifiesto fueron verificados en el PC. Falta completar la prueba de conexión y actualización en un teléfono físico porque no había un dispositivo autorizado por ADB durante esta versión.

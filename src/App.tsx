@@ -32,6 +32,7 @@ import {
   Search,
   Settings2,
   ShieldCheck,
+  Smartphone,
   Sparkles,
   Trophy,
   Trash2,
@@ -107,7 +108,7 @@ function matchesModSearch(item: ShinyModCatalogItem, search: string) {
   return search.split(/\s+/).filter(Boolean).every((term) => haystack.includes(term));
 }
 
-type TabId = "progress" | "characters" | "vision" | "history" | "shiny" | "changes" | "settings";
+type TabId = "progress" | "characters" | "vision" | "devices" | "history" | "shiny" | "changes" | "settings";
 type CreatorAccess = "checking" | "locked" | "granted";
 
 type LocalSyncInfo = { enabled: boolean; address: string; port: number; pairingCode: string };
@@ -146,6 +147,7 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
   { id: "progress", label: "Caja", icon: Box },
   { id: "characters", label: "Personajes", icon: Users },
   { id: "vision", label: "Visión", icon: Eye },
+  { id: "devices", label: "Dispositivos", icon: Smartphone },
   { id: "history", label: "Historial", icon: History },
   { id: "shiny", label: "Mods Brillantes", icon: Gem },
   { id: "changes", label: "Cambios", icon: FileClock },
@@ -153,6 +155,18 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.16.1",
+    date: "13 de septiembre de 2026",
+    title: "Dispositivos y versión siempre visibles",
+    items: [
+      "La versión instalada aparece en la identidad del programa y en una ficha pública disponible para todas las personas.",
+      "Sincronización PC–Android y descarga de la APK se trasladaron a la nueva sección lateral Dispositivos.",
+      "La sección muestra la versión del catálogo, la rueda pública y la última publicación del administrador.",
+      "Windows y Android comprueban automáticamente los cambios públicos del administrador cada 30 segundos y al recuperar conexión o foco.",
+      "Las nuevas versiones del programa llegan a ambos sistemas: Windows se reinicia después de validar su firma y Android descarga la APK, comprueba SHA-256 y abre la confirmación segura del sistema.",
+    ],
+  },
   {
     version: "1.16.0",
     date: "13 de septiembre de 2026",
@@ -1353,7 +1367,7 @@ export default function App() {
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark"><GameLogoMark /></div>
-          <div><strong>Caja Fantasma</strong><span>Once Human</span></div>
+          <div><strong>Caja Fantasma</strong><span>Once Human · v{APP_VERSION}</span></div>
         </div>
 
         <nav aria-label="Navegación principal">
@@ -1383,7 +1397,7 @@ export default function App() {
         <header className={`topbar vision-${selectedVision?.id ?? "none"} ${cycle.phase}`}>
           <VisionAtmosphere visionId={selectedVision?.id} active={cycle.phase === "active"} />
           <div className="topbar-copy">
-            <span className="eyebrow">{tab === "progress" ? "SEGUIMIENTO ACTUAL" : tab === "characters" ? "PERFILES DE JUEGO" : tab === "vision" ? "RUEDA VISIONAL" : tab === "history" ? "REGISTRO PERSONAL" : tab === "shiny" ? "COLECCIÓN DE MÓDULOS" : tab === "changes" ? "NOVEDADES" : "PREFERENCIAS"}</span>
+            <span className="eyebrow">{tab === "progress" ? "SEGUIMIENTO ACTUAL" : tab === "characters" ? "PERFILES DE JUEGO" : tab === "vision" ? "RUEDA VISIONAL" : tab === "devices" ? "PC Y ANDROID" : tab === "history" ? "REGISTRO PERSONAL" : tab === "shiny" ? "COLECCIÓN DE MÓDULOS" : tab === "changes" ? "NOVEDADES" : "PREFERENCIAS"}</span>
             <h1>{TABS.find((item) => item.id === tab)?.label}</h1>
           </div>
           <div className={`phase-chip ${cycle.phase} ${transition.active ? "transitioning" : ""}`}>
@@ -1658,20 +1672,19 @@ export default function App() {
           </section>
         )}
 
-        {tab === "settings" && (
-          <section className="page settings-page">
-            <div className="settings-grid">
-              <article className="settings-card panel public-timing-summary">
-                <div className="settings-icon"><Clock3 /></div><div><h3>Duración pública del ciclo</h3><p>Estos valores los define el administrador y se sincronizan junto con la rueda y sus puntos.</p><div className="timing-summary-values"><span><small>Espera</small><strong>{state.settings.waitMinutes} min</strong></span><span><small>Activa</small><strong>{state.settings.activeMinutes} min</strong></span><span><small>Transición al cierre</small><strong>{state.settings.transitionDelayMilliseconds} ms</strong></span></div><small>El propietario puede modificarlos en el editor general inferior y enviarlos todos con un solo botón.</small></div>
-              </article>
-              <article className="settings-card panel setting-disabled"><div className="settings-icon"><Bell /></div><div><h3>Notificaciones de escritorio</h3><p>Desactivadas en esta versión. Gravedad puede seguir avisando mediante voz.</p><span className="disabled-setting-badge">DESACTIVADAS</span></div></article>
-              <article className="settings-card voice-settings panel">
-                <div className="settings-icon"><Volume2 /></div><div><h3>Aviso por voz · Gravedad</h3><p>Habla antes de que empiece el evento aunque la aplicación esté minimizada.</p><div className="voice-controls"><label>Anticipación (minutos)<input type="number" min={1} max={60} value={state.settings.voiceLeadMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, voiceLeadMinutes: clampNumber(Number(event.target.value), 1, 60), lastVoiceAlertPhaseStartedAt: undefined } }))} /></label><button type="button" className="secondary compact" onClick={() => { speakMessage("Prueba de voz. El aviso de Gravedad está funcionando."); setToast("Prueba de voz reproducida"); window.setTimeout(() => setToast(""), 1800); }}><Volume2 size={15} /> Probar voz</button></div></div><button type="button" className={`switch ${state.settings.voiceNotificationsEnabled ? "on" : ""}`} aria-pressed={state.settings.voiceNotificationsEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, voiceNotificationsEnabled: !current.settings.voiceNotificationsEnabled } }))}><span /></button>
-              </article>
-              {!IS_ANDROID && <><SettingToggle icon={MonitorUp} title="Iniciar con Windows" description="Arranca en segundo plano; la ventana principal no interrumpe al encender el PC." enabled={state.settings.autoStartEnabled} onToggle={(enabled) => { commitState((current) => ({ ...current, settings: { ...current.settings, autoStartEnabled: enabled } })); void toggleAutostart(enabled); }} /><SettingToggle icon={Eye} title="Ventana flotante" description="Contador pequeño, movible y siempre encima del juego." enabled={state.settings.overlayEnabled} onToggle={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))} /><SettingToggle icon={Zap} title="Contador de Ballena" description="Muestra la Ballena y su rayo durante Gravedad; puede ocultarse sin quitar la ventana flotante." enabled={state.settings.overlayWhaleEnabled} onToggle={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleEnabled: !current.settings.overlayWhaleEnabled } }))} /></>}
-            </div>
+        {tab === "devices" && (
+          <section className="page devices-page">
+            <article className="device-version-panel panel">
+              <div className="device-version-icon"><ShieldCheck size={27} /></div>
+              <div><span className="eyebrow">VERSIÓN INSTALADA</span><h2>Caja Fantasma v{APP_VERSION}</h2><p>{IS_ANDROID ? "Aplicación Android ARM64 con actualizaciones verificadas dentro de la app." : "Aplicación de Windows con actualizaciones firmadas desde GitHub Releases."}</p></div>
+              <span className="version-current-badge">ACTUAL</span>
+            </article>
 
-            <article className="backup-panel panel"><div><span className="eyebrow">DATOS PERSONALES</span><h2>Respaldo local</h2><p>El historial permanece en este equipo y no se sube al repositorio público.</p></div><div><button type="button" className="secondary" onClick={() => exportState(state)}><Download size={17} /> Exportar</button><button type="button" className="secondary" onClick={() => importRef.current?.click()}><Upload size={17} /> Importar</button><input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(event) => void onImport(event.target.files?.[0])} /></div></article>
+            <article className="public-catalog-sync panel">
+              <div className="public-catalog-heading"><div><span className="eyebrow"><RadioTower size={15} /> CAMBIOS DEL ADMINISTRADOR</span><h2>Actualización pública para PC y Android</h2><p>La rueda, sus recompensas, puntos y tiempos se comprueban automáticamente en ambos sistemas.</p></div><span className="catalog-version-badge">CATÁLOGO v{state.catalog.catalogVersion}</span></div>
+              <div className="public-catalog-facts"><span><small>Rueda publicada</small><strong>{selectedVision?.name ?? "Sin rueda"}</strong></span><span><small>Publicado por</small><strong>{state.catalog.updatedBy || AUTHOR}</strong></span><span><small>Último cambio</small><strong>{formatDate(state.catalog.updatedAt)}</strong></span></div>
+              <div className="public-catalog-actions"><button type="button" className="secondary" onClick={() => void syncCatalog()}><RefreshCw size={16} /> Comprobar ahora</button><small>Se revisa al abrir, cada 30 segundos, al volver Internet y al regresar a la aplicación.</small></div>
+            </article>
 
             <article className={`local-device-sync panel ${state.settings.localSyncEnabled ? "enabled" : ""}`}>
               <div className="local-sync-heading"><div><span className="eyebrow"><Wifi size={15} /> SIN NUBE NI FIREBASE</span><h2>Sincronizar PC ↔ Android</h2><p>Transfiere puntos, cajas, rondas, personajes, historial y módulos Brillantes directamente por tu red local. Las dos aplicaciones deben estar abiertas.</p></div><span className={`local-sync-state ${state.settings.localSyncEnabled ? "online" : "offline"}`}>{state.settings.localSyncEnabled ? "ACTIVA" : "APAGADA"}</span></div>
@@ -1689,7 +1702,24 @@ export default function App() {
               <small>Usa una red Wi‑Fi de confianza o el anclaje USB del teléfono. Si Windows solicita acceso, permite solo redes privadas. El código evita conexiones accidentales de otros dispositivos.</small>
             </article>
 
-            {!IS_ANDROID && <article className="android-download-panel panel"><div><span className="eyebrow"><Download size={15} /> APLICACIÓN COMPAÑERA</span><h2>Instalar en Android</h2><p>Descarga la APK firmada de esta misma versión y úsala con la sincronización directa.</p></div><button type="button" className="primary" onClick={openAndroidDownload}><Download size={18} /> Descargar APK v{APP_VERSION}</button></article>}
+            {!IS_ANDROID && <article className="android-download-panel panel"><div><span className="eyebrow"><Download size={15} /> APLICACIÓN COMPAÑERA</span><h2>Instalar en Android</h2><p>Descarga la APK firmada una sola vez. Desde esta versión, el celular recibirá las próximas actualizaciones dentro de la aplicación.</p></div><button type="button" className="primary" onClick={openAndroidDownload}><Download size={18} /> Descargar APK v{APP_VERSION}</button></article>}
+          </section>
+        )}
+
+        {tab === "settings" && (
+          <section className="page settings-page">
+            <div className="settings-grid">
+              <article className="settings-card panel public-timing-summary">
+                <div className="settings-icon"><Clock3 /></div><div><h3>Duración pública del ciclo</h3><p>Estos valores los define el administrador y se sincronizan junto con la rueda y sus puntos.</p><div className="timing-summary-values"><span><small>Espera</small><strong>{state.settings.waitMinutes} min</strong></span><span><small>Activa</small><strong>{state.settings.activeMinutes} min</strong></span><span><small>Transición al cierre</small><strong>{state.settings.transitionDelayMilliseconds} ms</strong></span></div><small>El propietario puede modificarlos en el editor general inferior y enviarlos todos con un solo botón.</small></div>
+              </article>
+              <article className="settings-card panel setting-disabled"><div className="settings-icon"><Bell /></div><div><h3>Notificaciones de escritorio</h3><p>Desactivadas en esta versión. Gravedad puede seguir avisando mediante voz.</p><span className="disabled-setting-badge">DESACTIVADAS</span></div></article>
+              <article className="settings-card voice-settings panel">
+                <div className="settings-icon"><Volume2 /></div><div><h3>Aviso por voz · Gravedad</h3><p>Habla antes de que empiece el evento aunque la aplicación esté minimizada.</p><div className="voice-controls"><label>Anticipación (minutos)<input type="number" min={1} max={60} value={state.settings.voiceLeadMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, voiceLeadMinutes: clampNumber(Number(event.target.value), 1, 60), lastVoiceAlertPhaseStartedAt: undefined } }))} /></label><button type="button" className="secondary compact" onClick={() => { speakMessage("Prueba de voz. El aviso de Gravedad está funcionando."); setToast("Prueba de voz reproducida"); window.setTimeout(() => setToast(""), 1800); }}><Volume2 size={15} /> Probar voz</button></div></div><button type="button" className={`switch ${state.settings.voiceNotificationsEnabled ? "on" : ""}`} aria-pressed={state.settings.voiceNotificationsEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, voiceNotificationsEnabled: !current.settings.voiceNotificationsEnabled } }))}><span /></button>
+              </article>
+              {!IS_ANDROID && <><SettingToggle icon={MonitorUp} title="Iniciar con Windows" description="Arranca en segundo plano; la ventana principal no interrumpe al encender el PC." enabled={state.settings.autoStartEnabled} onToggle={(enabled) => { commitState((current) => ({ ...current, settings: { ...current.settings, autoStartEnabled: enabled } })); void toggleAutostart(enabled); }} /><SettingToggle icon={Eye} title="Ventana flotante" description="Contador pequeño, movible y siempre encima del juego." enabled={state.settings.overlayEnabled} onToggle={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))} /><SettingToggle icon={Zap} title="Contador de Ballena" description="Muestra la Ballena y su rayo durante Gravedad; puede ocultarse sin quitar la ventana flotante." enabled={state.settings.overlayWhaleEnabled} onToggle={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleEnabled: !current.settings.overlayWhaleEnabled } }))} /></>}
+            </div>
+
+            <article className="backup-panel panel"><div><span className="eyebrow">DATOS PERSONALES</span><h2>Respaldo local</h2><p>El historial permanece en este equipo y no se sube al repositorio público.</p></div><div><button type="button" className="secondary" onClick={() => exportState(state)}><Download size={17} /> Exportar</button><button type="button" className="secondary" onClick={() => importRef.current?.click()}><Upload size={17} /> Importar</button><input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(event) => void onImport(event.target.files?.[0])} /></div></article>
 
             <article className="owner-panel panel">
               <div className="panel-title"><div><span className="eyebrow">{creatorAccess === "granted" ? "MODO DESARROLLADOR" : "CUENTA PROPIETARIA"}</span><h2>{creatorAccess === "granted" ? "Editor de OscarD0823" : "Acceso privado"}</h2></div><span className={`creator-access-badge ${creatorAccess}`}>{creatorAccess === "granted" ? <UserCheck size={15} /> : <LockKeyhole size={15} />}{creatorAccess === "granted" ? "Propietario verificado" : creatorAccess === "checking" ? "Comprobando" : "Bloqueado"}</span></div>

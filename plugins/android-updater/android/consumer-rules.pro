@@ -1,0 +1,2 @@
+-keep class com.oscard0823.cajafantasma.updater.AndroidUpdaterPlugin { *; }
+-keep class com.oscard0823.cajafantasma.updater.InstallArgs { *; }

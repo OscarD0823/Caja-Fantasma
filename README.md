@@ -54,7 +54,7 @@ El modo desarrollador incluye un laboratorio visual que reutiliza la misma inter
 
 ## Actualizaciones
 
-El actualizador sigue el patrón de [Fortuna Real](https://github.com/OscarD0823/Fortuna-Real): consulta `latest.json` en GitHub Releases al abrir, cada 15 minutos, al volver Internet y al recuperar el foco; descarga el instalador, verifica su firma antes de instalarlo y vuelve a abrir la aplicación. Sin Internet, el programa inicia normalmente con los datos locales.
+El actualizador sigue el patrón de [Fortuna Real](https://github.com/OscarD0823/Fortuna-Real): Windows y Android consultan el mismo `latest.json` en GitHub Releases al abrir, cada 15 minutos, al volver Internet y al recuperar el foco. Windows descarga el instalador, verifica su firma, lo instala y vuelve a abrir la aplicación. Android descarga la APK desde la app, verifica su SHA-256 y entrega el paquete firmado al instalador del sistema; Android exige que la persona confirme esa pantalla y puede solicitar una sola vez el permiso «Instalar apps desconocidas». No es necesario buscar ni descargar manualmente las versiones siguientes. Sin Internet, el programa inicia normalmente con los datos locales.
 
 La clave privada y su contraseña DPAPI permanecen fuera del repositorio, en el perfil local de Windows. El repositorio contiene únicamente la clave pública necesaria para verificar instalaciones.
 
@@ -80,11 +80,13 @@ Para crear el instalador firmado en el equipo autorizado:
 pnpm run installer
 ```
 
-Los artefactos quedan en `Entrega/`. Para publicar una versión, incrementa la versión en `package.json`, `src-tauri/Cargo.toml` y `src-tauri/tauri.conf.json`, actualiza las notas y ejecuta:
+Los artefactos quedan en `Entrega/`. Para publicar una versión, incrementa la versión en `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json` y `src/model.ts`, actualiza las notas y crea primero la APK firmada en `Programa/Android/`. Después ejecuta:
 
 ```powershell
 ./scripts/build-installer.ps1 -Publish
 ```
+
+La publicación se detiene si falta la APK de esa misma versión. El script adjunta Windows, Android y `latest.json` en un solo Release para impedir que los dos actualizadores queden desalineados.
 
 ## Privacidad
 

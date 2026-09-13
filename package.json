@@ -1,7 +1,7 @@
 {
   "name": "caja-fantasma-once-human",
   "private": true,
-  "version": "1.16.0",
+  "version": "1.16.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,7 +11,8 @@
     "catalog:shiny": "node ./scripts/generate-shiny-catalog.mjs",
     "tauri": "tauri",
     "desktop": "tauri dev",
-    "installer": "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-installer.ps1"
+    "installer": "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-installer.ps1",
+    "android:release": "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-android.ps1"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.8.0",

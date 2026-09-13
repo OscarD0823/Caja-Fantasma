@@ -281,7 +281,11 @@ pub fn run() {
 #[cfg(mobile)]
 #[tauri::mobile_entry_point]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(tauri_plugin_android_updater::init());
+
+    builder
         .invoke_handler(tauri::generate_handler![mobile_sync_exchange])
         .run(tauri::generate_context!())
         .expect("no se pudo iniciar Caja Fantasma en Android");

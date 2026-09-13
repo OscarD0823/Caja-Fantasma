@@ -396,7 +396,7 @@ dependencies = [
 
 [[package]]
 name = "caja-fantasma-once-human"
-version = "1.16.0"
+version = "1.16.1"
 dependencies = [
  "base64 0.22.1",
  "minisign-verify",
@@ -404,6 +404,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "tauri-plugin-android-updater",
  "tauri-plugin-autostart",
  "tauri-plugin-opener",
  "tauri-plugin-process",
@@ -3874,6 +3875,15 @@ dependencies = [
  "serde_json",
  "tauri-utils",
  "walkdir",
+]
+
+[[package]]
+name = "tauri-plugin-android-updater"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tauri",
+ "tauri-plugin",
 ]
 
 [[package]]

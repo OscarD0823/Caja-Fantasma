@@ -1,6 +1,6 @@
 [package]
 name = "caja-fantasma-once-human"
-version = "1.16.0"
+version = "1.16.1"
 description = "Seguimiento de Caja Fantasma y Rueda Visional para Once Human"
 authors = ["OscarD0823"]
 edition = "2021"
@@ -21,6 +21,9 @@ tauri-plugin-autostart = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
+
+[target.'cfg(target_os = "android")'.dependencies]
+tauri-plugin-android-updater = { path = "../plugins/android-updater" }
 
 [dev-dependencies]
 minisign-verify = "0.2.5"

@@ -30,6 +30,16 @@ function Write-Utf8NoBom([string]$Path, [string]$Value) {
     [IO.File]::WriteAllText($Path, $Value, (New-Object Text.UTF8Encoding($false)))
 }
 
+function Get-Sha256Hex([string]$Path) {
+    $stream = [IO.File]::OpenRead($Path)
+    $algorithm = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($algorithm.ComputeHash($stream))).Replace("-", "") }
+    finally {
+        $algorithm.Dispose()
+        $stream.Dispose()
+    }
+}
+
 if (-not (Test-Path -LiteralPath $SigningKeyPath) -or -not (Test-Path -LiteralPath $SigningPasswordPath)) {
     throw "No se encontró la clave local protegida usada por Fortuna Real. Restaura .tauri\fortuna-real.key y su contraseña DPAPI."
 }
@@ -64,14 +74,27 @@ try {
             }
         }
     }
+    $AndroidApkName = "Caja-Fantasma-Android-$Version.apk"
+    $AndroidApk = Join-Path $ProjectRoot "Programa\Android\$AndroidApkName"
+    if (Test-Path -LiteralPath $AndroidApk) {
+        $Manifest.android = [ordered]@{
+            url = "https://github.com/$ReleaseRepository/releases/download/v$Version/$AndroidApkName"
+            sha256 = Get-Sha256Hex $AndroidApk
+            architecture = "arm64-v8a"
+            minimum_android = 8
+        }
+    }
     $ManifestPath = Join-Path $OutputDirectory "latest.json"
     Write-Utf8NoBom $ManifestPath ($Manifest | ConvertTo-Json -Depth 5)
     Copy-Item -LiteralPath $NotesPath -Destination $OutputDirectory -Force
 
     if ($Publish) {
+        if (-not (Test-Path -LiteralPath $AndroidApk)) {
+            throw "Falta $AndroidApkName. La publicación debe llevar juntos Windows, Android y su manifiesto común."
+        }
         & gh auth status
         if ($LASTEXITCODE -ne 0) { throw "GitHub CLI no tiene una sesión válida." }
-        & gh release create "v$Version" $DeliveredInstaller $DeliveredSignature $ManifestPath --repo $ReleaseRepository --target main --title "Caja Fantasma v$Version" --notes-file $NotesPath
+        & gh release create "v$Version" $DeliveredInstaller $DeliveredSignature $AndroidApk $ManifestPath --repo $ReleaseRepository --target main --title "Caja Fantasma v$Version" --notes-file $NotesPath
         if ($LASTEXITCODE -ne 0) { throw "GitHub no pudo publicar el Release." }
     }
 

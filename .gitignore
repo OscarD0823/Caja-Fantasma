@@ -13,7 +13,10 @@ src-tauri/icons/icon.icns
 .vscode/
 *.log
 *.sig
+*.idsig
 latest.json
 Entrega/
+plugins/*/android/.tauri/
+plugins/*/android/build/
 .env
 !.env.example
