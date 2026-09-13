@@ -1,18 +1,18 @@
 # Caja Fantasma · Once Human
 
-Aplicación de escritorio para Windows creada por [OscarD0823](https://github.com/OscarD0823). Registra las recompensas reclamadas hasta obtener la Caja Fantasma, controla la Rueda Visional y aprende del historial personal de cajas.
+Aplicación para Windows y Android creada por [OscarD0823](https://github.com/OscarD0823). Registra las recompensas reclamadas hasta obtener la Caja Fantasma, muestra la Rueda Visional pública y aprende del historial personal de cajas.
 
 Repositorio oficial: <https://github.com/OscarD0823/Caja-Fantasma>
 
 ## Descargas organizadas
 
-La carpeta [`Programa`](Programa/) reúne el instalador `.exe` de Windows, el estado de la versión Android, un README de instalación y una copia de la licencia. La APK se incorporará allí cuando la aplicación móvil y su sincronización directa con el PC estén implementadas y firmadas.
+La carpeta [`Programa`](Programa/) reúne el instalador `.exe` de Windows, la APK firmada para Android ARM64, instrucciones de instalación y una copia de la licencia.
 
 ## Funciones
 
 - Recompensas Pro con valores configurables: jefes de monolito, silos y Desafío de Manibus de Endless Dream valen 1; Guerra Pro y Manibus de Manibus valen 2.
 - Endless Dream incluye Invasión de Zona Onírica y Soñador de Luz, Soñador Profundo y Soñador Eterno; cada uno vale 1.
-- División Visión con Lunar / Lunar Revelry, Abismo de Gravedad / Gravity Abyss y Progenie Aberrante / Aberrant Progeny, además de un editor para ruedas futuras. OscarD0823 selecciona la rueda pública desde el modo desarrollador; los demás usuarios reciben esa selección y no ven las ruedas desactivadas.
+- División Visión con Lunar / Lunar Revelry, Abismo de Gravedad / Gravity Abyss y Progenie Aberrante / Aberrant Progeny, además de un editor para ruedas futuras. Cada rueda posee una ficha visual con imagen, descripción y estado. OscarD0823 selecciona la rueda pública desde el modo desarrollador; los demás usuarios reciben esa selección sin controles para alterar el ciclo.
 - Abismo de Gravedad incluye Ballena (1) y Plataformas (4).
 - Progenie Aberrante permanece desactivada con Araña, Antena y Grandulón; sus opciones no suman mientras el evento esté desactivado.
 - La caja puede marcarse en cualquier momento. Se guarda automáticamente fecha, hora, puntos, número de recompensas, origen y desglose.
@@ -24,7 +24,7 @@ La carpeta [`Programa`](Programa/) reúne el instalador `.exe` de Windows, el es
 - Las estadísticas comienzan en cero: no se precargan las 16 salidas de la hoja ni se presentan como historial de una persona nueva.
 - Carga manual de valores históricos aproximados. Se combinan únicamente con las cajas confirmadas de esa persona, pero permanecen separados y no inventan fechas.
 - El administrador configura la espera y la duración de la Rueda Visional; el valor inicial es 30 minutos de espera y 30 minutos activa. También puede establecer un retraso visual de 0 a 300.000 milisegundos entre el cierre del evento y la presentación del contador siguiente sin modificar el horario real.
-- Ajuste directo del contador por fase, minutos y segundos. La sincronización inicial de Gravedad parte de su cierre a las 4:52:30 p. m. de Colombia del 10 de septiembre de 2026.
+- Ajuste directo del contador por fase, minutos y segundos, visible únicamente para el administrador verificado. La sincronización inicial de Gravedad parte de su cierre a las 4:52:30 p. m. de Colombia del 10 de septiembre de 2026.
 - Gravedad emite un aviso de voz anticipado configurable. Las notificaciones de escritorio están desactivadas. La app funciona minimizada en la bandeja e inicia con Windows.
 - Contador flotante movible, siempre visible, escalable entre 20 % y 150 % y con posición recordada. El área transparente de la Ballena y futuros adicionales usa una escala independiente de 20 % a 100 %; al reducirla disminuyen tanto la animación como su espacio reservado y su máximo nunca supera el ancho de la ventana. El reloj luminoso del Riftwalker conserva un tamaño propio de 20 % a 150 % y estilos Digital, Compacto o Anillo, por lo que sigue siendo legible aunque la Ballena sea pequeña. La Ballena puede ocultarse sin desactivar el contador principal. Inicio incluye el botón “Configurar tamaños”, que despliega todos esos controles sin abandonar la pantalla principal. Puede usar la forma automática propia de cada evento o un diseño rectangular, cuadrado, vertical o redondo. El reloj principal admite lectura digital, compacta o mediante anillo de progreso, y el nombre se puede mostrar en español, inglés o con un texto personalizado local. La X lo desactiva y los controles del inicio permiten recuperarlo y cambiar los tamaños. Funciona sobre juegos en ventana o pantalla completa sin bordes; Windows no permite garantizar superposición sobre pantalla completa exclusiva.
 - El contador flotante permanece en modo pasivo por defecto: oculta el agarre y la X y deja pasar los clics al juego. Solo se vuelve interactivo después de pulsar “Configurar tamaños”; al terminar el ajuste, cambiar de sección, ocultar o minimizar la aplicación, vuelve a ser transparente para el ratón.
@@ -43,7 +43,7 @@ La carpeta [`Programa`](Programa/) reúne el instalador `.exe` de Windows, el es
 
 El archivo [`catalog/visions.json`](catalog/visions.json) es la fuente pública de recompensas, ruedas y sincronización opcional del contador. La aplicación lo comprueba al abrir, al recuperar el foco, al volver Internet y cada 30 segundos incluso si la ventana principal está oculta. Usa GitHub Raw sin caché y, si ese servicio falla, consulta de forma limitada la API pública de GitHub. Si `catalogVersion` es superior a la copia local, los demás equipos reciben las opciones nuevas. El botón «Sincronizar con todos», reservado al propietario, publica en una operación la fase, su hora absoluta, los minutos de espera y actividad y la transición al cierre en milisegundos; el ciclo continúa correctamente aunque el PC haya estado apagado.
 
-La ruta propuesta para reutilizar la aplicación en Android está documentada en [`docs/ANDROID-Y-SINCRONIZACION.md`](docs/ANDROID-Y-SINCRONIZACION.md). No usará Firebase, nube ni cuentas: el PC será un anfitrión temporal y la APK sincronizará directamente mediante QR solo cuando ambas aplicaciones estén abiertas y conectadas por red local, punto de acceso de Windows o USB tethering. La configuración pública seguirá en GitHub, pero el teléfono la recibirá del PC junto con los datos personales cifrados de la sesión.
+La APK actual reutiliza la interfaz y el núcleo Tauri, conserva sus datos personales en el teléfono y recibe la configuración pública desde GitHub. La sincronización directa de datos personales PC–celular continúa documentada como siguiente etapa en [`docs/ANDROID-Y-SINCRONIZACION.md`](docs/ANDROID-Y-SINCRONIZACION.md): no usará Firebase, nube ni cuentas y solo funcionará mientras ambas aplicaciones estén abiertas en la misma conexión local o mediante USB tethering.
 
 Existe un único instalador para todos. En `Configuración > Editor de OscarD0823`, el modo desarrollador permanece bloqueado hasta que GitHub CLI confirma que la sesión activa pertenece exactamente a `OscarD0823`, propietario del repositorio. Otra cuenta no puede habilitar el editor y el servidor repite la verificación antes de cada publicación.
 
@@ -63,7 +63,7 @@ El paquete NSIS instala el ejecutable de Caja Fantasma y genera su desinstalador
 
 ## Desarrollo
 
-Requisitos: Node.js 24, pnpm 11, Rust estable con destino MSVC, Visual Studio Build Tools y WebView2.
+Requisitos para Windows: Node.js 24, pnpm 11, Rust estable con destino MSVC, Visual Studio Build Tools y WebView2. Para Android se requiere además JDK, Android SDK, Build Tools, NDK y el destino Rust `aarch64-linux-android`.
 
 ```powershell
 pnpm install

@@ -1,19 +1,14 @@
 # Caja Fantasma · Once Human
 
-Archivos de distribución del programa creado por [OscarD0823](https://github.com/OscarD0823).
+Descargas oficiales del programa creado por [OscarD0823](https://github.com/OscarD0823).
 
-## Windows
+## Versión actual: 1.15.0
 
-- [`Windows/Caja-Fantasma-1.14.1-Instalador.exe`](Windows/Caja-Fantasma-1.14.1-Instalador.exe): instalador para Windows x64 con firma criptográfica del actualizador.
-- Tamaño: 10.530.077 bytes.
-- SHA-256: `0D780E7CBC68A19677314C7C74C098769A5C0E495A04961A7C90840BF23213F5`.
+| Plataforma | Descarga | Compatibilidad | SHA-256 |
+| --- | --- | --- | --- |
+| Windows | [`Windows/Caja-Fantasma-1.15.0-Instalador.exe`](Windows/Caja-Fantasma-1.15.0-Instalador.exe) | Windows 10/11 x64 | `1807A0C0C8B1DCCADA20F45CEA41FC65E39E68A3E187A2C84628EA5691DC4C02` |
+| Android | [`Android/Caja-Fantasma-Android-1.15.0.apk`](Android/Caja-Fantasma-Android-1.15.0.apk) | Android 8.0+ ARM64 | `8C4F190BA608085132E102F8D9051BF291FC82B120ED69818D8967B7D78A9B5B` |
 
-El instalador contiene únicamente Caja Fantasma y su desinstalador. Si el equipo no tiene Microsoft Edge WebView2, puede descargar el componente oficial necesario para mostrar la interfaz.
+Cada plataforma tiene sus instrucciones y sumas de comprobación dentro de su carpeta. La [licencia MIT](LICENSE) se conserva junto a las descargas. Los instaladores de Windows anteriores están archivados en [`Versiones-anteriores`](Versiones-anteriores/) y los lanzamientos completos permanecen en GitHub Releases.
 
-## Android
-
-La carpeta [`Android`](Android/) está reservada para la APK firmada. Todavía no contiene una APK porque la variante móvil y la sincronización directa PC–celular siguen en preparación. No se publica un archivo vacío o renombrado como si fuera una aplicación válida.
-
-## Licencia
-
-El programa se distribuye bajo la [licencia MIT](LICENSE).
+La APK está firmada e incluye únicamente Caja Fantasma. No usa Firebase, publicidad ni telemetría. La sincronización pública de la rueda usa GitHub; el historial personal permanece local en cada dispositivo.

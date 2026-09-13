@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": 39,
-  "updatedAt": "2026-09-13T00:03:37.075Z",
+  "catalogVersion": 40,
+  "updatedAt": "2026-09-13T13:54:13.928Z",
   "updatedBy": "OscarD0823",
   "boxTargetPoints": 1000,
   "eventTiming": {
@@ -85,6 +85,7 @@
       "id": "lunar",
       "name": "Lunar",
       "englishName": "Lunar Revelry",
+      "visualTheme": "lunar",
       "enabled": false,
       "description": "Lunar / Lunar Revelry. Lista preparada para añadir recompensas futuras.",
       "activities": []
@@ -93,6 +94,7 @@
       "id": "gravity",
       "name": "Abismo de Gravedad",
       "englishName": "Gravity Abyss",
+      "visualTheme": "gravity",
       "enabled": true,
       "description": "Abismo de Gravedad / Gravity Abyss.",
       "activities": [
@@ -116,6 +118,7 @@
       "id": "symbiosis",
       "name": "Progenie Aberrante",
       "englishName": "Aberrant Progeny",
+      "visualTheme": "symbiosis",
       "enabled": false,
       "description": "Progenie Aberrante / Aberrant Progeny. Evento desactivado con opciones preparadas para futuras configuraciones.",
       "activities": [

@@ -5,6 +5,7 @@ import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updat
 import { Download, RefreshCw, ShieldCheck, TriangleAlert } from "lucide-react";
 
 type Status = "downloading" | "installing" | "restarting" | "error";
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
 
 export default function AppUpdater() {
   const updateRef = useRef<Update | null>(null);
@@ -45,7 +46,7 @@ export default function AppUpdater() {
   }, []);
 
   const checkForUpdate = useCallback(async () => {
-    if (!isTauri() || navigator.onLine === false || checking.current || running.current) return;
+    if (!isTauri() || IS_ANDROID || navigator.onLine === false || checking.current || running.current) return;
     checking.current = true;
     try {
       const update = await check({ timeout: 8000 });
@@ -63,7 +64,7 @@ export default function AppUpdater() {
   }, [install]);
 
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isTauri() || IS_ANDROID) return;
     const firstCheck = window.setTimeout(() => void checkForUpdate(), 900);
     const periodicCheck = window.setInterval(() => void checkForUpdate(), 15 * 60_000);
     const refresh = () => void checkForUpdate();

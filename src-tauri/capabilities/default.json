@@ -2,6 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Permisos de las ventanas de Caja Fantasma",
+  "platforms": ["windows"],
   "windows": ["main", "overlay"],
   "permissions": [
     "core:default",

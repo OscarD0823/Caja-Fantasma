@@ -10,10 +10,13 @@ export type Vision = {
   id: string;
   name: string;
   englishName?: string;
+  visualTheme?: VisionVisualTheme;
   enabled: boolean;
   description: string;
   activities: Activity[];
 };
+
+export type VisionVisualTheme = "gravity" | "lunar" | "symbiosis" | "neutral";
 
 export type OverlayShape = "event" | "rectangle" | "square" | "vertical" | "round";
 export type OverlayCounterStyle = "digital" | "compact" | "ring";
@@ -176,7 +179,7 @@ export type CountdownTransitionSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.14.1";
+export const APP_VERSION = "1.15.0";
 export const AUTHOR = "OscarD0823";
 export const DEFAULT_CHARACTER_ID = "character-main";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
@@ -512,7 +515,7 @@ export function validateCatalog(value: unknown): value is Catalog {
     && Array.isArray(catalog.proActivities)
     && catalog.proActivities.every(validActivity)
     && Array.isArray(catalog.visions)
-    && catalog.visions.every((vision) => vision && typeof vision.id === "string" && typeof vision.name === "string" && (vision.englishName === undefined || typeof vision.englishName === "string") && typeof vision.enabled === "boolean" && Array.isArray(vision.activities) && vision.activities.every(validActivity))
+    && catalog.visions.every((vision) => vision && typeof vision.id === "string" && typeof vision.name === "string" && (vision.englishName === undefined || typeof vision.englishName === "string") && (vision.visualTheme === undefined || ["gravity", "lunar", "symbiosis", "neutral"].includes(vision.visualTheme)) && typeof vision.enabled === "boolean" && typeof vision.description === "string" && Array.isArray(vision.activities) && vision.activities.every(validActivity))
     && (timing === undefined || catalog.visions.some((vision) => vision.id === timing.selectedVisionId && vision.enabled))
     && validTiming;
 }

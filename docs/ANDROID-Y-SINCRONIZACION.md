@@ -54,23 +54,25 @@ La app de PC consulta GitHub Raw sin caché y usa la API pública de contenido c
 
 ## Estado comprobado del equipo
 
-El proyecto ya tiene una biblioteca Rust compatible con la entrada móvil de Tauri, pero todavía no está listo para compilar Android:
+La primera APK se generó y verificó para la versión 1.15.0:
 
-- Android Studio, Android SDK y Android NDK no están instalados en este equipo.
-- `JAVA_HOME`, `ANDROID_HOME` y `NDK_HOME` no están configurados.
-- Solo está instalado el destino Rust de Windows.
-- La bandeja, el inicio automático, el actualizador de Windows, el acceso del administrador mediante GitHub CLI y las dos ventanas deben compilarse únicamente bajo `cfg(desktop)`.
-- La ventana flotante de Windows se reemplazará inicialmente por un contador dentro de la APK. Dibujar encima de otras aplicaciones Android exige un permiso especial y un complemento nativo; no es necesario para la primera APK.
+- Android SDK 35/36, Build Tools 35/36 y NDK 29 están instalados y las licencias fueron aceptadas.
+- El destino Rust `aarch64-linux-android` compila la biblioteca nativa optimizada.
+- La bandeja, el inicio automático, el actualizador de Windows, la ventana flotante y el acceso del administrador mediante GitHub CLI quedan aislados bajo `cfg(desktop)`.
+- Android usa una sola ventana, navegación inferior adaptable y guarda los datos personales localmente.
+- La APK ARM64 de distribución está alineada, firmada con un certificado propio de OscarD0823 y verificada con `apksigner`.
+- El teléfono no estaba conectado por ADB durante la compilación, por lo que todavía corresponde realizar una prueba física de instalación, navegación y persistencia.
+- La sincronización directa y cifrada PC–celular descrita arriba sigue siendo la próxima etapa; la versión 1.15.0 solo comparte la configuración pública mediante GitHub.
 
 ## Trabajo por etapas
 
-1. Hacer que la interfaz sea adaptable a pantallas verticales y ocultar en Android las opciones exclusivas de Windows.
-2. Separar las funciones de escritorio mediante `cfg(desktop)` y generar `src-tauri/gen/android` con `pnpm tauri android init`.
-3. Instalar Android Studio, SDK Platform, Platform Tools, Build Tools y NDK; configurar Java/Android/NDK y añadir los destinos Rust para Android.
-4. Crear la primera APK de prueba con `pnpm tauri android build --apk` y validarla en un teléfono real.
-5. Implementar en Rust el anfitrión local del PC y el cliente móvil, además del QR y el registro de operaciones pendientes.
-6. Probar Wi-Fi, punto de acceso de Windows y USB tethering sin Internet.
-7. Firmar la versión final con un keystore privado. Para Google Play se generará AAB; para instalación directa, APK firmada.
+1. Completado: interfaz adaptable a pantallas verticales y separación de opciones exclusivas de Windows.
+2. Completado: entrada móvil de Tauri, proyecto Android generado y compilación Rust ARM64.
+3. Completado: SDK, Platform Tools, Build Tools, NDK y firma privada de distribución.
+4. Pendiente: validar la APK en un teléfono físico compatible.
+5. Pendiente: implementar en Rust el anfitrión local del PC y el cliente móvil, además del QR y el registro de operaciones pendientes.
+6. Pendiente: probar Wi-Fi, punto de acceso de Windows y USB tethering sin Internet.
+7. Futuro: generar un AAB firmado si se decide distribuir mediante Google Play.
 
 ## Pruebas obligatorias
 

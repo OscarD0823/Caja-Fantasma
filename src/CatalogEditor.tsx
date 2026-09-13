@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Github, Plus, RadioTower, Save, Trash2 } from "lucide-react";
-import type { Activity, Catalog, Vision } from "./model";
+import { visionVisualImage } from "./assets";
+import type { Activity, Catalog, Vision, VisionVisualTheme } from "./model";
 import { AUTHOR, clampNumber, createId, resolveTransitionDelayMilliseconds } from "./model";
 
 type Props = {
@@ -47,7 +48,7 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
   });
 
   const addVision = () => change((current) => {
-    const vision: Vision = { id: createId("vision"), name: "Nueva visión", englishName: "New vision", enabled: true, description: "Añade aquí la descripción del evento.", activities: [] };
+    const vision: Vision = { id: createId("vision"), name: "Nueva visión", englishName: "New vision", visualTheme: "neutral", enabled: true, description: "Añade aquí la descripción del evento.", activities: [] };
     current.visions.push(vision);
     return current;
   });
@@ -130,10 +131,16 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
 
       <section className="admin-vision-picker">
         <div><span className="eyebrow"><RadioTower size={15} /> CONTROL PÚBLICO</span><h3>Rueda seleccionada para todos</h3><p>Solo la cuenta propietaria puede cambiarla. Al publicarse, reemplaza la selección local de los demás equipos.</p></div>
-        <div className="admin-vision-options">
+        <div className="admin-vision-options" aria-label="Ruedas configuradas">
           {draft.visions.map((vision) => {
             const selected = draft.eventTiming?.selectedVisionId === vision.id;
-            return <button key={vision.id} type="button" disabled={!vision.enabled} className={selected ? "selected" : ""} onClick={() => selectPublicVision(vision.id)}><span>{vision.enabled ? "Disponible" : "Desactivada"}</span><strong>{vision.name}</strong>{selected && <Check size={16} />}</button>;
+            return <button key={vision.id} type="button" disabled={!vision.enabled} className={`admin-vision-card ${selected ? "selected" : ""}`} onClick={() => selectPublicVision(vision.id)}>
+              <img src={visionVisualImage(vision)} alt="" />
+              <span className="admin-vision-shade" />
+              <span className={`admin-vision-state ${selected ? "published" : vision.enabled ? "available" : "disabled"}`}>{selected ? "Publicada" : vision.enabled ? "Disponible" : "Desactivada"}</span>
+              <span className="admin-vision-copy"><strong>{vision.name}</strong><em>{vision.description || "Sin descripción"}</em></span>
+              {selected && <Check size={18} />}
+            </button>;
           })}
         </div>
         <div className="admin-timing-grid">
@@ -153,6 +160,7 @@ export default function CatalogEditor({ catalog, onSave, onPublish }: Props) {
           <div className="vision-edit-fields">
             <label>Nombre en español<input value={vision.name} onChange={(event) => change((current) => ({ ...current, visions: current.visions.map((item) => item.id === vision.id ? { ...item, name: event.target.value } : item) }))} /></label>
             <label>Nombre en inglés<input value={vision.englishName ?? ""} onChange={(event) => change((current) => ({ ...current, visions: current.visions.map((item) => item.id === vision.id ? { ...item, englishName: event.target.value } : item) }))} /></label>
+            <label>Imagen de la ficha<select value={vision.visualTheme ?? (vision.id === "gravity" || vision.id === "lunar" || vision.id === "symbiosis" ? vision.id : "neutral")} onChange={(event) => change((current) => ({ ...current, visions: current.visions.map((item) => item.id === vision.id ? { ...item, visualTheme: event.target.value as VisionVisualTheme } : item) }))}><option value="gravity">Abismo de Gravedad</option><option value="lunar">Lunar</option><option value="symbiosis">Progenie Aberrante</option><option value="neutral">Caja Fantasma</option></select></label>
             <label>Descripción<input value={vision.description} onChange={(event) => change((current) => ({ ...current, visions: current.visions.map((item) => item.id === vision.id ? { ...item, description: event.target.value } : item) }))} /></label>
             <label className="check-field" title={draft.eventTiming?.selectedVisionId === vision.id ? "Selecciona otra rueda pública antes de desactivar esta." : undefined}><input type="checkbox" disabled={draft.eventTiming?.selectedVisionId === vision.id} checked={vision.enabled} onChange={(event) => change((current) => ({ ...current, visions: current.visions.map((item) => item.id === vision.id ? { ...item, enabled: event.target.checked } : item) }))} /> <span>{vision.enabled ? <Check size={15} /> : null}Evento habilitado</span></label>
           </div>

@@ -1,22 +1,30 @@
 #![cfg_attr(target_env = "msvc", allow(linker_messages))]
 
+#[cfg(desktop)]
 use base64::{engine::general_purpose::STANDARD, Engine as _};
+#[cfg(desktop)]
 use serde_json::{json, Value};
-#[cfg(target_os = "windows")]
+#[cfg(all(desktop, target_os = "windows"))]
 use std::os::windows::process::CommandExt;
+#[cfg(desktop)]
 use std::{fs, process::Command};
+#[cfg(desktop)]
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, WindowEvent,
 };
 
+#[cfg(desktop)]
 const REPOSITORY: &str = "OscarD0823/Caja-Fantasma";
+#[cfg(desktop)]
 const CATALOG_PATH: &str = "catalog/visions.json";
+#[cfg(desktop)]
 const OWNER_LOGIN: &str = "OscarD0823";
-#[cfg(target_os = "windows")]
+#[cfg(all(desktop, target_os = "windows"))]
 const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
 
+#[cfg(desktop)]
 fn command_error(output: &std::process::Output, fallback: &str) -> String {
     let message = String::from_utf8_lossy(&output.stderr).trim().to_string();
     if message.is_empty() {
@@ -26,6 +34,7 @@ fn command_error(output: &std::process::Output, fallback: &str) -> String {
     }
 }
 
+#[cfg(desktop)]
 fn authenticated_owner() -> Result<String, String> {
     let output = Command::new("gh")
         .args(["api", "user", "--jq", ".login"])
@@ -47,11 +56,13 @@ fn authenticated_owner() -> Result<String, String> {
     Ok(login)
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 fn verify_github_owner() -> Result<String, String> {
     authenticated_owner()
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 fn start_github_login() -> Result<String, String> {
     #[cfg(target_os = "windows")]
@@ -79,6 +90,7 @@ fn start_github_login() -> Result<String, String> {
     }
 }
 
+#[cfg(desktop)]
 #[tauri::command]
 fn publish_catalog(catalog_json: String) -> Result<String, String> {
     let login = authenticated_owner()?;
@@ -162,7 +174,7 @@ fn publish_catalog(catalog_json: String) -> Result<String, String> {
     ))
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[cfg(desktop)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(
@@ -251,4 +263,12 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("no se pudo iniciar Caja Fantasma");
+}
+
+#[cfg(mobile)]
+#[tauri::mobile_entry_point]
+pub fn run() {
+    tauri::Builder::default()
+        .run(tauri::generate_context!())
+        .expect("no se pudo iniciar Caja Fantasma en Android");
 }

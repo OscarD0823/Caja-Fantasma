@@ -25,6 +25,7 @@ import {
   Minus,
   MonitorUp,
   Plus,
+  RadioTower,
   RefreshCw,
   RotateCcw,
   Save,
@@ -49,7 +50,7 @@ import {
 import CatalogEditor from "./CatalogEditor";
 import OverlayPreviewLab from "./OverlayPreviewLab";
 import AppUpdater from "./Updater";
-import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, SYMBIOSIS_EVENT_IMAGE } from "./assets";
+import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, SYMBIOSIS_EVENT_IMAGE, visionVisualImage, visionVisualTheme } from "./assets";
 import type { Activity, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, PointRoundRecord, PointRoundTrigger, Settings, ShinyModRecord, Vision } from "./model";
 import {
   APP_VERSION,
@@ -109,6 +110,7 @@ type TabId = "progress" | "characters" | "vision" | "history" | "shiny" | "chang
 type CreatorAccess = "checking" | "locked" | "granted";
 
 const REMOTE_CATALOG_API_URL = "https://api.github.com/repos/OscarD0823/Caja-Fantasma/contents/catalog/visions.json?ref=main";
+const IS_ANDROID = /Android/i.test(navigator.userAgent);
 let catalogApiFallbackAvailableAt = 0;
 
 async function fetchPublicCatalog(): Promise<unknown> {
@@ -142,6 +144,17 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.15.0",
+    date: "12 de septiembre de 2026",
+    title: "Aplicación Android y ruedas visuales",
+    items: [
+      "Primera APK instalable para teléfonos Android con el progreso, personajes, historial, módulos y rueda pública.",
+      "La vista pública de Visión ya no permite cambiar ni corregir el ciclo; esos controles ahora son exclusivos del administrador.",
+      "Todas las ruedas muestran una ficha con imagen, descripción y estado, incluida la configuración de futuras ruedas.",
+      "El propietario puede crear ruedas nuevas y modificar su nombre, descripción, imagen, estado, tiempos y recompensas antes de publicarlas.",
+    ],
+  },
   {
     version: "1.14.1",
     date: "12 de septiembre de 2026",
@@ -491,7 +504,7 @@ function pointRoundTriggerLabel(trigger: PointRoundTrigger) {
 }
 
 async function showOverlay(show: boolean) {
-  if (!isTauri()) return;
+  if (!isTauri() || IS_ANDROID) return;
   const overlay = await WebviewWindow.getByLabel("overlay");
   if (!overlay) return;
   if (show) await overlay.show();
@@ -528,7 +541,7 @@ export default function App() {
 
   const setHomeOverlayEditing = useCallback((enabled: boolean) => {
     setHomeOverlayConfigOpen(enabled);
-    if (isTauri()) void emit("caja-fantasma-overlay-edit-mode", { enabled });
+    if (isTauri() && !IS_ANDROID) void emit("caja-fantasma-overlay-edit-mode", { enabled });
   }, []);
 
   const SHINY_MOD_CATALOG = shinyCatalogModule?.SHINY_MOD_CATALOG ?? EMPTY_SHINY_CATALOG;
@@ -621,6 +634,11 @@ export default function App() {
   }, []);
 
   const checkCreatorAccess = useCallback(async () => {
+    if (IS_ANDROID) {
+      setCreatorAccess("locked");
+      setCreatorMessage("La edición y publicación del catálogo se realizan desde el instalador de Windows del propietario.");
+      return;
+    }
     if (!isTauri()) {
       if (import.meta.env.DEV) {
         setCreatorAccess("granted");
@@ -686,7 +704,7 @@ export default function App() {
     const receiveOverlayChange = () => setState(loadState());
     window.addEventListener("storage", receiveOverlayChange);
     let stopListening: (() => void) | undefined;
-    if (isTauri()) void listen("caja-fantasma-overlay-disabled", receiveOverlayChange).then((stop) => { stopListening = stop; });
+    if (isTauri() && !IS_ANDROID) void listen("caja-fantasma-overlay-disabled", receiveOverlayChange).then((stop) => { stopListening = stop; });
     return () => {
       window.removeEventListener("storage", receiveOverlayChange);
       stopListening?.();
@@ -719,7 +737,7 @@ export default function App() {
   }, [homeOverlayConfigOpen, setHomeOverlayEditing, tab]);
 
   useEffect(() => () => {
-    if (isTauri()) void emit("caja-fantasma-overlay-edit-mode", { enabled: false });
+    if (isTauri() && !IS_ANDROID) void emit("caja-fantasma-overlay-edit-mode", { enabled: false });
   }, []);
 
   useEffect(() => {
@@ -796,7 +814,7 @@ export default function App() {
   }, [syncCatalog]);
 
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isTauri() || IS_ANDROID) return;
     void isEnabled().then((enabled) => {
       if (state.settings.autoStartEnabled && !enabled) void enable().catch(() => undefined);
       if (!state.settings.autoStartEnabled && enabled) void disable().catch(() => undefined);
@@ -1106,7 +1124,7 @@ export default function App() {
   }, [commitState]);
 
   const publishCatalog = useCallback(async (catalog: Catalog) => {
-    if (!isTauri()) throw new Error("La publicación solo está disponible en la aplicación de escritorio.");
+    if (!isTauri() || IS_ANDROID) throw new Error("La publicación solo está disponible en la aplicación de escritorio del propietario.");
     const message = await invoke<string>("publish_catalog", { catalogJson: JSON.stringify(catalog, null, 2) });
     setSyncStatus(message);
     return message;
@@ -1166,13 +1184,13 @@ export default function App() {
   };
 
   const toggleAutostart = async (enabled: boolean) => {
-    if (!isTauri()) return;
+    if (!isTauri() || IS_ANDROID) return;
     if (enabled) await enable();
     else await disable();
   };
 
   const openRepository = () => {
-    if (isTauri()) void openUrl(REPOSITORY_URL);
+    if (isTauri() && !IS_ANDROID) void openUrl(REPOSITORY_URL);
     else window.open(REPOSITORY_URL, "_blank", "noopener,noreferrer");
   };
 
@@ -1352,22 +1370,7 @@ export default function App() {
 
         {tab === "vision" && (
           <section className="page vision-page">
-            <div className="vision-layout">
-              <article className={`timer-panel panel ${cycle.phase}`}>
-                <div className="timer-top"><span className="eyebrow"><Clock3 size={15} /> CICLO AUTOMÁTICO</span><span className="live-dot">{transition.active ? "TRANSICIÓN" : cycle.phase === "active" ? "EN CURSO" : "EN ESPERA"}</span></div>
-                <h2>{transition.active ? "Preparando el próximo contador" : cycle.phase === "active" ? "La Rueda está activa" : "La Rueda comenzará en"}</h2>
-                <strong className="timer-value">{formatDuration(overlayDisplayMs)}</strong>
-                <div className="cycle-track"><span style={{ width: `${Math.round(cycle.progress * 100)}%` }} /></div>
-                <p>{cycle.phase === "active" ? `Termina el ${formatDate(cycle.phaseEndsAt)}.` : `Comienza el ${formatDate(cycle.phaseEndsAt)}.`}</p>
-                <div className="hero-actions">
-                  <button type="button" className="primary" onClick={() => setCyclePhase(cycle.phase === "active" ? "waiting" : "active")}>
-                    {cycle.phase === "active" ? <X size={18} /> : <Zap size={18} />}{cycle.phase === "active" ? "Terminar ahora" : "Activar ahora"}
-                  </button>
-                  <button type="button" className="secondary" onClick={() => setCyclePhase(cycle.phase)}><RotateCcw size={17} /> Reiniciar contador</button>
-                </div>
-              </article>
-
-              <article className="overlay-preview panel">
+            {!IS_ANDROID && <article className="overlay-preview panel public-overlay-preview">
                 <div className="panel-title"><div><span className="eyebrow">VENTANA FLOTANTE</span><h3>Siempre visible</h3></div><button type="button" className={`switch ${state.settings.overlayEnabled ? "on" : ""}`} aria-pressed={state.settings.overlayEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><span /></button></div>
                 <div className={`mock-overlay ${cycle.phase} vision-${selectedVision?.id ?? "none"} shape-${state.settings.overlayShape} counter-${state.settings.overlayCounterStyle}`}><span>{transition.active ? "Preparando próximo contador" : cycle.phase === "active" ? `${overlayDisplayName} activa` : `Próxima ${overlayDisplayName}`}</span><strong>{overlayDisplayTimer}</strong></div>
                 <div className="overlay-style-config">
@@ -1382,36 +1385,22 @@ export default function App() {
                 <label className="overlay-size-control"><span>Estilo del reloj de Ballena</span><select value={state.settings.overlayWhaleCounterStyle} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterStyle: event.target.value as OverlayCounterStyle } }))}><option value="digital">Digital</option><option value="compact">Compacto</option><option value="ring">Anillo</option></select></label>
                 <div className="overlay-addon-option"><span><strong>Contador de Ballena</strong><small>Puede ocultarse sin desactivar el contador principal. Nunca supera el ancho de la ventana.</small></span><button type="button" className={`switch ${state.settings.overlayWhaleEnabled ? "on" : ""}`} aria-label="Mostrar contador de Ballena" aria-pressed={state.settings.overlayWhaleEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleEnabled: !current.settings.overlayWhaleEnabled } }))}><span /></button></div>
                 <p>Arrástrala a cualquier zona de la pantalla. La ventana, la Ballena y el reloj luminoso del rayo se configuran por separado.</p>
-              </article>
+              </article>}
+
+            <div className="section-heading public-wheels-heading"><div><span className="eyebrow"><RadioTower size={15} /> RUEDAS PUBLICADAS</span><h2>Ruedas Visionales</h2><p>OscarD0823 selecciona la rueda y sincroniza su estado para todos.</p></div></div>
+            <div className="public-vision-grid">
+              {state.catalog.visions.map((vision) => {
+                const selected = vision.id === selectedVision?.id;
+                const publicState = selected ? transition.active ? "CAMBIO DE FASE" : cycle.phase === "active" ? "EVENTO ACTIVO" : "PRÓXIMA RUEDA" : "OTRA RUEDA";
+                return <article key={vision.id} className={`public-wheel-card panel theme-${visionVisualTheme(vision)} ${selected ? "selected" : ""}`}>
+                  <img src={visionVisualImage(vision)} alt={`Referencia visual de ${vision.name}`} />
+                  <span className="public-wheel-shade" />
+                  <span className={`public-wheel-state ${selected ? cycle.phase : "idle"}`}>{publicState}</span>
+                  <div><span className="eyebrow">{vision.englishName || "Rueda Visional"}</span><h2>{vision.name}</h2><p>{vision.description || "Sin descripción publicada."}</p>{selected && <strong>{transition.active ? formatDuration(overlayDisplayMs) : cycle.phase === "active" ? `Termina en ${formatDuration(cycle.remainingMs)}` : `Comienza en ${formatDuration(cycle.remainingMs)}`}</strong>}</div>
+                  {selected && <UserCheck size={22} />}
+                </article>;
+              })}
             </div>
-
-            <article className="counter-editor panel">
-              <div className="panel-title">
-                <div><span className="eyebrow"><Clock3 size={15} /> AJUSTE DIRECTO</span><h2>Modificar el contador</h2></div>
-                <button type="button" className="secondary compact" onClick={loadCurrentCountdown}><RefreshCw size={15} /> Copiar tiempo actual</button>
-              </div>
-              <p>Corrige el contador con el tiempo exacto que muestra el juego. El ciclo seguirá alternando automáticamente desde ese punto.</p>
-              <div className="counter-editor-controls">
-                <div className="counter-phase-buttons" aria-label="Fase que se está contando">
-                  <button type="button" className={counterPhase === "waiting" ? "selected" : ""} aria-pressed={counterPhase === "waiting"} onClick={() => setCounterPhase("waiting")}>Falta para empezar</button>
-                  <button type="button" className={counterPhase === "active" ? "selected active" : ""} aria-pressed={counterPhase === "active"} onClick={() => setCounterPhase("active")}>Falta para terminar</button>
-                </div>
-                <div className="counter-time-fields">
-                  <label>Minutos<input type="number" min={0} max={counterPhase === "active" ? state.settings.activeMinutes : state.settings.waitMinutes} value={counterMinutes} onChange={(event) => setCounterMinutes(event.target.value)} /></label>
-                  <span>:</span>
-                  <label>Segundos<input type="number" min={0} max={59} value={counterSeconds} onChange={(event) => setCounterSeconds(event.target.value)} /></label>
-                </div>
-                <button type="button" className="primary" onClick={synchronizeCountdown}><Save size={17} /> Aplicar en este PC</button>
-                <button type="button" className="secondary shared-counter-button" disabled={creatorAccess !== "granted"} onClick={() => void publishSharedCountdown()}><Upload size={17} /> Sincronizar con todos</button>
-              </div>
-              <small className="counter-anchor-note">“Sincronizar con todos” es exclusivo del administrador y envía fase, hora absoluta, espera, duración activa y transición al cierre en milisegundos. Sincronización inicial: Gravedad terminó a las 4:52:30 p. m. de Colombia el 10 de septiembre de 2026.</small>
-            </article>
-
-            <article className="public-vision-card panel">
-              <span className="vision-icon">{selectedVision?.id === "gravity" ? <Zap /> : selectedVision?.id === "lunar" ? <Sparkles /> : <ActivityIcon />}</span>
-              <div><span className="eyebrow">RUEDA PÚBLICA</span><h2>{selectedVision?.name ?? "Sin rueda activa"}</h2><p>{selectedVision?.description}</p><small>La selecciona OscarD0823 y se sincroniza automáticamente en todos los equipos.</small></div>
-              <UserCheck size={22} />
-            </article>
           </section>
         )}
 
@@ -1551,16 +1540,26 @@ export default function App() {
               <article className="settings-card voice-settings panel">
                 <div className="settings-icon"><Volume2 /></div><div><h3>Aviso por voz · Gravedad</h3><p>Habla antes de que empiece el evento aunque la aplicación esté minimizada.</p><div className="voice-controls"><label>Anticipación (minutos)<input type="number" min={1} max={60} value={state.settings.voiceLeadMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, voiceLeadMinutes: clampNumber(Number(event.target.value), 1, 60), lastVoiceAlertPhaseStartedAt: undefined } }))} /></label><button type="button" className="secondary compact" onClick={() => { speakMessage("Prueba de voz. El aviso de Gravedad está funcionando."); setToast("Prueba de voz reproducida"); window.setTimeout(() => setToast(""), 1800); }}><Volume2 size={15} /> Probar voz</button></div></div><button type="button" className={`switch ${state.settings.voiceNotificationsEnabled ? "on" : ""}`} aria-pressed={state.settings.voiceNotificationsEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, voiceNotificationsEnabled: !current.settings.voiceNotificationsEnabled } }))}><span /></button>
               </article>
-              <SettingToggle icon={MonitorUp} title="Iniciar con Windows" description="Arranca en segundo plano; la ventana principal no interrumpe al encender el PC." enabled={state.settings.autoStartEnabled} onToggle={(enabled) => { commitState((current) => ({ ...current, settings: { ...current.settings, autoStartEnabled: enabled } })); void toggleAutostart(enabled); }} />
-              <SettingToggle icon={Eye} title="Ventana flotante" description="Contador pequeño, movible y siempre encima del juego." enabled={state.settings.overlayEnabled} onToggle={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))} />
-              <SettingToggle icon={Zap} title="Contador de Ballena" description="Muestra la Ballena y su rayo durante Gravedad; puede ocultarse sin quitar la ventana flotante." enabled={state.settings.overlayWhaleEnabled} onToggle={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleEnabled: !current.settings.overlayWhaleEnabled } }))} />
+              {!IS_ANDROID && <><SettingToggle icon={MonitorUp} title="Iniciar con Windows" description="Arranca en segundo plano; la ventana principal no interrumpe al encender el PC." enabled={state.settings.autoStartEnabled} onToggle={(enabled) => { commitState((current) => ({ ...current, settings: { ...current.settings, autoStartEnabled: enabled } })); void toggleAutostart(enabled); }} /><SettingToggle icon={Eye} title="Ventana flotante" description="Contador pequeño, movible y siempre encima del juego." enabled={state.settings.overlayEnabled} onToggle={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))} /><SettingToggle icon={Zap} title="Contador de Ballena" description="Muestra la Ballena y su rayo durante Gravedad; puede ocultarse sin quitar la ventana flotante." enabled={state.settings.overlayWhaleEnabled} onToggle={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleEnabled: !current.settings.overlayWhaleEnabled } }))} /></>}
             </div>
 
             <article className="backup-panel panel"><div><span className="eyebrow">DATOS PERSONALES</span><h2>Respaldo local</h2><p>El historial permanece en este equipo y no se sube al repositorio público.</p></div><div><button type="button" className="secondary" onClick={() => exportState(state)}><Download size={17} /> Exportar</button><button type="button" className="secondary" onClick={() => importRef.current?.click()}><Upload size={17} /> Importar</button><input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(event) => void onImport(event.target.files?.[0])} /></div></article>
 
             <article className="owner-panel panel">
               <div className="panel-title"><div><span className="eyebrow">{creatorAccess === "granted" ? "MODO DESARROLLADOR" : "CUENTA PROPIETARIA"}</span><h2>{creatorAccess === "granted" ? "Editor de OscarD0823" : "Acceso privado"}</h2></div><span className={`creator-access-badge ${creatorAccess}`}>{creatorAccess === "granted" ? <UserCheck size={15} /> : <LockKeyhole size={15} />}{creatorAccess === "granted" ? "Propietario verificado" : creatorAccess === "checking" ? "Comprobando" : "Bloqueado"}</span></div>
-              {creatorAccess === "granted" ? <><p>Las herramientas privadas y el historial de cambios solo aparecen al propietario verificado. Publicar sigue siendo una acción separada; esta compilación permanece local.</p><OverlayPreviewLab catalog={state.catalog} scale={state.settings.overlayScale} addonScale={state.settings.overlayAddonScale} whaleCounterScale={state.settings.overlayWhaleCounterScale} whaleCounterStyle={state.settings.overlayWhaleCounterStyle} shape={state.settings.overlayShape} counterStyle={state.settings.overlayCounterStyle} nameMode={state.settings.overlayNameMode} customName={state.settings.overlayCustomName} onScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(scale, .2, 1.5) } }))} onAddonScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(scale, .2, 1) } }))} onWhaleCounterScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterScale: clampNumber(scale, .2, 1.5) } }))} onWhaleCounterStyleChange={(style) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterStyle: style } }))} onAppearanceChange={(patch) => commitState((current) => ({ ...current, settings: { ...current.settings, ...(patch.shape ? { overlayShape: patch.shape } : {}), ...(patch.counterStyle ? { overlayCounterStyle: patch.counterStyle } : {}), ...(patch.nameMode ? { overlayNameMode: patch.nameMode } : {}), ...(patch.customName !== undefined ? { overlayCustomName: patch.customName.slice(0, 40) } : {}) } }))} onOpenRealOverlay={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: true } }))} /><CatalogEditor catalog={state.catalog} onSave={saveCatalog} onPublish={publishCatalog} /></> : <div className="creator-login-card"><div className="creator-lock"><LockKeyhole size={25} /></div><div><strong>Acceso privado del propietario</strong><span>{creatorMessage}</span><div className="creator-login-actions"><button type="button" className="primary compact" onClick={() => void startCreatorLogin()}><LogIn size={15} /> Iniciar sesión con GitHub</button><button type="button" className="secondary compact" disabled={creatorAccess === "checking"} onClick={() => void checkCreatorAccess()}><RefreshCw size={15} /> Comprobar cuenta</button></div></div></div>}
+              {creatorAccess === "granted" ? <>
+                <p>Las herramientas privadas, el control del contador y la publicación completa solo aparecen al propietario verificado.</p>
+                <section className="admin-cycle-console">
+                  <div className="admin-cycle-heading"><div><span className="eyebrow"><Clock3 size={15} /> CONTROL PRIVADO DEL CICLO</span><h3>Rueda pública y contador sincronizado</h3></div><span className={`live-dot ${cycle.phase}`}>{transition.active ? "TRANSICIÓN" : cycle.phase === "active" ? "EN CURSO" : "EN ESPERA"}</span></div>
+                  <div className="admin-cycle-grid">
+                    <div className={`admin-cycle-live ${cycle.phase}`}><span>{transition.active ? "Preparando el próximo contador" : cycle.phase === "active" ? `${selectedVision?.name ?? "Rueda"} activa` : `${selectedVision?.name ?? "Rueda"} comenzará en`}</span><strong>{formatDuration(overlayDisplayMs)}</strong><div className="cycle-track"><i style={{ width: `${Math.round(cycle.progress * 100)}%` }} /></div><small>{cycle.phase === "active" ? `Termina el ${formatDate(cycle.phaseEndsAt)}.` : `Comienza el ${formatDate(cycle.phaseEndsAt)}.`}</small><div className="hero-actions"><button type="button" className="primary" onClick={() => setCyclePhase(cycle.phase === "active" ? "waiting" : "active")}>{cycle.phase === "active" ? <X size={17} /> : <Zap size={17} />}{cycle.phase === "active" ? "Terminar ahora" : "Activar ahora"}</button><button type="button" className="secondary" onClick={() => setCyclePhase(cycle.phase)}><RotateCcw size={16} /> Reiniciar</button></div></div>
+                    <div className="admin-counter-editor"><div className="panel-title"><div><span className="eyebrow">AJUSTE EXACTO</span><h3>Modificar el contador</h3></div><button type="button" className="secondary compact" onClick={loadCurrentCountdown}><RefreshCw size={15} /> Copiar actual</button></div><p>Introduce el tiempo exacto que muestra el juego y decide si solo se aplica aquí o se envía a todos.</p><div className="counter-phase-buttons" aria-label="Fase que se está contando"><button type="button" className={counterPhase === "waiting" ? "selected" : ""} aria-pressed={counterPhase === "waiting"} onClick={() => setCounterPhase("waiting")}>Falta para empezar</button><button type="button" className={counterPhase === "active" ? "selected active" : ""} aria-pressed={counterPhase === "active"} onClick={() => setCounterPhase("active")}>Falta para terminar</button></div><div className="counter-time-fields"><label>Minutos<input type="number" min={0} max={counterPhase === "active" ? state.settings.activeMinutes : state.settings.waitMinutes} value={counterMinutes} onChange={(event) => setCounterMinutes(event.target.value)} /></label><span>:</span><label>Segundos<input type="number" min={0} max={59} value={counterSeconds} onChange={(event) => setCounterSeconds(event.target.value)} /></label></div><div className="admin-counter-actions"><button type="button" className="secondary" onClick={synchronizeCountdown}><Save size={16} /> Aplicar en este PC</button><button type="button" className="primary" onClick={() => void publishSharedCountdown()}><Upload size={16} /> Sincronizar con todos</button></div></div>
+                  </div>
+                  <small className="counter-anchor-note">La sincronización pública envía fase, hora absoluta, espera, duración activa y transición al cierre en milisegundos.</small>
+                </section>
+                <OverlayPreviewLab catalog={state.catalog} scale={state.settings.overlayScale} addonScale={state.settings.overlayAddonScale} whaleCounterScale={state.settings.overlayWhaleCounterScale} whaleCounterStyle={state.settings.overlayWhaleCounterStyle} shape={state.settings.overlayShape} counterStyle={state.settings.overlayCounterStyle} nameMode={state.settings.overlayNameMode} customName={state.settings.overlayCustomName} onScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(scale, .2, 1.5) } }))} onAddonScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(scale, .2, 1) } }))} onWhaleCounterScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterScale: clampNumber(scale, .2, 1.5) } }))} onWhaleCounterStyleChange={(style) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterStyle: style } }))} onAppearanceChange={(patch) => commitState((current) => ({ ...current, settings: { ...current.settings, ...(patch.shape ? { overlayShape: patch.shape } : {}), ...(patch.counterStyle ? { overlayCounterStyle: patch.counterStyle } : {}), ...(patch.nameMode ? { overlayNameMode: patch.nameMode } : {}), ...(patch.customName !== undefined ? { overlayCustomName: patch.customName.slice(0, 40) } : {}) } }))} onOpenRealOverlay={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: true } }))} />
+                <CatalogEditor catalog={state.catalog} onSave={saveCatalog} onPublish={publishCatalog} />
+              </> : <div className="creator-login-card"><div className="creator-lock"><LockKeyhole size={25} /></div><div><strong>Acceso privado del propietario</strong><span>{creatorMessage}</span>{!IS_ANDROID && <div className="creator-login-actions"><button type="button" className="primary compact" onClick={() => void startCreatorLogin()}><LogIn size={15} /> Iniciar sesión con GitHub</button><button type="button" className="secondary compact" disabled={creatorAccess === "checking"} onClick={() => void checkCreatorAccess()}><RefreshCw size={15} /> Comprobar cuenta</button></div>}</div></div>}
             </article>
           </section>
         )}
