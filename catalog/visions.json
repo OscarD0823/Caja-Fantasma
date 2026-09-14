@@ -1,18 +1,18 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": 40,
-  "updatedAt": "2026-09-13T13:54:13.928Z",
+  "catalogVersion": 41,
+  "updatedAt": "2026-09-14T02:18:57.852Z",
   "updatedBy": "OscarD0823",
   "boxTargetPoints": 1000,
   "eventTiming": {
     "selectedVisionId": "gravity",
     "waitMinutes": 30,
     "activeMinutes": 30,
-    "transitionDelayMilliseconds": 400,
-    "transitionDelaySeconds": 0.4,
+    "transitionDelayMilliseconds": 450,
+    "transitionDelaySeconds": 0.45,
     "phaseStartedAt": "2026-09-12T23:52:27.075Z",
     "phase": "waiting",
-    "updatedAt": "2026-09-13T00:03:37.075Z",
+    "updatedAt": "2026-09-14T02:18:57.852Z",
     "updatedBy": "OscarD0823"
   },
   "proActivities": [
