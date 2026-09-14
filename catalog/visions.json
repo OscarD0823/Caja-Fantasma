@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": 43,
-  "updatedAt": "2026-09-14T17:19:59.028Z",
+  "catalogVersion": 44,
+  "updatedAt": "2026-09-14T17:20:29.772Z",
   "updatedBy": "OscarD0823",
   "boxTargetPoints": 1000,
   "eventTiming": {
@@ -10,9 +10,9 @@
     "activeMinutes": 30,
     "transitionDelayMilliseconds": 450,
     "transitionDelaySeconds": 0.45,
-    "phaseStartedAt": "2026-09-14T16:52:29.028Z",
+    "phaseStartedAt": "2026-09-14T16:52:29.772Z",
     "phase": "waiting",
-    "updatedAt": "2026-09-14T17:19:59.028Z",
+    "updatedAt": "2026-09-14T17:20:29.772Z",
     "updatedBy": "OscarD0823"
   },
   "proActivities": [
