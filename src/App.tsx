@@ -49,6 +49,7 @@ import {
   Zap,
 } from "lucide-react";
 import CatalogEditor from "./CatalogEditor";
+import LocalSyncAddressFields from "./LocalSyncAddressFields";
 import OverlayPreviewLab from "./OverlayPreviewLab";
 import AppUpdater from "./Updater";
 import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, SYMBIOSIS_EVENT_IMAGE, visionVisualImage, visionVisualTheme } from "./assets";
@@ -84,6 +85,7 @@ import {
   validateCatalog,
 } from "./model";
 import { applyPersonalSyncPayload, exportState, importState, loadPersonalSyncUpdatedAt, loadState, personalSyncPayload, savePersonalSyncUpdatedAt, saveState } from "./storage";
+import { isValidLocalSyncAddress, splitLocalSyncAddress } from "./localSyncAddress";
 import type { ShinyModCatalogItem } from "./shinyModsCatalog";
 
 type ShinyCatalogModule = typeof import("./shinyModsCatalog");
@@ -155,6 +157,18 @@ const TABS: Array<{ id: TabId; label: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.16.2",
+    date: "13 de septiembre de 2026",
+    title: "Conexión móvil guiada y tiempos públicos comprobados",
+    items: [
+      "En Android, la IP del PC se escribe en cuatro bloques numéricos y el puerto en un bloque independiente.",
+      "Es posible pegar la dirección completa; la aplicación separa y valida automáticamente cada dato.",
+      "Windows muestra IP, puerto y código en tarjetas independientes para copiarlos sin confusión.",
+      "La sincronización local se verificó en ambas direcciones, con control de código y límite exclusivo a redes privadas.",
+      "Los tiempos publicados por el administrador se aplican en Windows y Android junto con la rueda, la fase y la transición.",
+    ],
+  },
   {
     version: "1.16.1",
     date: "13 de septiembre de 2026",
@@ -637,6 +651,8 @@ export default function App() {
   const teamReady = !isTeamMode || state.teamMemberIds.length >= 2;
   const publicVisionId = sharedVisionId(state.catalog, state.settings.selectedVisionId);
   const selectedVision = state.catalog.visions.find((vision) => vision.id === publicVisionId) ?? state.catalog.visions.find((vision) => vision.enabled) ?? state.catalog.visions[0];
+  const localSyncAddressReady = isValidLocalSyncAddress(state.settings.localSyncAddress);
+  const desktopLocalAddress = splitLocalSyncAddress(localSyncInfo?.address ?? "");
   const cycle = computeCycle(state.settings, now);
   const cycleDurationMinutes = cycle.phase === "active" ? state.settings.activeMinutes : state.settings.waitMinutes;
   const cyclePhaseStartedAt = new Date(Date.parse(cycle.phaseEndsAt) - cycleDurationMinutes * 60_000).toISOString();
@@ -694,8 +710,8 @@ export default function App() {
     if (!IS_ANDROID || !isTauri() || localSyncInFlightRef.current) return;
     const address = state.settings.localSyncAddress.trim();
     const pairingCode = state.settings.localSyncCode.trim();
-    if (!address || !/^\d{6}$/.test(pairingCode)) {
-      setLocalSyncStatus("Escribe la IP y el código de 6 números que muestra el PC");
+    if (!isValidLocalSyncAddress(address) || !/^\d{6}$/.test(pairingCode)) {
+      setLocalSyncStatus("Completa la IP, el puerto y el código de 6 números que muestra el PC");
       return;
     }
     localSyncInFlightRef.current = true;
@@ -1682,21 +1698,22 @@ export default function App() {
 
             <article className="public-catalog-sync panel">
               <div className="public-catalog-heading"><div><span className="eyebrow"><RadioTower size={15} /> CAMBIOS DEL ADMINISTRADOR</span><h2>Actualización pública para PC y Android</h2><p>La rueda, sus recompensas, puntos y tiempos se comprueban automáticamente en ambos sistemas.</p></div><span className="catalog-version-badge">CATÁLOGO v{state.catalog.catalogVersion}</span></div>
-              <div className="public-catalog-facts"><span><small>Rueda publicada</small><strong>{selectedVision?.name ?? "Sin rueda"}</strong></span><span><small>Publicado por</small><strong>{state.catalog.updatedBy || AUTHOR}</strong></span><span><small>Último cambio</small><strong>{formatDate(state.catalog.updatedAt)}</strong></span></div>
-              <div className="public-catalog-actions"><button type="button" className="secondary" onClick={() => void syncCatalog()}><RefreshCw size={16} /> Comprobar ahora</button><small>Se revisa al abrir, cada 30 segundos, al volver Internet y al regresar a la aplicación.</small></div>
+              <div className="public-catalog-facts"><span><small>Rueda publicada</small><strong>{selectedVision?.name ?? "Sin rueda"}</strong></span><span><small>Falta para volver</small><strong>{state.settings.waitMinutes} min</strong></span><span><small>Duración activa</small><strong>{state.settings.activeMinutes} min</strong></span><span><small>Transición</small><strong>{state.settings.transitionDelayMilliseconds} ms</strong></span><span><small>Publicado por</small><strong>{state.catalog.updatedBy || AUTHOR}</strong></span><span><small>Último cambio</small><strong>{formatDate(state.catalog.updatedAt)}</strong></span></div>
+              <div className="public-catalog-actions"><button type="button" className="secondary" onClick={() => void syncCatalog()}><RefreshCw size={16} /> Comprobar ahora</button><small>{syncStatus}. Se revisa al abrir, cada 30 segundos, al volver Internet y al regresar a la aplicación.</small></div>
             </article>
 
             <article className={`local-device-sync panel ${state.settings.localSyncEnabled ? "enabled" : ""}`}>
               <div className="local-sync-heading"><div><span className="eyebrow"><Wifi size={15} /> SIN NUBE NI FIREBASE</span><h2>Sincronizar PC ↔ Android</h2><p>Transfiere puntos, cajas, rondas, personajes, historial y módulos Brillantes directamente por tu red local. Las dos aplicaciones deben estar abiertas.</p></div><span className={`local-sync-state ${state.settings.localSyncEnabled ? "online" : "offline"}`}>{state.settings.localSyncEnabled ? "ACTIVA" : "APAGADA"}</span></div>
               {!IS_ANDROID ? <>
                 <div className="local-sync-desktop-grid">
-                  <div><small>DIRECCIÓN DEL PC</small><strong>{localSyncInfo?.address ?? "Se mostrará al activar"}</strong></div>
+                  <div><small>IP DEL PC</small><strong>{localSyncInfo ? desktopLocalAddress.octets.join(".") : "Se mostrará al activar"}</strong></div>
+                  <div><small>PUERTO</small><strong>{localSyncInfo?.port ?? "—"}</strong></div>
                   <div><small>CÓDIGO DE CONEXIÓN</small><strong className="pairing-code">{state.settings.localSyncCode || "—— —— ——"}</strong></div>
                 </div>
                 <div className="local-sync-actions"><button type="button" className={state.settings.localSyncEnabled ? "secondary" : "primary"} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncEnabled: !current.settings.localSyncEnabled } }))}>{state.settings.localSyncEnabled ? <WifiOff size={17} /> : <Wifi size={17} />}{state.settings.localSyncEnabled ? "Detener conexión" : "Compartir con el celular"}</button>{state.settings.localSyncEnabled && <button type="button" className="secondary" onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncCode: createPairingCode() } }))}><RefreshCw size={16} /> Cambiar código</button>}</div>
               </> : <>
-                <div className="local-sync-mobile-fields"><label>Dirección mostrada en el PC<input inputMode="decimal" value={state.settings.localSyncAddress} placeholder="192.168.1.20:47183" onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncAddress: event.target.value.slice(0, 80) } }))} /></label><label>Código de 6 números<input inputMode="numeric" maxLength={6} value={state.settings.localSyncCode} placeholder="000000" onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncCode: event.target.value.replace(/\D/g, "").slice(0, 6) } }))} /></label></div>
-                <div className="local-sync-actions"><button type="button" disabled={localSyncBusy} className={state.settings.localSyncEnabled ? "secondary" : "primary"} onClick={() => { const enabling = !state.settings.localSyncEnabled; if (enabling && (!state.settings.localSyncAddress.trim() || !/^\d{6}$/.test(state.settings.localSyncCode))) { setLocalSyncStatus("Escribe la dirección y el código que aparecen en el PC"); return; } commitState((current) => ({ ...current, settings: { ...current.settings, localSyncEnabled: enabling } })); if (enabling) window.setTimeout(() => void exchangeWithComputer(), 0); }}>{state.settings.localSyncEnabled ? <WifiOff size={17} /> : <Wifi size={17} />}{state.settings.localSyncEnabled ? "Desconectar" : "Conectar con el PC"}</button>{state.settings.localSyncEnabled && <button type="button" className="secondary" disabled={localSyncBusy} onClick={() => void exchangeWithComputer()}><RefreshCw className={localSyncBusy ? "spin" : ""} size={16} /> Sincronizar ahora</button>}</div>
+                <div className="local-sync-mobile-fields"><LocalSyncAddressFields value={state.settings.localSyncAddress} onChange={(address) => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncAddress: address.slice(0, 80) } }))} /><label className="local-pairing-field">Código de 6 números<input inputMode="numeric" maxLength={6} value={state.settings.localSyncCode} placeholder="000000" onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncCode: event.target.value.replace(/\D/g, "").slice(0, 6) } }))} /></label></div>
+                <div className="local-sync-actions"><button type="button" disabled={localSyncBusy} className={state.settings.localSyncEnabled ? "secondary" : "primary"} onClick={() => { const enabling = !state.settings.localSyncEnabled; if (enabling && (!localSyncAddressReady || !/^\d{6}$/.test(state.settings.localSyncCode))) { setLocalSyncStatus("Completa los cuatro bloques de la IP, el puerto y el código del PC"); return; } commitState((current) => ({ ...current, settings: { ...current.settings, localSyncEnabled: enabling } })); if (enabling) window.setTimeout(() => void exchangeWithComputer(), 0); }}>{state.settings.localSyncEnabled ? <WifiOff size={17} /> : <Wifi size={17} />}{state.settings.localSyncEnabled ? "Desconectar" : "Conectar con el PC"}</button>{state.settings.localSyncEnabled && <button type="button" className="secondary" disabled={localSyncBusy} onClick={() => void exchangeWithComputer()}><RefreshCw className={localSyncBusy ? "spin" : ""} size={16} /> Sincronizar ahora</button>}</div>
               </>}
               <p className="local-sync-message" role="status">{localSyncStatus}</p>
               <small>Usa una red Wi‑Fi de confianza o el anclaje USB del teléfono. Si Windows solicita acceso, permite solo redes privadas. El código evita conexiones accidentales de otros dispositivos.</small>

@@ -2,12 +2,21 @@ import assert from "node:assert/strict";
 import catalog from "../catalog/visions.json" with { type: "json" };
 import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, applyRemoteCatalog, boxStatistics, buildBreakdown, buildPointRoundBreakdown, computeCountdownTransition, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, overlayVisionName, parseManualBaseline, pointActionsInRound, resolveTransitionDelayMilliseconds, sharedEventTimingFromSettings, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type Catalog, type PersistedState, type PointAction, type Settings } from "../src/model.ts";
 import { overlayDesignSize, whaleCounterLayoutWithinWindow, whaleCounterScaleWithinWindow, whaleScaleWithinWindow } from "../src/overlayGeometry.ts";
+import { completeLocalSyncAddress, isValidLocalSyncAddress, joinLocalSyncAddress, splitLocalSyncAddress } from "../src/localSyncAddress.ts";
 import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesModSearch, normalizeModSearch } from "../src/shinyModsCatalog.ts";
 
 const freshState = { ...createInitialCharacterTracking(Date.parse("2026-09-11T00:00:00Z")), actions: [] as PointAction[] };
 assert.equal(freshState.trackingMode, "solo", "La aplicación debe iniciar en Solitario.");
 assert.equal(freshState.characters.length, 1);
 assert.equal(actionsForTeamSession(freshState.actions, freshState.activeTeamSessionId).length, 0, "El conteo inicial de Equipo debe empezar en cero.");
+
+const separatedAddress = splitLocalSyncAddress("192.168.137.24:47186");
+assert.deepEqual(separatedAddress, { octets: ["192", "168", "137", "24"], port: "47186" });
+assert.equal(joinLocalSyncAddress(separatedAddress), "192.168.137.24:47186");
+assert.equal(completeLocalSyncAddress("http://10.0.0.8:47183/")?.address, "10.0.0.8:47183", "Pegar la dirección completa debe llenar todos los bloques.");
+assert.equal(isValidLocalSyncAddress("172.20.10.2:47183"), true);
+assert.equal(isValidLocalSyncAddress("192.168.1.999:47183"), false);
+assert.equal(isValidLocalSyncAddress("192.168.1.20:70000"), false);
 
 assert.equal(validateCatalog(catalog), true, "El catálogo incluido debe ser válido.");
 assert.equal(sharedVisionId(catalog), catalog.eventTiming.selectedVisionId, "La rueda pública debe ser la que eligió el administrador.");
@@ -122,6 +131,21 @@ assert.deepEqual({
   phase: "active",
   phaseStartedAt: "2026-09-12T12:30:00.000Z",
 }, "Un cliente debe aplicar en un solo paso la rueda y todos los tiempos publicados por el administrador.");
+const timingOnlyCatalog = structuredClone(newerCatalog) as Catalog;
+timingOnlyCatalog.updatedAt = "2026-09-12T12:36:00.000Z";
+timingOnlyCatalog.eventTiming = {
+  ...timingOnlyCatalog.eventTiming!,
+  waitMinutes: 55,
+  activeMinutes: 25,
+  transitionDelayMilliseconds: 850,
+  transitionDelaySeconds: .85,
+  updatedAt: "2026-09-12T12:36:00.000Z",
+};
+const timingOnlyUpdated = applyRemoteCatalog(remotelyUpdated, timingOnlyCatalog);
+assert.equal(timingOnlyUpdated.settings.waitMinutes, 55);
+assert.equal(timingOnlyUpdated.settings.activeMinutes, 25);
+assert.equal(timingOnlyUpdated.settings.transitionDelayMilliseconds, 850);
+assert.equal(timingOnlyUpdated.catalog.eventTiming?.waitMinutes, 55, "El catálogo visible y el contador deben conservar la misma configuración pública.");
 const staleCatalog = structuredClone(catalog) as Catalog;
 staleCatalog.catalogVersion = Math.max(0, catalog.catalogVersion - 1);
 assert.strictEqual(applyRemoteCatalog(remotelyUpdated, staleCatalog), remotelyUpdated, "Una respuesta antigua o cacheada no debe devolver el contador a una configuración anterior.");

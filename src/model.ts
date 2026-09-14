@@ -183,7 +183,7 @@ export type CountdownTransitionSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.16.1";
+export const APP_VERSION = "1.16.2";
 export const AUTHOR = "OscarD0823";
 export const DEFAULT_CHARACTER_ID = "character-main";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
@@ -319,7 +319,7 @@ export function applyRemoteCatalog(current: PersistedState, catalog: Catalog): P
 
   return {
     ...current,
-    catalog: hasNewCatalog ? catalog : current.catalog,
+    catalog: hasNewCatalog || hasNewTiming ? catalog : current.catalog,
     settings: {
       ...current.settings,
       selectedVisionId,

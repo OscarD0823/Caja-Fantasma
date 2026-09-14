@@ -5,6 +5,7 @@ $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Security
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
+$CargoTargetDirectory = if ($env:CARGO_TARGET_DIR) { [IO.Path]::GetFullPath($env:CARGO_TARGET_DIR) } else { Join-Path $ProjectRoot "src-tauri\target" }
 $Version = (Get-Content -Raw (Join-Path $ProjectRoot "src-tauri\tauri.conf.json") | ConvertFrom-Json).version
 $SigningKeyPath = Join-Path $env:USERPROFILE ".tauri\fortuna-real.key"
 $SigningPasswordPath = "$SigningKeyPath.password.dpapi"
@@ -50,7 +51,7 @@ try {
     & $Node $TauriCli build
     if ($LASTEXITCODE -ne 0) { throw "Tauri no pudo crear el instalador." }
 
-    $Installer = Get-ChildItem -Path (Join-Path $ProjectRoot "src-tauri\target\release\bundle\nsis") -Filter "*-setup.exe" -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    $Installer = Get-ChildItem -Path (Join-Path $CargoTargetDirectory "release\bundle\nsis") -Filter "*-setup.exe" -File | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if (-not $Installer) { throw "No se encontró el instalador NSIS generado." }
     $Signature = "$($Installer.FullName).sig"
     if (-not (Test-Path -LiteralPath $Signature)) { throw "El instalador no tiene la firma de actualización requerida." }

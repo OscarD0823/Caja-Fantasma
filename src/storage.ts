@@ -1,6 +1,6 @@
 import defaultCatalog from "../catalog/visions.json";
 import type { Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointRoundRecord, PointRoundTrigger, ShinyModRecord } from "./model";
-import { VISION_CYCLE_WAIT_STARTED_AT, clampNumber, createInitialCharacterTracking, resolveTransitionDelayMilliseconds, sharedVisionId, validateCatalog } from "./model";
+import { VISION_CYCLE_WAIT_STARTED_AT, applyRemoteCatalog, clampNumber, createInitialCharacterTracking, resolveTransitionDelayMilliseconds, sharedVisionId, validateCatalog } from "./model";
 
 const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
 const OVERLAY_POSITION_KEY = "caja-fantasma.once-human.overlay-position.v1";
@@ -196,7 +196,7 @@ export function loadState(): PersistedState {
     settings.localSyncCode = typeof settings.localSyncCode === "string" && /^\d{6}$/.test(settings.localSyncCode) ? settings.localSyncCode : "";
     settings.transitionDelayMilliseconds = resolveTransitionDelayMilliseconds(parsed.settings, fresh.settings.transitionDelayMilliseconds);
     const characters = characterState(parsed, fresh);
-    return {
+    const loadedState: PersistedState = {
       ...fresh,
       ...parsed,
       catalog,
@@ -211,6 +211,7 @@ export function loadState(): PersistedState {
       ...characters,
       settings,
     };
+    return applyRemoteCatalog(loadedState, catalog);
   } catch {
     return initialState();
   }

@@ -8,7 +8,7 @@ La sincronización de Caja Fantasma no usará Firebase, servicios en la nube, cu
 
 ## Conexión local implementada
 
-El PC actúa como anfitrión temporal. Al pulsar **Compartir con el celular**, abre un servicio TCP local y muestra su dirección y un código de seis números. En la APK se escriben ambos valores y se pulsa **Conectar con el PC**. Al desactivar la función o cerrar el programa, el servicio deja de aceptar conexiones.
+El PC actúa como anfitrión temporal. Al pulsar **Compartir con el celular**, abre un servicio TCP local y muestra por separado su IP, el puerto y un código de seis números. En la APK la IP se introduce en cuatro bloques, el puerto en su propio campo y el código en otro; también se puede pegar una dirección completa en cualquiera de los bloques. Después se pulsa **Conectar con el PC**. Al desactivar la función o cerrar el programa, el servicio deja de aceptar conexiones.
 
 La ruta principal será una red local, sin necesitar Internet:
 
@@ -45,9 +45,9 @@ Mientras no haya conexión, cada dispositivo conserva su copia local. Al reconec
 
 ## Configuración pública
 
-`catalog/visions.json` continúa en GitHub como fuente pública de recompensas y horario tanto para PC como para Android. El administrador sigue publicando allí la rueda general. La conexión local no sustituye ni modifica ese catálogo.
+`catalog/visions.json` continúa en GitHub como fuente pública de recompensas y horario tanto para PC como para Android. El administrador publica de una vez la rueda general, los minutos de espera, los minutos de actividad, el retraso de transición, la fase vigente y su hora de inicio. La conexión local no sustituye ni modifica ese catálogo.
 
-La app de PC consulta GitHub Raw sin caché y usa la API pública de contenido como respaldo controlado. Las respuestas con una versión anterior nunca reemplazan una configuración más nueva.
+PC y Android consultan GitHub Raw sin caché al abrir, al recuperar el foco, al volver la conexión y cada 30 segundos; usan la API pública de contenido como respaldo controlado. Las respuestas con una versión anterior nunca reemplazan una configuración más nueva. Cuando el administrador vuelve a sincronizar los tiempos sin cambiar la estructura del catálogo, la fecha de publicación permite que ambos tipos de dispositivo reemplacen también esa configuración y continúen el ciclo desde la misma hora absoluta.
 
 ## Actualización de la APK
 
@@ -57,7 +57,7 @@ Android no permite que una aplicación distribuida fuera de Google Play se reemp
 
 ## Estado comprobado del equipo
 
-La APK con sincronización local y actualización integrada se genera y verifica para la versión 1.16.1:
+La APK con sincronización local y actualización integrada se genera y verifica para la versión 1.16.2:
 
 - Android SDK 35/36, Build Tools 35/36 y NDK 29 están instalados y las licencias fueron aceptadas.
 - El destino Rust `aarch64-linux-android` compila la biblioteca nativa optimizada.
@@ -65,7 +65,7 @@ La APK con sincronización local y actualización integrada se genera y verifica
 - Android usa una sola ventana, navegación inferior adaptable y guarda los datos personales localmente.
 - La APK ARM64 de distribución está alineada, firmada con un certificado propio de OscarD0823 y verificada con `apksigner`.
 - El teléfono no estaba conectado por ADB durante la compilación, por lo que todavía corresponde realizar una prueba física de instalación, navegación y persistencia.
-- El anfitrión local, el cliente Android, el código de emparejamiento, la restricción a IP privadas y el intercambio bidireccional cuentan con pruebas automáticas por bucle local.
+- El anfitrión local, el cliente Android, el código de emparejamiento, la restricción a IP privadas y el intercambio bidireccional cuentan con pruebas automáticas por bucle local. Las pruebas cubren el envío PC→celular, el envío celular→PC, el rechazo de un código incorrecto, el puerto predeterminado y los rangos privados 10.x, 172.16–31.x y 192.168.x.
 
 ## Trabajo por etapas
 

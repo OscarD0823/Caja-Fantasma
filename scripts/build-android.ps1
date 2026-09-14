@@ -5,6 +5,7 @@ $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Security
 
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
+$CargoTargetDirectory = if ($env:CARGO_TARGET_DIR) { [IO.Path]::GetFullPath($env:CARGO_TARGET_DIR) } else { Join-Path $ProjectRoot "src-tauri\target" }
 $Version = (Get-Content -Raw (Join-Path $ProjectRoot "src-tauri\tauri.conf.json") | ConvertFrom-Json).version
 $SigningDirectory = Join-Path $env:LOCALAPPDATA "Caja Fantasma\signing"
 $KeyStore = Join-Path $SigningDirectory "android-release.jks"
@@ -66,7 +67,7 @@ if ($BuildExitCode -ne 0 -and ($CapturedBuildOutput -join "`n") -notmatch "Creat
     throw "Tauri no pudo compilar la biblioteca Android."
 }
 
-$NativeLibrary = Join-Path $ProjectRoot "src-tauri\target\aarch64-linux-android\release\libcaja_fantasma_once_human_lib.so"
+$NativeLibrary = Join-Path $CargoTargetDirectory "aarch64-linux-android\release\libcaja_fantasma_once_human_lib.so"
 if (-not (Test-Path -LiteralPath $NativeLibrary)) {
     throw "No se encontró la biblioteca ARM64 compilada."
 }

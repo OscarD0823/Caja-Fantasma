@@ -40,7 +40,7 @@ struct LocalSyncRequest {
     data_json: String,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalSyncExchange {
     pub ok: bool,
@@ -98,6 +98,9 @@ fn read_json_line(stream: &mut TcpStream) -> Result<String, String> {
         }
         let bytes = &chunk[..read];
         if let Some(end) = bytes.iter().position(|byte| *byte == b'\n') {
+            if result.len().saturating_add(end) > MAX_SYNC_BYTES {
+                return Err("La solicitud de sincronización supera el límite permitido.".into());
+            }
             result.extend_from_slice(&bytes[..end]);
             break;
         }
@@ -470,8 +473,25 @@ mod tests {
         let latest_date = "2026-09-13T10:01:00.000Z".to_string();
         let info = desktop::start(code.clone(), "{\"points\":1}".into(), initial_date)
             .expect("the local server should start");
+        let address = format!("127.0.0.1:{}", info.port);
+        let older_exchange = mobile_sync_exchange_blocking(
+            address.clone(),
+            code.clone(),
+            "{\"points\":0}".into(),
+            "2026-09-13T09:59:00.000Z".into(),
+        )
+        .expect("the PC should return its newer payload to the phone");
+        assert_eq!(older_exchange.data_json, "{\"points\":1}");
+        let wrong_code = mobile_sync_exchange_blocking(
+            address.clone(),
+            "000000".into(),
+            "{\"points\":0}".into(),
+            "2026-09-13T09:59:00.000Z".into(),
+        )
+        .expect_err("an incorrect pairing code must be rejected");
+        assert!(wrong_code.contains("no coincide"));
         let exchange = mobile_sync_exchange_blocking(
-            format!("127.0.0.1:{}", info.port),
+            address,
             code,
             "{\"points\":2}".into(),
             latest_date.clone(),
@@ -488,7 +508,17 @@ mod tests {
     fn rejects_public_internet_addresses() {
         let error = local_socket_address("8.8.8.8:47183").expect_err("public IPs must be rejected");
         assert!(error.contains("red local"));
+        assert_eq!(
+            local_socket_address("192.168.1.20")
+                .expect("the default local port should be accepted")
+                .port(),
+            DEFAULT_LOCAL_SYNC_PORT
+        );
         assert!(!is_local_ip("8.8.8.8".parse().expect("valid public IP")));
+        assert!(is_local_ip("10.0.0.8".parse().expect("valid private IP")));
+        assert!(is_local_ip(
+            "172.20.10.2".parse().expect("valid private IP")
+        ));
         assert!(is_local_ip(
             "192.168.1.20".parse().expect("valid private IP")
         ));
