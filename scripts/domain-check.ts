@@ -183,11 +183,11 @@ for (const shape of ["event", "rectangle", "square", "vertical", "round"] as con
 }
 
 const activityHistory: ActivityHistoryRecord[] = [
-  { id: "a1", activityId: "platform", activityName: "Plataformas", points: 4, count: 1, occurredAt: "2026-09-18T23:59:00-05:00" },
-  { id: "a2", activityId: "platform", activityName: "Plataformas", points: 12, count: 3, occurredAt: "2026-09-19T08:00:00-05:00" },
-  { id: "a3", activityId: "forsaken", activityName: "Desamparado", points: 200, count: 200, occurredAt: "2026-09-19T09:00:00-05:00" },
+  { id: "a1", activityId: "platform", activityName: "Plataformas", points: 4, count: 1, occurredAt: new Date(2026, 8, 18, 23, 59).toISOString() },
+  { id: "a2", activityId: "platform", activityName: "Plataformas", points: 12, count: 3, occurredAt: new Date(2026, 8, 19, 8).toISOString() },
+  { id: "a3", activityId: "forsaken", activityName: "Desamparado", points: 200, count: 200, occurredAt: new Date(2026, 8, 19, 9).toISOString() },
 ];
-const dailyActivity = activityHistorySummary(activityHistory, new Date("2026-09-19T12:00:00-05:00"));
+const dailyActivity = activityHistorySummary(activityHistory, new Date(2026, 8, 19, 12));
 assert.equal(dailyActivity.today.count, 203, "El resumen diario debe separar las actividades por fecha local.");
 assert.equal(dailyActivity.today.points, 212);
 assert.equal(dailyActivity.totalCount, 204);
