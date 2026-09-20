@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Eye, MonitorUp, Radio, Waves } from "lucide-react";
-import type { Catalog, GravityWhaleSnapshot, OverlayCounterStyle, OverlayNameMode, OverlayShape } from "./model";
+import type { Catalog, GravityWhaleSnapshot, OverlayCounterStyle, OverlayNameMode, OverlayShape, WhaleCounterStyle } from "./model";
 import { clampNumber } from "./model";
 import OverlayVisual, { overlayDesignSize } from "./OverlayVisual";
 
@@ -9,7 +9,7 @@ type Props = {
   scale: number;
   addonScale: number;
   whaleCounterScale: number;
-  whaleCounterStyle: OverlayCounterStyle;
+  whaleCounterStyle: WhaleCounterStyle;
   whaleShowTime: boolean;
   shape: OverlayShape;
   counterStyle: OverlayCounterStyle;
@@ -18,7 +18,7 @@ type Props = {
   onScaleChange: (scale: number) => void;
   onAddonScaleChange: (scale: number) => void;
   onWhaleCounterScaleChange: (scale: number) => void;
-  onWhaleCounterStyleChange: (style: OverlayCounterStyle) => void;
+  onWhaleCounterStyleChange: (style: WhaleCounterStyle) => void;
   onAppearanceChange: (patch: Partial<{ shape: OverlayShape; counterStyle: OverlayCounterStyle; nameMode: OverlayNameMode; customName: string }>) => void;
   onOpenRealOverlay: () => void;
 };
@@ -58,8 +58,8 @@ export default function OverlayPreviewLab({ catalog, scale, addonScale, whaleCou
       <div><span>Ballena</span><div className="preview-choice"><button type="button" className={whaleMode === "hidden" ? "selected" : ""} onClick={() => setWhaleMode("hidden")}>Oculta</button><button type="button" disabled={vision?.id !== "gravity"} className={whaleMode === "active" ? "selected" : ""} onClick={() => setWhaleMode("active")}><Waves size={14} /> Disparando</button><button type="button" disabled={vision?.id !== "gravity"} className={whaleMode === "departing" ? "selected" : ""} onClick={() => setWhaleMode("departing")}>Salida</button></div></div>
       <label className="overlay-size-control"><span>Tamaño de ventana <strong>{Math.round(normalizedScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(normalizedScale * 100)} onChange={(event) => onScaleChange(Number(event.target.value) / 100)} /></label>
       <label className="overlay-size-control"><span>Área de Ballena <strong>{Math.round(normalizedAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(normalizedAddonScale * 100)} onChange={(event) => onAddonScaleChange(Number(event.target.value) / 100)} /></label>
-      <label className="overlay-size-control"><span>Reloj de Ballena <strong>{Math.round(normalizedWhaleCounterScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(normalizedWhaleCounterScale * 100)} onChange={(event) => onWhaleCounterScaleChange(Number(event.target.value) / 100)} /></label>
-      <label>Estilo del reloj de Ballena<select value={whaleCounterStyle} onChange={(event) => onWhaleCounterStyleChange(event.target.value as OverlayCounterStyle)}><option value="digital">Digital</option><option value="compact">Compacto</option><option value="ring">Anillo</option></select></label>
+      {whaleCounterStyle !== "beam" && <label className="overlay-size-control"><span>Reloj de Ballena <strong>{Math.round(normalizedWhaleCounterScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(normalizedWhaleCounterScale * 100)} onChange={(event) => onWhaleCounterScaleChange(Number(event.target.value) / 100)} /></label>}
+      <label>Estilo del reloj de Ballena<select value={whaleCounterStyle} onChange={(event) => onWhaleCounterStyleChange(event.target.value as WhaleCounterStyle)}><option value="digital">Digital</option><option value="compact">Compacto</option><option value="ring">Anillo</option><option value="beam">Solo rayo</option></select></label>
     </div>
 
     <div className="overlay-lab-canvas" style={{ minHeight: Math.round(designSize.height * normalizedScale) + 28 }}>

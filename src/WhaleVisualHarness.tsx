@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { OverlayCounterStyle, Vision } from "./model";
+import type { Vision, WhaleCounterStyle } from "./model";
 import OverlayVisual from "./OverlayVisual";
 import { overlayDesignSize } from "./overlayGeometry";
 
@@ -12,10 +12,11 @@ const GRAVITY_VISION: Vision = {
   activities: [],
 };
 
-const CASES: Array<{ title: string; addonScale: number; counterScale: number; style: OverlayCounterStyle }> = [
+const CASES: Array<{ title: string; addonScale: number; counterScale: number; style: WhaleCounterStyle }> = [
   { title: "Ballena 100% · reloj 150%", addonScale: 1, counterScale: 1.5, style: "digital" },
   { title: "Ballena 20% · reloj 150%", addonScale: .2, counterScale: 1.5, style: "ring" },
   { title: "Ballena 20% · reloj 20%", addonScale: .2, counterScale: .2, style: "compact" },
+  { title: "Ballena 100% · solo rayo", addonScale: 1, counterScale: 1, style: "beam" },
 ];
 
 export default function WhaleVisualHarness() {

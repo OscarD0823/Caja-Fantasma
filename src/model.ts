@@ -20,6 +20,7 @@ export type VisionVisualTheme = "gravity" | "lunar" | "symbiosis" | "neutral";
 
 export type OverlayShape = "event" | "rectangle" | "square" | "vertical" | "round";
 export type OverlayCounterStyle = "digital" | "compact" | "ring";
+export type WhaleCounterStyle = OverlayCounterStyle | "beam";
 export type OverlayNameMode = "spanish" | "english" | "custom";
 
 export type SharedEventTiming = {
@@ -57,6 +58,17 @@ export type PointAction = {
   characterIds?: string[];
   trackingMode?: "solo" | "team";
   teamSessionId?: string;
+};
+
+export type ActivityHistoryRecord = {
+  id: string;
+  activityId: string;
+  activityName: string;
+  visionId?: string;
+  visionName?: string;
+  points: number;
+  count: number;
+  occurredAt: string;
 };
 
 export type BoxRecord = {
@@ -123,7 +135,7 @@ export type Settings = {
   overlayWhaleEnabled: boolean;
   overlayWhaleShowTime: boolean;
   overlayWhaleCounterScale: number;
-  overlayWhaleCounterStyle: OverlayCounterStyle;
+  overlayWhaleCounterStyle: WhaleCounterStyle;
   overlayShape: OverlayShape;
   overlayCounterStyle: OverlayCounterStyle;
   overlayNameMode: OverlayNameMode;
@@ -137,6 +149,7 @@ export type Settings = {
   timingPresetVersion: number;
   autoStartEnabled: boolean;
   localSyncEnabled: boolean;
+  localSyncLiveEnabled: boolean;
   localSyncAddress: string;
   localSyncCode: string;
   lastNotificationPhaseStartedAt?: string;
@@ -151,6 +164,7 @@ export type PersistedState = {
   schemaVersion: 1;
   catalog: Catalog;
   actions: PointAction[];
+  activityHistory: ActivityHistoryRecord[];
   boxes: BoxRecord[];
   pointRounds: PointRoundRecord[];
   pointRoundBoundaries: Record<string, string>;
@@ -184,7 +198,7 @@ export type CountdownTransitionSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.16.3";
+export const APP_VERSION = "1.17.0";
 export const AUTHOR = "OscarD0823";
 export const DEFAULT_CHARACTER_ID = "character-main";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
@@ -459,6 +473,48 @@ export function buildBreakdown(actions: PointAction[]) {
     groups.set(key, current);
   }
   return [...groups.values()].sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
+}
+
+export function localDateKey(value: string | number | Date) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function activityHistorySummary(records: ActivityHistoryRecord[], today = new Date()) {
+  const todayKey = localDateKey(today);
+  const daily = new Map<string, { date: string; count: number; points: number }>();
+  const ranking = new Map<string, { key: string; name: string; count: number; todayCount: number; points: number }>();
+  for (const record of records) {
+    const date = localDateKey(record.occurredAt);
+    if (!date) continue;
+    const count = Math.max(0, Math.round(Number(record.count) || 0));
+    const points = Math.max(0, Math.round(Number(record.points) || 0));
+    const day = daily.get(date) ?? { date, count: 0, points: 0 };
+    day.count += count;
+    day.points += points;
+    daily.set(date, day);
+    const key = `${record.visionId ?? "pro"}:${record.activityId}`;
+    const name = record.visionName ? `${record.visionName} · ${record.activityName}` : record.activityName;
+    const item = ranking.get(key) ?? { key, name, count: 0, todayCount: 0, points: 0 };
+    item.count += count;
+    item.points += points;
+    if (date === todayKey) item.todayCount += count;
+    ranking.set(key, item);
+  }
+  const days = [...daily.values()].sort((a, b) => b.date.localeCompare(a.date));
+  const ranked = [...ranking.values()].sort((a, b) => b.count - a.count || b.points - a.points || a.name.localeCompare(b.name));
+  const todayStats = daily.get(todayKey) ?? { date: todayKey, count: 0, points: 0 };
+  return {
+    today: todayStats,
+    totalCount: records.reduce((sum, record) => sum + Math.max(0, Math.round(Number(record.count) || 0)), 0),
+    totalPoints: records.reduce((sum, record) => sum + Math.max(0, Math.round(Number(record.points) || 0)), 0),
+    days,
+    ranking: ranked,
+  };
 }
 
 export function buildPointRoundBreakdown(actions: PointAction[]) {

@@ -1,3 +1,5 @@
 # Versiones anteriores
 
 Archivo histórico de instaladores de Windows y APK de Android que antes estaban en las carpetas principales. Para nuevas instalaciones usa siempre la versión indicada en [`../README.md`](../README.md). Los artefactos y notas de cada lanzamiento también permanecen disponibles en GitHub Releases.
+
+La versión 1.16.3 quedó archivada aquí al publicar 1.17.0.

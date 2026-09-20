@@ -53,7 +53,7 @@ import LocalSyncAddressFields from "./LocalSyncAddressFields";
 import OverlayPreviewLab from "./OverlayPreviewLab";
 import AppUpdater from "./Updater";
 import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, SYMBIOSIS_EVENT_IMAGE, visionVisualImage, visionVisualTheme } from "./assets";
-import type { Activity, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, PointRoundRecord, PointRoundTrigger, Settings, ShinyModRecord, Vision } from "./model";
+import type { Activity, ActivityHistoryRecord, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, PointRoundRecord, PointRoundTrigger, Settings, ShinyModRecord, Vision, WhaleCounterStyle } from "./model";
 import {
   APP_VERSION,
   ANDROID_APK_URL,
@@ -62,6 +62,7 @@ import {
   REMOTE_CATALOG_URL,
   REPOSITORY_URL,
   actionCharacterIds,
+  activityHistorySummary,
   applyRemoteCatalog,
   actionsForCharacter,
   actionsForTeamSession,
@@ -75,6 +76,7 @@ import {
   detachCharacterFromActions,
   formatCompactDuration,
   formatDuration,
+  localDateKey,
   overlayVisionName,
   parseManualBaseline,
   pointActionsInRound,
@@ -116,7 +118,7 @@ type CreatorAccess = "checking" | "locked" | "granted";
 
 type LocalSyncInfo = { enabled: boolean; address: string; port: number; pairingCode: string };
 type LocalSyncSnapshot = { enabled: boolean; revision: number; updatedAt: string; dataJson: string; lastExchangeAt: number; lastMobileUpdateAt: number };
-type LocalSyncAction = "status" | "pull" | "push";
+type LocalSyncAction = "status" | "pull" | "push" | "live";
 type LocalSyncExchange = Omit<LocalSyncSnapshot, "enabled" | "lastMobileUpdateAt"> & { ok: boolean; message: string; catalogJson?: string };
 
 const REMOTE_CATALOG_API_URL = "https://api.github.com/repos/OscarD0823/Caja-Fantasma/contents/catalog/visions.json?ref=main";
@@ -159,6 +161,18 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.17.0",
+    date: "19 de septiembre de 2026",
+    title: "Datos en vivo, resumen diario y ranking",
+    items: [
+      "La sincronización en vivo opcional refleja cambios personales entre PC y Android mientras ambas aplicaciones estén abiertas, sin quitar los botones manuales.",
+      "Caja separa los puntos y actividades de hoy de los acumulados históricos.",
+      "Un ranking ordena los jefes y recompensas por la cantidad realizada desde que comenzó a usarse el programa.",
+      "Cada recompensa muestra su contador de hoy y su contador histórico.",
+      "La Ballena incorpora el estilo Solo rayo: el haz funciona como contador y pierde intensidad al acercarse al final.",
+    ],
+  },
   {
     version: "1.16.3",
     date: "19 de septiembre de 2026",
@@ -609,6 +623,7 @@ export default function App() {
   const personalSyncUpdatedAtRef = useRef(loadPersonalSyncUpdatedAt());
   const personalSyncJsonRef = useRef(JSON.stringify(personalSyncPayload(state)));
   const localSyncInFlightRef = useRef(false);
+  const liveRevisionRef = useRef(0);
   const lastLocalExchangeRef = useRef(0);
   const lastMobileUpdateRef = useRef(0);
   const localSyncEnabledRef = useRef(state.settings.localSyncEnabled);
@@ -625,7 +640,7 @@ export default function App() {
   const defaultShinyMod = SHINY_MOD_CATALOG.find((item) => item.englishName === "Rush Hour <Downstar>" && !item.isCatalogShiny) ?? SHINY_MOD_CATALOG[0];
 
   const referencePoints = useMemo(() => [...state.manualBaselinePoints], [state.manualBaselinePoints]);
-  const personalSyncJson = useMemo(() => JSON.stringify(personalSyncPayload(state)), [state.actions, state.boxes, state.pointRounds, state.pointRoundBoundaries, state.manualBaselinePoints, state.shinyMods, state.characters, state.activeCharacterId, state.trackingMode, state.teamMemberIds, state.activeTeamSessionId]);
+  const personalSyncJson = useMemo(() => JSON.stringify(personalSyncPayload(state)), [state.actions, state.activityHistory, state.boxes, state.pointRounds, state.pointRoundBoundaries, state.manualBaselinePoints, state.shinyMods, state.characters, state.activeCharacterId, state.trackingMode, state.teamMemberIds, state.activeTeamSessionId]);
   const sharedCatalogJson = useMemo(() => JSON.stringify(state.catalog), [state.catalog]);
   const target = clampNumber(state.catalog.boxTargetPoints, 1, 10_000);
   const activeCharacter = state.characters.find((character) => character.id === state.activeCharacterId) ?? state.characters[0];
@@ -640,21 +655,9 @@ export default function App() {
   const currentPointRoundPoints = useMemo(() => currentPointRoundActions.reduce((sum, action) => sum + action.points, 0), [currentPointRoundActions]);
   const visiblePointRounds = useMemo(() => state.pointRounds.filter((record) => isTeamMode ? record.trackingMode === "team" : record.trackingMode === "solo" && record.characterId === activeCharacter.id), [activeCharacter.id, isTeamMode, state.pointRounds]);
   const savedPointRoundTotal = useMemo(() => visiblePointRounds.reduce((sum, record) => sum + record.points, 0), [visiblePointRounds]);
-  const savedActivityCounts = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const record of visiblePointRounds) {
-      for (const item of record.breakdown) {
-        const key = item.activityId ? `${item.visionId ?? "pro"}:${item.activityId}` : `legacy:${item.name}`;
-        totals.set(key, (totals.get(key) ?? 0) + item.count);
-      }
-    }
-    return totals;
-  }, [visiblePointRounds]);
-  const savedActivityCount = (activity: Activity, vision?: Vision) => {
-    const current = savedActivityCounts.get(`${vision?.id ?? "pro"}:${activity.id}`) ?? 0;
-    const legacyName = vision ? `${vision.name} · ${activity.name}` : activity.name;
-    return current + (savedActivityCounts.get(`legacy:${legacyName}`) ?? 0);
-  };
+  const todayKey = localDateKey(now);
+  const activitySummary = useMemo(() => activityHistorySummary(state.activityHistory, new Date(`${todayKey}T12:00:00`)), [state.activityHistory, todayKey]);
+  const activityCount = (activity: Activity, vision?: Vision) => activitySummary.ranking.find((item) => item.key === `${vision?.id ?? "pro"}:${activity.id}`) ?? { todayCount: 0, count: 0 };
   const breakdown = useMemo(() => buildBreakdown(currentActions), [currentActions]);
   const activeCharacterBoxes = useMemo(() => state.boxes.filter((box) => (box.characterId ?? DEFAULT_CHARACTER_ID) === activeCharacter.id), [state.boxes, activeCharacter.id]);
   const activeCharacterPoints = useMemo(() => activeCharacterActions.reduce((sum, action) => sum + action.points, 0), [activeCharacterActions]);
@@ -760,15 +763,20 @@ export default function App() {
         address,
         pairingCode,
         action,
-        dataJson: action === "push" ? personalSyncJsonRef.current : "{}",
-        updatedAt: action === "push" ? personalSyncUpdatedAtRef.current : "1970-01-01T00:00:00.000Z",
+        knownRevision: action === "live" ? liveRevisionRef.current : 0,
+        dataJson: action === "push" || action === "live" ? personalSyncJsonRef.current : "{}",
+        updatedAt: action === "push" || action === "live" ? personalSyncUpdatedAtRef.current : "1970-01-01T00:00:00.000Z",
       });
+      if (action !== "status") liveRevisionRef.current = exchange.revision;
       acceptLocalSyncCatalog(exchange.catalogJson);
       if (action === "pull") {
         const receivedChanges = acceptLocalSyncSnapshot(exchange, true);
         setLocalSyncStatus(receivedChanges ? tx("Datos del PC copiados al celular", "PC data copied to this phone") : tx("El celular ya tenía los mismos datos del PC", "The phone already had the same PC data"));
       } else if (action === "push") {
         setLocalSyncStatus(tx("Datos del celular copiados al PC", "Phone data copied to the PC"));
+      } else if (action === "live") {
+        const receivedChanges = acceptLocalSyncSnapshot(exchange, true);
+        setLocalSyncStatus(receivedChanges ? tx("Cambios del PC recibidos en vivo", "PC changes received live") : tx("Sincronización en vivo · datos al día", "Live sync · data up to date"));
       } else {
         setLocalSyncStatus(tx("PC conectado · catálogo público al día", "PC connected · public catalog up to date"));
       }
@@ -792,9 +800,10 @@ export default function App() {
         dataJson: personalSyncJsonRef.current,
         updatedAt: personalSyncUpdatedAtRef.current,
         catalogJson: sharedCatalogJson,
+        liveEnabled: state.settings.localSyncLiveEnabled,
       }).catch(() => undefined);
     }
-  }, [personalSyncJson, sharedCatalogJson, state.settings.localSyncEnabled]);
+  }, [personalSyncJson, sharedCatalogJson, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
 
   useEffect(() => {
     if (IS_ANDROID || !isTauri() || !state.settings.localSyncEnabled) {
@@ -814,6 +823,7 @@ export default function App() {
           dataJson: personalSyncJsonRef.current,
           updatedAt: personalSyncUpdatedAtRef.current,
           catalogJson: sharedCatalogJson,
+          liveEnabled: state.settings.localSyncLiveEnabled,
         });
         if (!active) {
           if (!localSyncEnabledRef.current) void invoke("stop_local_sync").catch(() => undefined);
@@ -844,7 +854,7 @@ export default function App() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [acceptLocalSyncSnapshot, sharedCatalogJson, state.settings.localSyncCode, state.settings.localSyncEnabled, tx]);
+  }, [acceptLocalSyncSnapshot, sharedCatalogJson, state.settings.localSyncCode, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled, tx]);
 
   useEffect(() => {
     if (IS_ANDROID || !isTauri() || state.settings.localSyncEnabled) return;
@@ -854,10 +864,12 @@ export default function App() {
 
   useEffect(() => {
     if (!IS_ANDROID || !state.settings.localSyncEnabled) return;
-    void exchangeWithComputer("status", false);
-    const timer = window.setInterval(() => void exchangeWithComputer("status", false), 5_000);
+    const action: LocalSyncAction = state.settings.localSyncLiveEnabled ? "live" : "status";
+    if (!state.settings.localSyncLiveEnabled) liveRevisionRef.current = 0;
+    void exchangeWithComputer(action, false);
+    const timer = window.setInterval(() => void exchangeWithComputer(action, false), state.settings.localSyncLiveEnabled ? 1_500 : 5_000);
     return () => window.clearInterval(timer);
-  }, [exchangeWithComputer, state.settings.localSyncEnabled]);
+  }, [exchangeWithComputer, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
 
   const checkCreatorAccess = useCallback(async () => {
     if (IS_ANDROID) {
@@ -1069,15 +1081,28 @@ export default function App() {
       trackingMode: isTeamMode ? "team" : "solo",
       teamSessionId: isTeamMode ? state.activeTeamSessionId : undefined,
     };
-    commitState((current) => ({ ...current, actions: [...current.actions, action] }));
+    const historyRecord: ActivityHistoryRecord = {
+      id: action.id,
+      activityId: action.activityId,
+      activityName: action.activityName,
+      visionId: action.visionId,
+      visionName: action.visionName,
+      points: action.points,
+      count: 1,
+      occurredAt: action.occurredAt,
+    };
+    commitState((current) => ({ ...current, actions: [...current.actions, action], activityHistory: [...current.activityHistory, historyRecord].slice(-100_000) }));
     setToast(isTeamMode ? `+${activity.points} para ${state.teamMemberIds.length} personajes · ${activity.name}` : `+${activity.points} · ${activity.name}`);
     window.setTimeout(() => setToast(""), 1800);
   };
 
   const removeActionFromCurrentTracking = (actionId: string) => {
     commitState((current) => {
-      if (isTeamMode) return { ...current, actions: current.actions.filter((action) => action.id !== actionId) };
-      return { ...current, actions: detachCharacterFromActions(current.actions, activeCharacter.id, new Set([actionId])) };
+      const actions = isTeamMode
+        ? current.actions.filter((action) => action.id !== actionId)
+        : detachCharacterFromActions(current.actions, activeCharacter.id, new Set([actionId]));
+      const activityHistory = actions.some((action) => action.id === actionId) ? current.activityHistory : current.activityHistory.filter((record) => record.id !== actionId);
+      return { ...current, actions, activityHistory };
     });
   };
 
@@ -1554,6 +1579,18 @@ export default function App() {
               </article>
             </div>
 
+            <section className="activity-insights-grid" aria-label={tx("Estadísticas de recompensas", "Reward statistics")}>
+              <article className="daily-points-panel panel">
+                <div className="panel-title"><div><span className="eyebrow"><Clock3 size={14} /> {tx("PUNTUACIÓN POR DÍA", "POINTS BY DAY")}</span><h2>{tx("Actividad de hoy", "Today's activity")}</h2></div><span className="daily-date-badge">{new Date(`${todayKey}T12:00:00`).toLocaleDateString(english ? "en-US" : "es-CO", { day: "2-digit", month: "short" })}</span></div>
+                <div className="daily-score-cards"><span><small>{tx("Puntos de hoy", "Points today")}</small><strong>{activitySummary.today.points}</strong></span><span><small>{tx("Jefes y recompensas", "Bosses and rewards")}</small><strong>{activitySummary.today.count}</strong></span><span><small>{tx("Puntos históricos", "All-time points")}</small><strong>{activitySummary.totalPoints}</strong></span><span><small>{tx("Registros históricos", "All-time records")}</small><strong>{activitySummary.totalCount}</strong></span></div>
+                {activitySummary.days.length > 0 ? <div className="daily-history-list">{activitySummary.days.slice(0, 7).map((day) => <div key={day.date}><span>{new Date(`${day.date}T12:00:00`).toLocaleDateString(english ? "en-US" : "es-CO", { weekday: "short", day: "2-digit", month: "short" })}</span><strong>{day.points} pts</strong><small>{day.count} {tx("actividades", "activities")}</small></div>)}</div> : <p className="empty-inline">{tx("El primer registro de actividad creará el resumen diario.", "Your first activity will create the daily summary.")}</p>}
+              </article>
+              <article className="activity-ranking-panel panel">
+                <div className="panel-title"><div><span className="eyebrow"><Trophy size={14} /> {tx("RANKING HISTÓRICO", "ALL-TIME RANKING")}</span><h2>{tx("Lo que más has realizado", "Your most completed activities")}</h2></div><span>{activitySummary.ranking.length}</span></div>
+                {activitySummary.ranking.length > 0 ? <div className="activity-ranking-list">{activitySummary.ranking.slice(0, 12).map((item, index) => <div key={item.key}><span className="ranking-position">#{index + 1}</span><span className="ranking-name"><strong>{item.name}</strong><small>{tx("Hoy", "Today")} {item.todayCount} · {item.points} pts</small></span><strong className="ranking-count">{item.count}×</strong></div>)}</div> : <p className="empty-inline">{tx("Todavía no hay jefes ni recompensas para ordenar.", "There are no bosses or rewards to rank yet.")}</p>}
+              </article>
+            </section>
+
             {!IS_ANDROID && <article className={`home-overlay-controls panel ${homeOverlayConfigOpen ? "expanded" : ""}`}>
               <div><span className="eyebrow"><MonitorUp size={15} /> {tx("VENTANA FLOTANTE", "FLOATING OVERLAY")}</span><h2>{tx("Configurar ventana", "Configure overlay")}</h2><p>{tx("Todos los tamaños y estilos están aquí en Caja para que la pestaña Visión muestre solamente las ruedas publicadas.", "All sizes and styles are configured here so the Visional Wheel page only shows published wheels.")}</p></div>
               <div className="home-overlay-actions">
@@ -1570,8 +1607,8 @@ export default function App() {
                 </div>
                 <label className="overlay-size-control"><span>{tx("Ventana", "Overlay")} <strong>{Math.round(state.settings.overlayScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
                 <label className="overlay-size-control"><span>{tx("Área de Ballena", "Whale area")} <strong>{Math.round(state.settings.overlayAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(state.settings.overlayAddonScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(Number(event.target.value) / 100, .2, 1) } }))} /></label>
-                {state.settings.overlayWhaleShowTime && <><label className="overlay-size-control"><span>Tiempo sobre el rayo <strong>{Math.round(state.settings.overlayWhaleCounterScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayWhaleCounterScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>
-                <label className="overlay-size-control"><span>Estilo del tiempo</span><select value={state.settings.overlayWhaleCounterStyle} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterStyle: event.target.value as OverlayCounterStyle } }))}><option value="digital">Digital</option><option value="compact">Compacto</option><option value="ring">Anillo</option></select></label></>}
+                {state.settings.overlayWhaleShowTime && <>{state.settings.overlayWhaleCounterStyle !== "beam" && <label className="overlay-size-control"><span>Tiempo sobre el rayo <strong>{Math.round(state.settings.overlayWhaleCounterScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayWhaleCounterScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>}
+                <label className="overlay-size-control"><span>Estilo del tiempo</span><select value={state.settings.overlayWhaleCounterStyle} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterStyle: event.target.value as WhaleCounterStyle } }))}><option value="digital">Digital</option><option value="compact">Compacto</option><option value="ring">Anillo</option><option value="beam">Solo rayo</option></select></label></>}
                 <div className="overlay-addon-option"><span><strong>Mostrar tiempo de Ballena</strong><small>Si lo desactivas, permanece solamente el Riftwalker con su rayo de progreso.</small></span><button type="button" className={`switch ${state.settings.overlayWhaleShowTime ? "on" : ""}`} aria-label="Mostrar tiempo sobre el rayo de Ballena" aria-pressed={state.settings.overlayWhaleShowTime} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleShowTime: !current.settings.overlayWhaleShowTime } }))}><span /></button></div>
                 <div className="overlay-addon-option"><span><strong>Ballena y rayo</strong><small>Puede ocultarse por completo sin desactivar el contador principal.</small></span><button type="button" className={`switch ${state.settings.overlayWhaleEnabled ? "on" : ""}`} aria-label="Mostrar Ballena y rayo" aria-pressed={state.settings.overlayWhaleEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleEnabled: !current.settings.overlayWhaleEnabled } }))}><span /></button></div>
               </div>}
@@ -1585,7 +1622,8 @@ export default function App() {
                 activity={activity}
                 disabled={!teamReady}
                 currentCount={currentPointRoundActions.filter((action) => !action.visionId && action.activityId === activity.id).length}
-                savedCount={savedActivityCount(activity)}
+                dailyCount={activityCount(activity).todayCount}
+                totalCount={activityCount(activity).count}
                 onAdd={() => addActivity(activity)}
                 onRemove={() => removeLastActivity(activity.id)}
               />)}
@@ -1599,7 +1637,8 @@ export default function App() {
                 activity={activity}
                 disabled={!selectedVision.enabled || !teamReady}
                 currentCount={currentPointRoundActions.filter((action) => action.visionId === selectedVision.id && action.activityId === activity.id).length}
-                savedCount={savedActivityCount(activity, selectedVision)}
+                dailyCount={activityCount(activity, selectedVision).todayCount}
+                totalCount={activityCount(activity, selectedVision).count}
                 onAdd={() => addActivity(activity, selectedVision)}
                 onRemove={() => removeLastActivity(activity.id, selectedVision.id)}
               />) : <div className="empty-card"><Sparkles size={28} /><strong>Aún no hay recompensas para {selectedVision?.name}</strong><span>Puedes añadirlas en Configuración y publicarlas para todos.</span></div>}
@@ -1788,6 +1827,12 @@ export default function App() {
                   <button type="button" className="secondary" disabled={localSyncBusy} onClick={() => { if (window.confirm(tx("Los datos personales del PC se reemplazarán por los datos actuales de este celular. ¿Continuar?", "The PC's personal data will be replaced with this phone's current data. Continue?"))) void exchangeWithComputer("push"); }}><Upload size={18} /><span><strong>{tx("Celular → PC", "Phone → PC")}</strong><small>{tx("Enviar los datos del celular", "Send phone data to the PC")}</small></span></button>
                 </div>}
               </>}
+              <div className={`local-live-sync-option ${state.settings.localSyncLiveEnabled ? "enabled" : ""}`}>
+                <span className="local-live-sync-icon"><Zap size={19} /></span>
+                <span><strong>{tx("Sincronización en vivo", "Live synchronization")}</strong><small>{tx("Refleja automáticamente los cambios de puntos, cajas, personajes y módulos mientras PC y celular estén abiertos. Los botones manuales siguen disponibles.", "Automatically mirrors points, crates, characters, and mods while PC and phone are open. Manual buttons remain available.")}</small></span>
+                <button type="button" className={`switch ${state.settings.localSyncLiveEnabled ? "on" : ""}`} disabled={!state.settings.localSyncEnabled} aria-label={tx("Activar sincronización en vivo", "Enable live synchronization")} aria-pressed={state.settings.localSyncLiveEnabled} onClick={() => { liveRevisionRef.current = 0; commitState((current) => ({ ...current, settings: { ...current.settings, localSyncLiveEnabled: !current.settings.localSyncLiveEnabled } })); }}><span /></button>
+              </div>
+              {state.settings.localSyncLiveEnabled && <p className="local-live-sync-note"><RadioTower size={15} /> {tx("Debe estar activada en ambos dispositivos. Al iniciarla, el celular recibe primero la copia del PC; usa Celular → PC antes si quieres conservar primero la copia del teléfono.", "Enable it on both devices. When it starts, the phone first receives the PC copy; use Phone → PC beforehand if you need to preserve the phone copy first.")}</p>}
               <p className="local-sync-message" role="status">{localSyncStatus}</p>
               <small>{tx("Usa una red Wi‑Fi de confianza o el anclaje USB del teléfono. Los cambios públicos del administrador también viajan del PC al celular mientras estén conectados.", "Use a trusted Wi-Fi network or USB tethering. Public administrator changes also travel from the PC to the phone while connected.")}</small>
             </article>
@@ -1883,7 +1928,7 @@ function VisionAtmosphere({ visionId, active }: { visionId?: string; active: boo
   </div>;
 }
 
-function ActivityCard({ activity, currentCount, savedCount, language, disabled = false, onAdd, onRemove }: { activity: Activity; currentCount: number; savedCount: number; language: "es" | "en"; disabled?: boolean; onAdd: () => void; onRemove: () => void }) {
+function ActivityCard({ activity, currentCount, dailyCount, totalCount, language, disabled = false, onAdd, onRemove }: { activity: Activity; currentCount: number; dailyCount: number; totalCount: number; language: "es" | "en"; disabled?: boolean; onAdd: () => void; onRemove: () => void }) {
   const english = language === "en";
   const inactive = disabled || !activity.enabled || activity.points <= 0;
   return (
@@ -1896,7 +1941,7 @@ function ActivityCard({ activity, currentCount, savedCount, language, disabled =
           <span aria-label={`${currentCount} ${english ? "in the current round" : "en la ronda actual"}`}>{currentCount}</span>
           <button type="button" aria-label={`${english ? "Add" : "Sumar"} ${activity.name}`} disabled={inactive} onClick={onAdd}><Plus size={19} /></button>
         </div>
-        <small>{english ? "Total" : "Lleva"} {savedCount}</small>
+        <small>{english ? "Today" : "Hoy"} {dailyCount} · {english ? "All time" : "Histórico"} {totalCount}</small>
       </div>
     </article>
   );

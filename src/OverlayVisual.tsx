@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { Box, GripHorizontal, X, Zap } from "lucide-react";
 import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, GRAVITY_WHALE_BOSS_IMAGE, LUNAR_EVENT_IMAGE, SYMBIOSIS_EVENT_IMAGE } from "./assets";
-import type { GravityWhaleSnapshot, OverlayCounterStyle, OverlayNameMode, OverlayShape, Vision } from "./model";
+import type { GravityWhaleSnapshot, OverlayCounterStyle, OverlayNameMode, OverlayShape, Vision, WhaleCounterStyle } from "./model";
 import { formatCompactDuration, formatDuration, overlayVisionName } from "./model";
 import { OVERLAY_SHAPE_SIZES, OVERLAY_WHALE_WIDTH, overlayDesignSize, whaleCounterLayoutWithinWindow, whaleCounterScaleWithinWindow, whaleScaleWithinWindow } from "./overlayGeometry";
 
@@ -16,7 +16,7 @@ type Props = {
   whale: GravityWhaleSnapshot;
   addonScale: number;
   whaleCounterScale: number;
-  whaleCounterStyle: OverlayCounterStyle;
+  whaleCounterStyle: WhaleCounterStyle;
   whaleShowTime: boolean;
   shape: OverlayShape;
   counterStyle: OverlayCounterStyle;
@@ -29,6 +29,7 @@ type Props = {
 
 export default function OverlayVisual({ vision, phase, remainingMs, progress, transitionRemainingMs = 0, whale, addonScale, whaleCounterScale, whaleCounterStyle, whaleShowTime, shape, counterStyle, nameMode, customName, onClose, preview = false, interactive = true }: Props) {
   const remainingWhalePercent = Math.max(0, Math.min(100, Math.round((1 - whale.progress) * 100)));
+  const beamCounter = whaleCounterStyle === "beam";
   const normalizedAddonScale = whaleScaleWithinWindow(addonScale, shape);
   const normalizedWhaleCounterScale = whaleCounterScaleWithinWindow(whaleCounterScale, shape, whaleCounterStyle);
   const counterCompensation = normalizedWhaleCounterScale / normalizedAddonScale;
@@ -61,7 +62,7 @@ export default function OverlayVisual({ vision, phase, remainingMs, progress, tr
       </div>
     </section>
 
-    {whale.visible && <section style={{ width: (OVERLAY_WHALE_WIDTH - 8) * normalizedAddonScale, height: whaleShowTime ? whaleLayout.stageHeight : Math.ceil((150 - 4) * normalizedAddonScale) } as CSSProperties} className={`overlay-whale-stage whale-counter-${whaleCounterStyle} counter-placement-${whaleLayout.placement} ${whaleShowTime ? "with-time" : "beam-only"} ${whale.departing ? "departing" : "engaged"}`} aria-label={whale.departing ? "El Riftwalker se retira" : whaleShowTime ? `Riftwalker activo durante ${formatDuration(whale.remainingMs)}` : "Riftwalker activo con rayo de progreso"}>
+    {whale.visible && <section style={{ width: (OVERLAY_WHALE_WIDTH - 8) * normalizedAddonScale, height: whaleShowTime && !beamCounter ? whaleLayout.stageHeight : Math.ceil((150 - 4) * normalizedAddonScale) } as CSSProperties} className={`overlay-whale-stage whale-counter-${whaleCounterStyle} counter-placement-${whaleLayout.placement} ${whaleShowTime ? "with-time" : "beam-only"} ${whale.departing ? "departing" : "engaged"}`} aria-label={whale.departing ? "El Riftwalker se retira" : whaleShowTime ? `Riftwalker activo durante ${formatDuration(whale.remainingMs)}` : "Riftwalker activo con rayo de progreso"}>
       <div className="overlay-whale-canvas" style={{ top: whaleLayout.canvasOffset, transform: `translateX(-50%) scale(${normalizedAddonScale})` }}>
         <div className="overlay-whale-motion">
           <div className="overlay-whale-swimmer">
@@ -72,11 +73,12 @@ export default function OverlayVisual({ vision, phase, remainingMs, progress, tr
               <span className="boss-energy"><i /><i /><i /></span>
             </div>
             <div className="overlay-whale-beam">
-              <span className="overlay-whale-beam-progress" style={{ width: `${remainingWhalePercent}%` }} />
+              <span className="overlay-whale-beam-progress" style={{ width: `${remainingWhalePercent}%`, opacity: Math.max(.12, remainingWhalePercent / 100), filter: `brightness(${.45 + remainingWhalePercent / 100})` }} />
+              {beamCounter && whaleShowTime && !whale.departing && <strong className="overlay-whale-beam-time">{whaleTimer}</strong>}
             </div>
           </div>
         </div>
-        {whaleShowTime && !whale.departing && <div className={`overlay-whale-countdown ${whaleCounterStyle} placement-${whaleLayout.placement}`} style={{ "--whale-counter-compensation": counterCompensation, "--whale-counter-progress": `${remainingWhalePercent * 3.6}deg`, "--whale-counter-left": `${whaleLayout.left}px`, "--whale-counter-top": `${whaleLayout.top}px` } as CSSProperties}>
+        {whaleShowTime && !beamCounter && !whale.departing && <div className={`overlay-whale-countdown ${whaleCounterStyle} placement-${whaleLayout.placement}`} style={{ "--whale-counter-compensation": counterCompensation, "--whale-counter-progress": `${remainingWhalePercent * 3.6}deg`, "--whale-counter-left": `${whaleLayout.left}px`, "--whale-counter-top": `${whaleLayout.top}px` } as CSSProperties}>
           <small>RIFTWALKER</small>
           <strong>{whaleTimer}</strong>
         </div>}

@@ -25,16 +25,17 @@ Un cable USB en modo normal de carga o transferencia de archivos no crea por sí
 3. El cliente solo acepta direcciones privadas, de enlace local o de bucle local; no permite enviar el historial a una IP pública.
 4. Cada intercambio valida código, versión del protocolo, fecha, JSON y un límite máximo de 8 MB.
 5. El teléfono decide la dirección: **PC → Celular** descarga y reemplaza la copia personal del teléfono; **Celular → PC** carga y reemplaza la copia personal del PC. La hora del dispositivo no decide cuál gana.
-6. La APK comprueba la conexión cada cinco segundos sin transferir ni reemplazar datos personales. El PC revisa cada segundo y medio si recibió un envío explícito del teléfono.
-7. La respuesta del PC incluye su catálogo público vigente para que espera, duración activa, fase y transición también lleguen al teléfono por la conexión local.
+6. Si **Sincronización en vivo** está apagada, la APK comprueba la conexión cada cinco segundos sin transferir ni reemplazar datos personales. Los botones manuales siguen disponibles.
+7. Si se activa en ambos dispositivos, la APK intercambia cambios cada segundo y medio. Una revisión monotónica del PC impide que una copia atrasada lo sobrescriba: el teléfono primero recibe la revisión nueva y solo puede enviar después de haberla reconocido.
+8. La respuesta del PC incluye su catálogo público vigente para que espera, duración activa, fase y transición también lleguen al teléfono por la conexión local.
 
 El canal no se publica en Internet ni utiliza Firebase. En esta versión el contenido viaja dentro de la red local sin cifrado adicional, por lo que debe usarse únicamente en una red Wi-Fi de confianza o mediante USB tethering. El código evita accesos accidentales de otros dispositivos, pero no sustituye el cifrado de una red segura.
 
 ## Qué se sincroniza
 
-Cada equipo mantiene su copia local. Los datos solo se reemplazan cuando la persona pulsa una de las dos direcciones de sincronización:
+Cada equipo mantiene su copia local. En modo manual, los datos solo se reemplazan cuando la persona pulsa una de las dos direcciones. En modo en vivo, se reflejan mientras ambas aplicaciones están abiertas y la opción está habilitada en las dos:
 
-- recompensas y puntos;
+- recompensas, puntos, resumen diario y ranking histórico;
 - personajes y equipos;
 - cajas e historial manual;
 - mods y estado Brillante;
@@ -42,7 +43,7 @@ Cada equipo mantiene su copia local. Los datos solo se reemplazan cuando la pers
 
 El acceso de administrador, GitHub CLI, claves de publicación, bandeja de Windows, autoinicio y posición de la ventana flotante nunca se envían al teléfono.
 
-Mientras no haya conexión, cada dispositivo conserva su copia local. Al reconectar no se reemplaza nada automáticamente: la persona elige qué copia conservar. Esta implementación todavía no fusiona dos ediciones simultáneas independientes.
+Mientras no haya conexión, cada dispositivo conserva su copia local. Al reconectar en modo manual no se reemplaza nada automáticamente. Al iniciar el modo en vivo, el celular recibe primero la copia vigente del PC; si debe conservarse antes la copia del teléfono, se usa **Celular → PC** y luego se activa el modo en vivo. Esta implementación ordena cambios por revisión, pero todavía no fusiona dos ediciones hechas exactamente al mismo tiempo durante una desconexión.
 
 ## Configuración pública
 
@@ -58,7 +59,7 @@ Android no permite que una aplicación distribuida fuera de Google Play se reemp
 
 ## Estado comprobado del equipo
 
-La APK con sincronización local y actualización integrada se genera y verifica para la versión 1.16.3:
+La APK con sincronización local, modo en vivo y actualización integrada se genera y verifica para la versión 1.17.0:
 
 - Android SDK 35/36, Build Tools 35/36 y NDK 29 están instalados y las licencias fueron aceptadas.
 - El destino Rust `aarch64-linux-android` compila la biblioteca nativa optimizada.
@@ -66,17 +67,17 @@ La APK con sincronización local y actualización integrada se genera y verifica
 - Android usa una sola ventana, navegación inferior adaptable y guarda los datos personales localmente.
 - La APK ARM64 de distribución está alineada, firmada con un certificado propio de OscarD0823 y verificada con `apksigner`.
 - El teléfono no estaba conectado por ADB durante la compilación, por lo que todavía corresponde realizar una prueba física de instalación, navegación y persistencia.
-- El anfitrión local, el cliente Android, el código de emparejamiento, la restricción a IP privadas y el intercambio bidireccional cuentan con pruebas automáticas por bucle local. Las pruebas cubren el envío PC→celular, el envío celular→PC, el rechazo de un código incorrecto, el puerto predeterminado y los rangos privados 10.x, 172.16–31.x y 192.168.x.
+- El anfitrión local, el cliente Android, el código de emparejamiento, la restricción a IP privadas y el intercambio bidireccional cuentan con pruebas automáticas por bucle local. Las pruebas cubren PC→celular, celular→PC, el inicio seguro del modo en vivo, cambios desde ambos lados, rechazo de revisiones atrasadas y del código incorrecto, el puerto predeterminado y los rangos privados 10.x, 172.16–31.x y 192.168.x.
 
 ## Trabajo por etapas
 
 1. Completado: interfaz adaptable a pantallas verticales y separación de opciones exclusivas de Windows.
 2. Completado: entrada móvil de Tauri, proyecto Android generado y compilación Rust ARM64.
 3. Completado: SDK, Platform Tools, Build Tools, NDK y firma privada de distribución.
-4. Completado: anfitrión TCP local en Rust, cliente móvil, código de conexión, validación y sincronización manual por dirección.
-5. Completado: pruebas de intercambio por bucle local, rechazo de IP pública y compilación ARM64.
+4. Completado: anfitrión TCP local en Rust, cliente móvil, código de conexión, sincronización manual por dirección y modo en vivo por revisiones.
+5. Completado: pruebas de intercambio manual y en vivo por bucle local, rechazo de IP pública y compilación ARM64.
 6. Pendiente: validar la APK y el flujo del instalador del sistema en un teléfono físico mediante Wi-Fi y USB tethering.
-7. Futuro: cifrado de aplicación punto a punto, descubrimiento automático y fusión de operaciones simultáneas.
+7. Futuro: cifrado de aplicación punto a punto, descubrimiento automático y fusión de operaciones simultáneas desconectadas.
 8. Futuro: generar un AAB firmado si se decide distribuir mediante Google Play.
 
 ## Pruebas obligatorias
@@ -87,6 +88,8 @@ La APK con sincronización local y actualización integrada se genera y verifica
 - **Celular → PC** reemplaza los datos personales del PC aunque el reloj del teléfono sea anterior.
 - **PC → Celular** reemplaza los datos personales del teléfono sin cargar primero su copia al PC.
 - La comprobación automática de conexión nunca reemplaza datos personales.
+- El modo en vivo solo acepta cambios del teléfono después de reconocer la última revisión del PC.
+- Desactivar el modo en vivo en el PC rechaza intercambios automáticos sin deshabilitar los botones manuales.
 - Las configuraciones exclusivas del PC y el modo administrador nunca llegan al teléfono.
 - La conexión funciona sin Internet usando el punto de acceso local o USB tethering.
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import catalog from "../catalog/visions.json" with { type: "json" };
-import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, applyRemoteCatalog, boxStatistics, buildBreakdown, buildPointRoundBreakdown, computeCountdownTransition, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, overlayVisionName, parseManualBaseline, pointActionsInRound, resolveTransitionDelayMilliseconds, sharedEventTimingFromSettings, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type BoxRecord, type Catalog, type PersistedState, type PointAction, type Settings } from "../src/model.ts";
+import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, activityHistorySummary, applyRemoteCatalog, boxStatistics, buildBreakdown, buildPointRoundBreakdown, computeCountdownTransition, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, overlayVisionName, parseManualBaseline, pointActionsInRound, resolveTransitionDelayMilliseconds, sharedEventTimingFromSettings, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type ActivityHistoryRecord, type BoxRecord, type Catalog, type PersistedState, type PointAction, type Settings } from "../src/model.ts";
 import { overlayDesignSize, whaleCounterLayoutWithinWindow, whaleCounterScaleWithinWindow, whaleScaleWithinWindow } from "../src/overlayGeometry.ts";
 import { completeLocalSyncAddress, isValidLocalSyncAddress, joinLocalSyncAddress, splitLocalSyncAddress } from "../src/localSyncAddress.ts";
 import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesModSearch, normalizeModSearch } from "../src/shinyModsCatalog.ts";
@@ -61,6 +61,7 @@ const settings: Settings = {
   timingPresetVersion: 4,
   autoStartEnabled: true,
   localSyncEnabled: false,
+  localSyncLiveEnabled: false,
   localSyncAddress: "",
   localSyncCode: "",
   dataResetVersion: 1,
@@ -93,6 +94,7 @@ const localState: PersistedState = {
   schemaVersion: 1,
   catalog: catalog as Catalog,
   actions: [],
+  activityHistory: [],
   boxes: [],
   pointRounds: [],
   pointRoundBoundaries: {},
@@ -179,6 +181,21 @@ for (const shape of ["event", "rectangle", "square", "vertical", "round"] as con
     }
   }
 }
+
+const activityHistory: ActivityHistoryRecord[] = [
+  { id: "a1", activityId: "platform", activityName: "Plataformas", points: 4, count: 1, occurredAt: "2026-09-18T23:59:00-05:00" },
+  { id: "a2", activityId: "platform", activityName: "Plataformas", points: 12, count: 3, occurredAt: "2026-09-19T08:00:00-05:00" },
+  { id: "a3", activityId: "forsaken", activityName: "Desamparado", points: 200, count: 200, occurredAt: "2026-09-19T09:00:00-05:00" },
+];
+const dailyActivity = activityHistorySummary(activityHistory, new Date("2026-09-19T12:00:00-05:00"));
+assert.equal(dailyActivity.today.count, 203, "El resumen diario debe separar las actividades por fecha local.");
+assert.equal(dailyActivity.today.points, 212);
+assert.equal(dailyActivity.totalCount, 204);
+assert.equal(dailyActivity.ranking[0].name, "Desamparado", "El ranking histórico debe ordenar por cantidad completada.");
+assert.equal(dailyActivity.ranking.find((item) => item.key === "pro:platform")?.todayCount, 3);
+
+const beamLayout = whaleCounterLayoutWithinWindow(whaleScaleWithinWindow(1, "event"), whaleCounterScaleWithinWindow(1, "event", "beam"), "event", "beam");
+assert.equal(beamLayout.stageHeight, Math.ceil((150 - 4) * whaleScaleWithinWindow(1, "event")), "El modo solo rayo no debe reservar un reloj separado.");
 assert.ok(overlayDesignSize(true, "event", 1, 1, "digital", false).height < overlayDesignSize(true, "event", 1, 1, "digital", true).height, "Ocultar el tiempo debe retirar su espacio y dejar la Ballena con el rayo.");
 assert.equal(shouldShowGravityWhale(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 44 * 60_000), false);
 assert.equal(shouldShowGravityWhale(synchronizedSettings, Date.parse(VISION_CYCLE_WAIT_STARTED_AT) + 45 * 60_000), true);

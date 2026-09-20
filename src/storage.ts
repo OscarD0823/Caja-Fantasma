@@ -1,5 +1,5 @@
 import defaultCatalog from "../catalog/visions.json";
-import type { Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointRoundRecord, PointRoundTrigger, ShinyModRecord } from "./model";
+import type { ActivityHistoryRecord, BoxRecord, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, PointRoundRecord, PointRoundTrigger, ShinyModRecord, WhaleCounterStyle } from "./model";
 import { VISION_CYCLE_WAIT_STARTED_AT, applyRemoteCatalog, clampNumber, createInitialCharacterTracking, resolveTransitionDelayMilliseconds, sharedVisionId, validateCatalog } from "./model";
 
 const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
@@ -9,6 +9,7 @@ export const PERSONAL_SYNC_INITIAL_DATE = "1970-01-01T00:00:00.000Z";
 const CURRENT_DATA_RESET_VERSION = 2;
 const OVERLAY_SHAPES = new Set<OverlayShape>(["event", "rectangle", "square", "vertical", "round"]);
 const OVERLAY_COUNTER_STYLES = new Set<OverlayCounterStyle>(["digital", "compact", "ring"]);
+const WHALE_COUNTER_STYLES = new Set<WhaleCounterStyle>(["digital", "compact", "ring", "beam"]);
 const OVERLAY_NAME_MODES = new Set<OverlayNameMode>(["spanish", "english", "custom"]);
 const POINT_ROUND_TRIGGERS = new Set<PointRoundTrigger>(["event-start", "manual", "whale-end"]);
 
@@ -33,6 +34,64 @@ function sanitizeShinyMods(value: unknown): ShinyModRecord[] {
       obtainedAt: typeof candidate.obtainedAt === "string" ? candidate.obtainedAt : undefined,
     }];
   }).slice(0, 5_000);
+}
+
+function sanitizeActivityHistory(value: unknown): ActivityHistoryRecord[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const candidate = entry as Partial<ActivityHistoryRecord>;
+    const occurredAt = typeof candidate.occurredAt === "string" && Number.isFinite(Date.parse(candidate.occurredAt)) ? candidate.occurredAt : "";
+    if (typeof candidate.id !== "string" || typeof candidate.activityId !== "string" || typeof candidate.activityName !== "string" || !occurredAt) return [];
+    return [{
+      id: candidate.id.slice(0, 160),
+      activityId: candidate.activityId.slice(0, 100),
+      activityName: candidate.activityName.slice(0, 120),
+      visionId: typeof candidate.visionId === "string" ? candidate.visionId.slice(0, 100) : undefined,
+      visionName: typeof candidate.visionName === "string" ? candidate.visionName.slice(0, 120) : undefined,
+      points: Math.max(0, Math.min(1_000_000, Math.round(Number(candidate.points) || 0))),
+      count: Math.max(1, Math.min(100_000, Math.round(Number(candidate.count) || 1))),
+      occurredAt,
+    }];
+  }).slice(-100_000);
+}
+
+function activityRecordFromAction(action: PointAction): ActivityHistoryRecord {
+  return {
+    id: action.id,
+    activityId: action.activityId,
+    activityName: action.activityName,
+    visionId: action.visionId,
+    visionName: action.visionName,
+    points: action.points,
+    count: 1,
+    occurredAt: action.occurredAt,
+  };
+}
+
+function legacyActivityHistory(actions: PointAction[], boxes: BoxRecord[], catalog: Catalog) {
+  const knownActivities: Array<{ activity: Catalog["proActivities"][number]; vision?: Catalog["visions"][number]; fullName: string }> = [
+    ...catalog.proActivities.map((activity) => ({ activity, fullName: activity.name })),
+    ...catalog.visions.flatMap((vision) => vision.activities.map((activity) => ({ activity, vision, fullName: `${vision.name} · ${activity.name}` }))),
+  ];
+  const records: ActivityHistoryRecord[] = actions.map(activityRecordFromAction);
+  for (const box of boxes) {
+    box.breakdown.forEach((item, index) => {
+      const known = knownActivities.find((candidate) => candidate.fullName === item.name);
+      const separator = item.name.lastIndexOf(" · ");
+      records.push({
+        id: `legacy-${box.id}-${index}`,
+        activityId: known?.activity.id ?? `legacy-${index}-${item.name.toLocaleLowerCase("es").replace(/[^a-z0-9]+/g, "-").slice(0, 70)}`,
+        activityName: known?.activity.name ?? (separator >= 0 ? item.name.slice(separator + 3) : item.name),
+        visionId: known?.vision?.id,
+        visionName: known?.vision?.name ?? (separator >= 0 ? item.name.slice(0, separator) : undefined),
+        points: Math.max(0, Math.round(item.points)),
+        count: Math.max(1, Math.round(item.count)),
+        occurredAt: box.occurredAt,
+      });
+    });
+  }
+  return sanitizeActivityHistory(records);
 }
 
 function sanitizeCharacters(value: unknown, fallback: CharacterProfile[]) {
@@ -120,6 +179,7 @@ export function initialState(): PersistedState {
     schemaVersion: 1,
     catalog: defaultCatalog as Catalog,
     actions: [],
+    activityHistory: [],
     boxes: [],
     pointRounds: [],
     pointRoundBoundaries: {},
@@ -151,6 +211,7 @@ export function initialState(): PersistedState {
       timingPresetVersion: 4,
       autoStartEnabled: true,
       localSyncEnabled: false,
+      localSyncLiveEnabled: false,
       localSyncAddress: "",
       localSyncCode: "",
       sharedTimingUpdatedAt: (defaultCatalog as Catalog).eventTiming?.updatedAt,
@@ -189,22 +250,26 @@ export function loadState(): PersistedState {
     settings.overlayWhaleEnabled = settings.overlayWhaleEnabled !== false;
     settings.overlayWhaleShowTime = settings.overlayWhaleShowTime !== false;
     settings.overlayWhaleCounterScale = clampNumber(Number(settings.overlayWhaleCounterScale) || 1, .2, 1.5);
-    settings.overlayWhaleCounterStyle = OVERLAY_COUNTER_STYLES.has(settings.overlayWhaleCounterStyle) ? settings.overlayWhaleCounterStyle : "digital";
+    settings.overlayWhaleCounterStyle = WHALE_COUNTER_STYLES.has(settings.overlayWhaleCounterStyle) ? settings.overlayWhaleCounterStyle : "digital";
     settings.overlayShape = OVERLAY_SHAPES.has(settings.overlayShape) ? settings.overlayShape : "event";
     settings.overlayCounterStyle = OVERLAY_COUNTER_STYLES.has(settings.overlayCounterStyle) ? settings.overlayCounterStyle : "digital";
     settings.overlayNameMode = OVERLAY_NAME_MODES.has(settings.overlayNameMode) ? settings.overlayNameMode : "spanish";
     settings.overlayCustomName = typeof settings.overlayCustomName === "string" ? settings.overlayCustomName.trim().slice(0, 40) : "";
     settings.localSyncEnabled = settings.localSyncEnabled === true;
+    settings.localSyncLiveEnabled = settings.localSyncLiveEnabled === true;
     settings.localSyncAddress = typeof settings.localSyncAddress === "string" ? settings.localSyncAddress.trim().slice(0, 80) : "";
     settings.localSyncCode = typeof settings.localSyncCode === "string" && /^\d{6}$/.test(settings.localSyncCode) ? settings.localSyncCode : "";
     settings.transitionDelayMilliseconds = resolveTransitionDelayMilliseconds(parsed.settings, fresh.settings.transitionDelayMilliseconds);
     const characters = characterState(parsed, fresh);
+    const actions = mustClearPreviousRecords ? [] : Array.isArray(parsed.actions) ? parsed.actions : [];
+    const boxes = mustClearBoxHistory ? [] : Array.isArray(parsed.boxes) ? parsed.boxes : [];
     const loadedState: PersistedState = {
       ...fresh,
       ...parsed,
       catalog,
-      actions: mustClearPreviousRecords ? [] : Array.isArray(parsed.actions) ? parsed.actions : [],
-      boxes: mustClearBoxHistory ? [] : Array.isArray(parsed.boxes) ? parsed.boxes : [],
+      actions,
+      activityHistory: mustClearPreviousRecords ? [] : Array.isArray(parsed.activityHistory) ? sanitizeActivityHistory(parsed.activityHistory) : legacyActivityHistory(actions, boxes, catalog),
+      boxes,
       pointRounds: mustClearPreviousRecords ? [] : sanitizePointRounds(parsed.pointRounds),
       pointRoundBoundaries: mustClearPreviousRecords ? {} : sanitizePointRoundBoundaries(parsed.pointRoundBoundaries),
       manualBaselinePoints: mustClearPreviousRecords ? [] : Array.isArray(parsed.manualBaselinePoints)
@@ -262,6 +327,7 @@ export function importState(text: string): PersistedState {
     ...fresh,
     ...parsed,
     actions: parsed.actions,
+    activityHistory: Array.isArray(parsed.activityHistory) ? sanitizeActivityHistory(parsed.activityHistory) : legacyActivityHistory(parsed.actions, parsed.boxes, catalog),
     boxes: parsed.boxes,
     pointRounds: sanitizePointRounds(parsed.pointRounds),
     pointRoundBoundaries: sanitizePointRoundBoundaries(parsed.pointRoundBoundaries),
@@ -280,12 +346,13 @@ export function importState(text: string): PersistedState {
       overlayWhaleEnabled: parsed.settings?.overlayWhaleEnabled !== false,
       overlayWhaleShowTime: parsed.settings?.overlayWhaleShowTime !== false,
       overlayWhaleCounterScale: clampNumber(Number(parsed.settings?.overlayWhaleCounterScale) || 1, .2, 1.5),
-      overlayWhaleCounterStyle: OVERLAY_COUNTER_STYLES.has(parsed.settings?.overlayWhaleCounterStyle as OverlayCounterStyle) ? parsed.settings!.overlayWhaleCounterStyle! : "digital",
+      overlayWhaleCounterStyle: WHALE_COUNTER_STYLES.has(parsed.settings?.overlayWhaleCounterStyle as WhaleCounterStyle) ? parsed.settings!.overlayWhaleCounterStyle! : "digital",
       overlayShape: OVERLAY_SHAPES.has(parsed.settings?.overlayShape as OverlayShape) ? parsed.settings!.overlayShape! : "event",
       overlayCounterStyle: OVERLAY_COUNTER_STYLES.has(parsed.settings?.overlayCounterStyle as OverlayCounterStyle) ? parsed.settings!.overlayCounterStyle! : "digital",
       overlayNameMode: OVERLAY_NAME_MODES.has(parsed.settings?.overlayNameMode as OverlayNameMode) ? parsed.settings!.overlayNameMode! : "spanish",
       overlayCustomName: typeof parsed.settings?.overlayCustomName === "string" ? parsed.settings.overlayCustomName.trim().slice(0, 40) : "",
       localSyncEnabled: parsed.settings?.localSyncEnabled === true,
+      localSyncLiveEnabled: parsed.settings?.localSyncLiveEnabled === true,
       localSyncAddress: typeof parsed.settings?.localSyncAddress === "string" ? parsed.settings.localSyncAddress.trim().slice(0, 80) : "",
       localSyncCode: typeof parsed.settings?.localSyncCode === "string" && /^\d{6}$/.test(parsed.settings.localSyncCode) ? parsed.settings.localSyncCode : "",
       transitionDelayMilliseconds: resolveTransitionDelayMilliseconds(parsed.settings, fresh.settings.transitionDelayMilliseconds),
@@ -297,6 +364,7 @@ export function importState(text: string): PersistedState {
 
 export type PersonalSyncPayload = Pick<PersistedState,
   | "actions"
+  | "activityHistory"
   | "boxes"
   | "pointRounds"
   | "pointRoundBoundaries"
@@ -312,6 +380,7 @@ export type PersonalSyncPayload = Pick<PersistedState,
 export function personalSyncPayload(state: PersistedState): PersonalSyncPayload {
   return {
     actions: state.actions,
+    activityHistory: state.activityHistory,
     boxes: state.boxes,
     pointRounds: state.pointRounds,
     pointRoundBoundaries: state.pointRoundBoundaries,

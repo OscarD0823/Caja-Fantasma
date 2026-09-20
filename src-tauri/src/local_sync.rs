@@ -41,6 +41,8 @@ struct LocalSyncRequest {
     pairing_code: String,
     #[serde(default)]
     action: LocalSyncAction,
+    #[serde(default)]
+    known_revision: u64,
     updated_at: String,
     data_json: String,
 }
@@ -51,6 +53,7 @@ enum LocalSyncAction {
     Status,
     Pull,
     Push,
+    Live,
     #[default]
     Auto,
 }
@@ -72,6 +75,7 @@ fn parse_sync_action(action: &str) -> Result<LocalSyncAction, String> {
         "status" => Ok(LocalSyncAction::Status),
         "pull" => Ok(LocalSyncAction::Pull),
         "push" => Ok(LocalSyncAction::Push),
+        "live" => Ok(LocalSyncAction::Live),
         "auto" => Ok(LocalSyncAction::Auto),
         _ => Err("La dirección de sincronización no es válida.".into()),
     }
@@ -193,6 +197,7 @@ fn mobile_sync_exchange_blocking(
     address: String,
     pairing_code: String,
     action: LocalSyncAction,
+    known_revision: u64,
     data_json: String,
     updated_at: String,
 ) -> Result<LocalSyncExchange, String> {
@@ -214,6 +219,7 @@ fn mobile_sync_exchange_blocking(
             protocol: LOCAL_SYNC_PROTOCOL,
             pairing_code,
             action,
+            known_revision,
             updated_at,
             data_json,
         },
@@ -233,12 +239,20 @@ pub async fn mobile_sync_exchange(
     address: String,
     pairing_code: String,
     action: String,
+    known_revision: u64,
     data_json: String,
     updated_at: String,
 ) -> Result<LocalSyncExchange, String> {
     let action = parse_sync_action(&action)?;
     tauri::async_runtime::spawn_blocking(move || {
-        mobile_sync_exchange_blocking(address, pairing_code, action, data_json, updated_at)
+        mobile_sync_exchange_blocking(
+            address,
+            pairing_code,
+            action,
+            known_revision,
+            data_json,
+            updated_at,
+        )
     })
     .await
     .map_err(|error| format!("La conexión local se interrumpió: {error}"))?
@@ -257,6 +271,7 @@ mod desktop {
     #[derive(Clone)]
     struct ServerState {
         enabled: Arc<AtomicBool>,
+        live_enabled: Arc<AtomicBool>,
         pairing_code: Arc<Mutex<String>>,
         snapshot: Arc<Mutex<LocalSyncSnapshot>>,
         address: String,
@@ -328,6 +343,11 @@ mod desktop {
             if request.pairing_code != expected_code {
                 return Err("El código de conexión no coincide con el del PC.".into());
             }
+            if request.action == LocalSyncAction::Live
+                && !state.live_enabled.load(Ordering::Relaxed)
+            {
+                return Err("Activa Sincronización en vivo también en el PC.".into());
+            }
             validate_sync_payload(&request.data_json, &request.updated_at)?;
             let mut snapshot = state
                 .snapshot
@@ -355,7 +375,20 @@ mod desktop {
                     snapshot.revision = snapshot.revision.saturating_add(1);
                     snapshot.last_mobile_update_at = exchange_at;
                 }
-                LocalSyncAction::Status | LocalSyncAction::Pull | LocalSyncAction::Auto => {}
+                LocalSyncAction::Live if request.known_revision == snapshot.revision => {
+                    if request.updated_at != snapshot.updated_at
+                        || request.data_json != snapshot.data_json
+                    {
+                        snapshot.revision = snapshot.revision.saturating_add(1);
+                        snapshot.updated_at = request.updated_at;
+                        snapshot.data_json = request.data_json;
+                        snapshot.last_mobile_update_at = exchange_at;
+                    }
+                }
+                LocalSyncAction::Status
+                | LocalSyncAction::Pull
+                | LocalSyncAction::Auto
+                | LocalSyncAction::Live => {}
             }
             let (response_updated_at, response_data_json) =
                 if request.action == LocalSyncAction::Status {
@@ -369,6 +402,7 @@ mod desktop {
                     LocalSyncAction::Status => "PC conectado.".into(),
                     LocalSyncAction::Pull => "Datos del PC listos para el celular.".into(),
                     LocalSyncAction::Push => "Datos del celular guardados en el PC.".into(),
+                    LocalSyncAction::Live => "Cambios en vivo sincronizados.".into(),
                     LocalSyncAction::Auto => "Datos sincronizados directamente con el PC.".into(),
                 },
                 revision: snapshot.revision,
@@ -387,10 +421,12 @@ mod desktop {
         data_json: String,
         updated_at: String,
         catalog_json: String,
+        live_enabled: bool,
     ) -> Result<ServerState, String> {
         let (listener, port) = bind_listener()?;
         let state = ServerState {
             enabled: Arc::new(AtomicBool::new(true)),
+            live_enabled: Arc::new(AtomicBool::new(live_enabled)),
             pairing_code: Arc::new(Mutex::new(pairing_code)),
             snapshot: Arc::new(Mutex::new(LocalSyncSnapshot {
                 enabled: true,
@@ -440,6 +476,7 @@ mod desktop {
         data_json: String,
         updated_at: String,
         catalog_json: String,
+        live_enabled: bool,
     ) -> Result<LocalSyncInfo, String> {
         validate_pairing_code(&pairing_code)?;
         validate_sync_payload(&data_json, &updated_at)?;
@@ -450,6 +487,7 @@ mod desktop {
                 data_json.clone(),
                 updated_at.clone(),
                 catalog_json.clone(),
+                live_enabled,
             )?;
             let _ = LOCAL_SYNC_SERVER.set(server);
         }
@@ -457,11 +495,12 @@ mod desktop {
             .get()
             .ok_or_else(|| "No se pudo iniciar el servidor local.".to_string())?;
         state.enabled.store(true, Ordering::Relaxed);
+        state.live_enabled.store(live_enabled, Ordering::Relaxed);
         *state
             .pairing_code
             .lock()
             .map_err(|_| "No se pudo guardar el código de conexión.".to_string())? = pairing_code;
-        update(data_json, updated_at, catalog_json)?;
+        update(data_json, updated_at, catalog_json, live_enabled)?;
         info(state)
     }
 
@@ -479,20 +518,20 @@ mod desktop {
         data_json: String,
         updated_at: String,
         catalog_json: String,
+        live_enabled: bool,
     ) -> Result<(), String> {
         validate_sync_payload(&data_json, &updated_at)?;
         validate_catalog_payload(&catalog_json)?;
         let state = LOCAL_SYNC_SERVER
             .get()
             .ok_or_else(|| "La sincronización local todavía no está iniciada.".to_string())?;
+        state.live_enabled.store(live_enabled, Ordering::Relaxed);
         let mut snapshot = state
             .snapshot
             .lock()
             .map_err(|_| "No se pudieron actualizar los datos compartidos.".to_string())?;
-        if updated_at >= snapshot.updated_at {
-            if updated_at != snapshot.updated_at || data_json != snapshot.data_json {
-                snapshot.revision = snapshot.revision.saturating_add(1);
-            }
+        if updated_at != snapshot.updated_at || data_json != snapshot.data_json {
+            snapshot.revision = snapshot.revision.saturating_add(1);
             snapshot.updated_at = updated_at;
             snapshot.data_json = data_json;
         }
@@ -522,8 +561,15 @@ pub fn start_local_sync(
     data_json: String,
     updated_at: String,
     catalog_json: String,
+    live_enabled: bool,
 ) -> Result<LocalSyncInfo, String> {
-    desktop::start(pairing_code, data_json, updated_at, catalog_json)
+    desktop::start(
+        pairing_code,
+        data_json,
+        updated_at,
+        catalog_json,
+        live_enabled,
+    )
 }
 
 #[cfg(desktop)]
@@ -538,8 +584,9 @@ pub fn update_local_sync_state(
     data_json: String,
     updated_at: String,
     catalog_json: String,
+    live_enabled: bool,
 ) -> Result<(), String> {
-    desktop::update(data_json, updated_at, catalog_json)
+    desktop::update(data_json, updated_at, catalog_json, live_enabled)
 }
 
 #[cfg(desktop)]
@@ -563,6 +610,7 @@ mod tests {
             "{\"points\":1}".into(),
             initial_date,
             catalog.clone(),
+            true,
         )
         .expect("the local server should start");
         let address = format!("127.0.0.1:{}", info.port);
@@ -570,6 +618,7 @@ mod tests {
             address.clone(),
             code.clone(),
             LocalSyncAction::Auto,
+            0,
             "{\"points\":0}".into(),
             "2026-09-13T09:59:00.000Z".into(),
         )
@@ -579,6 +628,7 @@ mod tests {
             address.clone(),
             "000000".into(),
             LocalSyncAction::Pull,
+            0,
             "{\"points\":0}".into(),
             "2026-09-13T09:59:00.000Z".into(),
         )
@@ -588,6 +638,7 @@ mod tests {
             address.clone(),
             code.clone(),
             LocalSyncAction::Pull,
+            0,
             "{\"points\":2}".into(),
             latest_date.clone(),
         )
@@ -599,6 +650,7 @@ mod tests {
             address.clone(),
             code.clone(),
             LocalSyncAction::Push,
+            0,
             "{\"points\":2}".into(),
             "2026-09-13T09:00:00.000Z".into(),
         )
@@ -611,8 +663,9 @@ mod tests {
 
         let status = mobile_sync_exchange_blocking(
             address.clone(),
-            code,
+            code.clone(),
             LocalSyncAction::Status,
+            0,
             "{\"points\":999}".into(),
             latest_date,
         )
@@ -626,11 +679,71 @@ mod tests {
             mobile_update_at
         );
 
+        let first_live = mobile_sync_exchange_blocking(
+            address.clone(),
+            code.clone(),
+            LocalSyncAction::Live,
+            0,
+            "{\"points\":999}".into(),
+            "2026-09-13T10:03:00.000Z".into(),
+        )
+        .expect("a phone entering live mode must first receive the PC snapshot");
+        assert_eq!(first_live.data_json, "{\"points\":2}");
+
+        let phone_live = mobile_sync_exchange_blocking(
+            address.clone(),
+            code.clone(),
+            LocalSyncAction::Live,
+            first_live.revision,
+            "{\"points\":3}".into(),
+            "2026-09-13T10:04:00.000Z".into(),
+        )
+        .expect("the phone should publish after acknowledging the PC revision");
+        assert_eq!(phone_live.data_json, "{\"points\":3}");
+        assert!(phone_live.revision > first_live.revision);
+
+        desktop::update(
+            "{\"points\":4}".into(),
+            "2026-09-13T08:05:00.000Z".into(),
+            catalog,
+            true,
+        )
+        .expect("the desktop should publish its next local change without trusting its clock");
+        let stale_phone = mobile_sync_exchange_blocking(
+            address.clone(),
+            code.clone(),
+            LocalSyncAction::Live,
+            phone_live.revision,
+            "{\"points\":5}".into(),
+            "2026-09-13T10:06:00.000Z".into(),
+        )
+        .expect("a stale phone should receive the newer PC revision without overwriting it");
+        assert_eq!(stale_phone.data_json, "{\"points\":4}");
+
+        desktop::update(
+            "{\"points\":4}".into(),
+            "2026-09-13T08:05:00.000Z".into(),
+            "{\"catalogVersion\":42}".into(),
+            false,
+        )
+        .expect("live mode should be configurable while the server remains available");
+        let live_disabled = mobile_sync_exchange_blocking(
+            address.clone(),
+            code,
+            LocalSyncAction::Live,
+            stale_phone.revision,
+            "{\"points\":4}".into(),
+            "2026-09-13T08:05:00.000Z".into(),
+        )
+        .expect_err("both devices must opt in to live synchronization");
+        assert!(live_disabled.contains("en vivo"));
+
         desktop::stop().expect("the test server should stop");
         let disabled = mobile_sync_exchange_blocking(
             address,
             "482731".into(),
             LocalSyncAction::Status,
+            0,
             "{}".into(),
             "2026-09-13T10:02:00.000Z".into(),
         )
