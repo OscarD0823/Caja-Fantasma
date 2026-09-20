@@ -111,6 +111,7 @@ export type ShinyModRecord = {
 };
 
 export type Settings = {
+  uiLanguage: "es" | "en";
   selectedVisionId: string;
   waitMinutes: number;
   activeMinutes: number;
@@ -183,7 +184,7 @@ export type CountdownTransitionSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.16.2";
+export const APP_VERSION = "1.16.3";
 export const AUTHOR = "OscarD0823";
 export const DEFAULT_CHARACTER_ID = "character-main";
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
@@ -314,7 +315,10 @@ export function applyRemoteCatalog(current: PersistedState, catalog: Catalog): P
   const appliedTiming = Date.parse(current.settings.sharedTimingUpdatedAt ?? "");
   const remoteTiming = Date.parse(timing.updatedAt);
   const selectedVisionId = sharedVisionId(catalog, current.settings.selectedVisionId);
-  const hasNewTiming = !Number.isFinite(appliedTiming) || remoteTiming > appliedTiming;
+  // A higher catalog version is the administrator's authoritative publication.
+  // Do not let a client clock or a previously stored future timestamp keep the
+  // new durations/transition delay from reaching Windows or Android.
+  const hasNewTiming = hasNewCatalog || !Number.isFinite(appliedTiming) || remoteTiming > appliedTiming;
   if (!hasNewCatalog && !hasNewTiming && current.settings.selectedVisionId === selectedVisionId) return current;
 
   return {

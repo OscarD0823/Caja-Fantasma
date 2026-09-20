@@ -5,6 +5,7 @@ import { VISION_CYCLE_WAIT_STARTED_AT, applyRemoteCatalog, clampNumber, createIn
 const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
 const OVERLAY_POSITION_KEY = "caja-fantasma.once-human.overlay-position.v1";
 const PERSONAL_SYNC_UPDATED_AT_KEY = "caja-fantasma.once-human.personal-sync-updated-at.v1";
+export const PERSONAL_SYNC_INITIAL_DATE = "1970-01-01T00:00:00.000Z";
 const CURRENT_DATA_RESET_VERSION = 2;
 const OVERLAY_SHAPES = new Set<OverlayShape>(["event", "rectangle", "square", "vertical", "round"]);
 const OVERLAY_COUNTER_STYLES = new Set<OverlayCounterStyle>(["digital", "compact", "ring"]);
@@ -126,6 +127,7 @@ export function initialState(): PersistedState {
     shinyMods: [],
     ...createInitialCharacterTracking(),
     settings: {
+      uiLanguage: "es",
       selectedVisionId: sharedVisionId(defaultCatalog as Catalog),
       waitMinutes: 30,
       activeMinutes: 30,
@@ -163,6 +165,7 @@ export function loadState(): PersistedState {
     if (!parsed || parsed.schemaVersion !== 1 || !validateCatalog(parsed.catalog)) return initialState();
     const fresh = initialState();
     const settings = { ...fresh.settings, ...(parsed.settings ?? {}), notificationsEnabled: false };
+    settings.uiLanguage = parsed.settings?.uiLanguage === "en" ? "en" : "es";
     if ((parsed.settings?.timingPresetVersion ?? 0) < 4) {
       const timing = fresh.catalog.eventTiming;
       settings.selectedVisionId = timing?.selectedVisionId ?? "gravity";
@@ -247,7 +250,7 @@ export function exportState(state: PersistedState) {
   URL.revokeObjectURL(link.href);
 }
 
-export function importState(text: string) {
+export function importState(text: string): PersistedState {
   const parsed = JSON.parse(text) as Partial<PersistedState>;
   if (parsed.schemaVersion !== 1 || !validateCatalog(parsed.catalog) || !Array.isArray(parsed.actions) || !Array.isArray(parsed.boxes)) {
     throw new Error("El archivo no es un respaldo válido de Caja Fantasma.");
@@ -270,6 +273,7 @@ export function importState(text: string) {
     settings: {
       ...fresh.settings,
       ...(parsed.settings ?? {}),
+      uiLanguage: parsed.settings?.uiLanguage === "en" ? "en" : "es",
       selectedVisionId: sharedVisionId(catalog),
       overlayScale: clampNumber(Number(parsed.settings?.overlayScale) || 1, .2, 1.5),
       overlayAddonScale: clampNumber(Number(parsed.settings?.overlayAddonScale) || 1, .2, 1),
@@ -339,9 +343,7 @@ export function applyPersonalSyncPayload(current: PersistedState, value: unknown
 export function loadPersonalSyncUpdatedAt() {
   const saved = localStorage.getItem(PERSONAL_SYNC_UPDATED_AT_KEY) ?? "";
   if (Number.isFinite(Date.parse(saved))) return saved;
-  const createdAt = new Date().toISOString();
-  localStorage.setItem(PERSONAL_SYNC_UPDATED_AT_KEY, createdAt);
-  return createdAt;
+  return PERSONAL_SYNC_INITIAL_DATE;
 }
 
 export function savePersonalSyncUpdatedAt(updatedAt: string) {

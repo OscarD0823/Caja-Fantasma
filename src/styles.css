@@ -465,6 +465,9 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .settings-card > div:nth-child(2) { flex: 1; }
 .settings-card h3 { margin: 1px 0 5px; font: 700 14px "Space Grotesk", sans-serif; }
 .settings-card p { margin: 0; color: #7d969d; font-size: 9px; line-height: 1.5; }
+.language-choice { margin-top: 12px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.language-choice button { min-height: 34px; border: 1px solid rgba(133, 175, 182, .15); border-radius: 9px; color: #91a9ae; background: rgba(133, 175, 182, .04); cursor: pointer; font-size: 10px; font-weight: 700; }
+.language-choice button.selected { border-color: rgba(92, 225, 210, .5); color: #08201e; background: var(--cyan-bright); }
 .setting-disabled { opacity: .82; }
 .disabled-setting-badge { display: inline-flex; margin-top: 10px; padding: 5px 8px; border: 1px solid rgba(142, 190, 198, .14); border-radius: 999px; color: #839aa1; background: rgba(142, 190, 198, .05); font-size: 8px; font-weight: 800; letter-spacing: .08em; }
 .field-row { display: flex; gap: 9px; margin-top: 14px; }
@@ -526,6 +529,11 @@ input { width: 100%; min-height: 34px; margin-top: 5px; padding: 0 10px; border:
 .local-pairing-field { display: flex; flex-direction: column; justify-content: center; }
 .local-sync-mobile-fields .local-pairing-field input { font: 700 18px "Space Grotesk", sans-serif; letter-spacing: .18em; text-align: center; }
 .local-sync-actions { margin-top: 13px; display: flex; flex-wrap: wrap; gap: 8px; }
+.local-sync-direction-grid { margin-top: 10px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.local-sync-direction-grid > button { min-height: 64px; justify-content: flex-start; text-align: left; }
+.local-sync-direction-grid > button > span { display: grid; gap: 3px; }
+.local-sync-direction-grid strong { color: #dff7f5; font-size: 11px; }
+.local-sync-direction-grid small { color: #729097; font-size: 8px; font-weight: 500; }
 .local-sync-message { margin: 13px 0 4px; color: #a4c2c6; font-size: 10px; }
 .local-device-sync > small { color: #668087; font-size: 8px; line-height: 1.5; }
 .android-download-panel { min-height: 126px; margin-top: 15px; padding: 23px; display: flex; align-items: center; justify-content: space-between; gap: 18px; background: radial-gradient(circle at 90% 50%, rgba(93, 220, 204, .09), transparent 33%), rgba(7, 24, 33, .86); }
@@ -891,6 +899,7 @@ html.overlay-document, body.overlay-document, body.overlay-document #root { over
   .phase-chip strong { font-size: 11px; }
   .page { padding: 17px 13px 105px; }
   .local-device-sync { padding: 16px; }
+  .local-sync-direction-grid { grid-template-columns: 1fr; }
   .panel { border-radius: 13px; }
   .public-wheel-card { min-height: 220px; }
   .public-wheel-card > div { min-height: 125px; padding: 18px 43px 17px 17px; }

@@ -37,6 +37,7 @@ assert.ok(catalog.proActivities.every((item) => item.points >= 0 && item.points 
 assert.ok(catalog.visions.flatMap((vision) => vision.activities).every((item) => item.points >= 0 && item.points <= 1_000));
 
 const settings: Settings = {
+  uiLanguage: "es",
   selectedVisionId: "gravity",
   waitMinutes: 30,
   activeMinutes: 30,
@@ -146,6 +147,20 @@ assert.equal(timingOnlyUpdated.settings.waitMinutes, 55);
 assert.equal(timingOnlyUpdated.settings.activeMinutes, 25);
 assert.equal(timingOnlyUpdated.settings.transitionDelayMilliseconds, 850);
 assert.equal(timingOnlyUpdated.catalog.eventTiming?.waitMinutes, 55, "El catálogo visible y el contador deben conservar la misma configuración pública.");
+const newerVersionWithOlderClock = structuredClone(timingOnlyCatalog) as Catalog;
+newerVersionWithOlderClock.catalogVersion += 1;
+newerVersionWithOlderClock.eventTiming = {
+  ...newerVersionWithOlderClock.eventTiming!,
+  waitMinutes: 61,
+  activeMinutes: 29,
+  transitionDelayMilliseconds: 1_275,
+  transitionDelaySeconds: 1.275,
+  updatedAt: "2026-09-12T11:00:00.000Z",
+};
+const authoritativeVersionUpdate = applyRemoteCatalog(timingOnlyUpdated, newerVersionWithOlderClock);
+assert.equal(authoritativeVersionUpdate.settings.waitMinutes, 61);
+assert.equal(authoritativeVersionUpdate.settings.activeMinutes, 29);
+assert.equal(authoritativeVersionUpdate.settings.transitionDelayMilliseconds, 1_275, "Una versión pública superior debe aplicar los tiempos aunque el reloj del cliente tenga una fecha posterior.");
 const staleCatalog = structuredClone(catalog) as Catalog;
 staleCatalog.catalogVersion = Math.max(0, catalog.catalogVersion - 1);
 assert.strictEqual(applyRemoteCatalog(remotelyUpdated, staleCatalog), remotelyUpdated, "Una respuesta antigua o cacheada no debe devolver el contador a una configuración anterior.");
@@ -259,10 +274,10 @@ const rushHourNormal = SHINY_MOD_CATALOG.find((item) => item.englishName === "Ru
 const rushHourShiny = SHINY_MOD_CATALOG.find((item) => item.englishName === "Rush Hour <Downstar>" && item.isCatalogShiny);
 assert.equal(rushHourNormal?.name, "Hora punta <Estrella descendente>");
 assert.equal(rushHourNormal?.variant, "Estrella Descendente");
-assert.equal(rushHourNormal?.levelLabel, "Nivel 0–17");
+assert.equal(rushHourNormal?.levelLabel, "Nivel 1–17");
 assert.equal(rushHourShiny?.name, "Hora punta <Estrella descendente>");
 assert.equal(rushHourShiny?.levelLabel, "Brillante");
-assert.equal(SHINY_MOD_CATALOG.every((item) => item.levelLabel === (item.isCatalogShiny ? "Brillante" : "Nivel 0–17")), true);
+assert.equal(SHINY_MOD_CATALOG.every((item) => item.levelLabel === (item.isCatalogShiny ? "Brillante" : "Nivel 1–17")), true);
 assert.equal(matchesModSearch(rushHourNormal!, normalizeModSearch("19500542")), true);
 assert.equal(matchesModSearch(rushHourNormal!, normalizeModSearch("hora punta estrella descendente")), true);
 assert.equal(normalizeModSearch("Vórtice de escarcha"), "vortice de escarcha");

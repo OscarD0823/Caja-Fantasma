@@ -24,14 +24,15 @@ Un cable USB en modo normal de carga o transferencia de archivos no crea por sí
 2. La aplicación genera un código aleatorio de seis números que puede cambiarse desde Windows.
 3. El cliente solo acepta direcciones privadas, de enlace local o de bucle local; no permite enviar el historial a una IP pública.
 4. Cada intercambio valida código, versión del protocolo, fecha, JSON y un límite máximo de 8 MB.
-5. La instantánea con fecha más reciente se devuelve a ambos dispositivos. Los ajustes exclusivos de pantalla, el catálogo y las credenciales del administrador no forman parte de ella.
-6. La APK comprueba cambios cada tres segundos y el PC cada segundo y medio mientras la opción siga activa.
+5. El teléfono decide la dirección: **PC → Celular** descarga y reemplaza la copia personal del teléfono; **Celular → PC** carga y reemplaza la copia personal del PC. La hora del dispositivo no decide cuál gana.
+6. La APK comprueba la conexión cada cinco segundos sin transferir ni reemplazar datos personales. El PC revisa cada segundo y medio si recibió un envío explícito del teléfono.
+7. La respuesta del PC incluye su catálogo público vigente para que espera, duración activa, fase y transición también lleguen al teléfono por la conexión local.
 
 El canal no se publica en Internet ni utiliza Firebase. En esta versión el contenido viaja dentro de la red local sin cifrado adicional, por lo que debe usarse únicamente en una red Wi-Fi de confianza o mediante USB tethering. El código evita accesos accidentales de otros dispositivos, pero no sustituye el cifrado de una red segura.
 
 ## Qué se sincroniza
 
-Cada equipo mantiene su copia local y, durante la conexión, comparte la instantánea personal con fecha más reciente:
+Cada equipo mantiene su copia local. Los datos solo se reemplazan cuando la persona pulsa una de las dos direcciones de sincronización:
 
 - recompensas y puntos;
 - personajes y equipos;
@@ -41,13 +42,13 @@ Cada equipo mantiene su copia local y, durante la conexión, comparte la instant
 
 El acceso de administrador, GitHub CLI, claves de publicación, bandeja de Windows, autoinicio y posición de la ventana flotante nunca se envían al teléfono.
 
-Mientras no haya conexión, cada dispositivo conserva su copia local. Al reconectar, la última modificación personal reemplaza la copia anterior. Para evitar conflictos, conviene terminar de registrar en un dispositivo antes de continuar en el otro; esta primera implementación no fusiona dos ediciones simultáneas independientes.
+Mientras no haya conexión, cada dispositivo conserva su copia local. Al reconectar no se reemplaza nada automáticamente: la persona elige qué copia conservar. Esta implementación todavía no fusiona dos ediciones simultáneas independientes.
 
 ## Configuración pública
 
-`catalog/visions.json` continúa en GitHub como fuente pública de recompensas y horario tanto para PC como para Android. El administrador publica de una vez la rueda general, los minutos de espera, los minutos de actividad, el retraso de transición, la fase vigente y su hora de inicio. La conexión local no sustituye ni modifica ese catálogo.
+`catalog/visions.json` continúa en GitHub como fuente pública de recompensas y horario tanto para PC como para Android. El administrador publica de una vez la rueda general, los minutos de espera, los minutos de actividad, el retraso de transición, la fase vigente y su hora de inicio. Además, un PC conectado retransmite su copia pública vigente al teléfono; el teléfono nunca publica ni modifica ese catálogo.
 
-PC y Android consultan GitHub Raw sin caché al abrir, al recuperar el foco, al volver la conexión y cada 30 segundos; usan la API pública de contenido como respaldo controlado. Las respuestas con una versión anterior nunca reemplazan una configuración más nueva. Cuando el administrador vuelve a sincronizar los tiempos sin cambiar la estructura del catálogo, la fecha de publicación permite que ambos tipos de dispositivo reemplacen también esa configuración y continúen el ciclo desde la misma hora absoluta.
+PC y Android consultan GitHub Raw sin caché al abrir, al recuperar el foco, al volver la conexión y cada 30 segundos; usan la API pública de contenido como respaldo controlado. Las respuestas con una versión anterior nunca reemplazan una configuración más nueva. Una versión pública superior siempre aplica todos sus tiempos aunque el reloj local tenga una fecha posterior; dentro de la misma versión, la fecha de publicación permite aplicar una sincronización de tiempo posterior.
 
 ## Actualización de la APK
 
@@ -57,7 +58,7 @@ Android no permite que una aplicación distribuida fuera de Google Play se reemp
 
 ## Estado comprobado del equipo
 
-La APK con sincronización local y actualización integrada se genera y verifica para la versión 1.16.2:
+La APK con sincronización local y actualización integrada se genera y verifica para la versión 1.16.3:
 
 - Android SDK 35/36, Build Tools 35/36 y NDK 29 están instalados y las licencias fueron aceptadas.
 - El destino Rust `aarch64-linux-android` compila la biblioteca nativa optimizada.
@@ -72,7 +73,7 @@ La APK con sincronización local y actualización integrada se genera y verifica
 1. Completado: interfaz adaptable a pantallas verticales y separación de opciones exclusivas de Windows.
 2. Completado: entrada móvil de Tauri, proyecto Android generado y compilación Rust ARM64.
 3. Completado: SDK, Platform Tools, Build Tools, NDK y firma privada de distribución.
-4. Completado: anfitrión TCP local en Rust, cliente móvil, código de conexión, validación y sincronización automática bidireccional.
+4. Completado: anfitrión TCP local en Rust, cliente móvil, código de conexión, validación y sincronización manual por dirección.
 5. Completado: pruebas de intercambio por bucle local, rechazo de IP pública y compilación ARM64.
 6. Pendiente: validar la APK y el flujo del instalador del sistema en un teléfono físico mediante Wi-Fi y USB tethering.
 7. Futuro: cifrado de aplicación punto a punto, descubrimiento automático y fusión de operaciones simultáneas.
@@ -81,10 +82,11 @@ La APK con sincronización local y actualización integrada se genera y verifica
 ## Pruebas obligatorias
 
 - Ningún dato se transmite cuando una de las dos aplicaciones está cerrada.
-- El PC no deja ningún puerto abierto después de desconectar.
+- Al desconectar, el PC rechaza de inmediato cualquier intercambio aunque el proceso conserve su listener local hasta cerrarse.
 - Un teléfono sin el código vigente no puede leer ni modificar datos.
-- Una recompensa registrada en el teléfono aparece en el PC y no se duplica al volver a intercambiar la misma instantánea.
-- Editar, revertir o borrar en un dispositivo actualiza el otro cuando esa copia es la más reciente.
+- **Celular → PC** reemplaza los datos personales del PC aunque el reloj del teléfono sea anterior.
+- **PC → Celular** reemplaza los datos personales del teléfono sin cargar primero su copia al PC.
+- La comprobación automática de conexión nunca reemplaza datos personales.
 - Las configuraciones exclusivas del PC y el modo administrador nunca llegan al teléfono.
 - La conexión funciona sin Internet usando el punto de acceso local o USB tethering.
 
