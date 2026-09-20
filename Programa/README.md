@@ -2,12 +2,12 @@
 
 Descargas oficiales del programa creado por [OscarD0823](https://github.com/OscarD0823).
 
-## Versión actual: 1.17.0
+## Versión actual: 1.17.1
 
 | Plataforma | Descarga | Compatibilidad | SHA-256 |
 | --- | --- | --- | --- |
-| Windows | [`Windows/Caja-Fantasma-1.17.0-Instalador.exe`](Windows/Caja-Fantasma-1.17.0-Instalador.exe) | Windows 10/11 x64 | `1FA1393E2F0E76DCA6140DFA578FDFDC9674C60773175D88367D9189B65A32AD` |
-| Android | [`Android/Caja-Fantasma-Android-1.17.0.apk`](Android/Caja-Fantasma-Android-1.17.0.apk) | Android 8.0+ ARM64 | `D1F98706D7DCB6F7B994C8CE00F0067A9F13A7C38116A1C2064180317AE4E03F` |
+| Windows | [`Windows/Caja-Fantasma-1.17.1-Instalador.exe`](Windows/Caja-Fantasma-1.17.1-Instalador.exe) | Windows 10/11 x64 | `49EE61344E4960B51F418FEC0FCC40E7D4712217391AC45FC72E9A88119890DB` |
+| Android | [`Android/Caja-Fantasma-Android-1.17.1.apk`](Android/Caja-Fantasma-Android-1.17.1.apk) | Android 8.0+ ARM64 | `B39703E3E976697E1C8AC1B9E24375D836A916FDA0737C16A172EE49F0D7B9EE` |
 
 Cada plataforma tiene sus instrucciones y sumas de comprobación dentro de su carpeta. La [licencia MIT](LICENSE) se conserva junto a las descargas. Las versiones anteriores están archivadas en [`Versiones-anteriores`](Versiones-anteriores/) y los lanzamientos completos permanecen en GitHub Releases.
 

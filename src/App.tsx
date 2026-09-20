@@ -162,6 +162,16 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 
 const CHANGELOG = [
   {
+    version: "1.17.1",
+    date: "20 de septiembre de 2026",
+    title: "Conexión en vivo estable en Windows",
+    items: [
+      "Corregido el error de socket 10035 que podía aparecer al sincronizar con frecuencia entre el PC y Android.",
+      "Cada conexión del celular espera correctamente la llegada de los datos sin bloquear indefinidamente el servidor.",
+      "Los botones PC → Celular y Celular → PC conservan su funcionamiento junto al modo en vivo.",
+    ],
+  },
+  {
     version: "1.17.0",
     date: "19 de septiembre de 2026",
     title: "Datos en vivo, resumen diario y ranking",

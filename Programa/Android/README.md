@@ -2,12 +2,12 @@
 
 ## APK disponible
 
-- Archivo: [`Caja-Fantasma-Android-1.17.0.apk`](Caja-Fantasma-Android-1.17.0.apk)
+- Archivo: [`Caja-Fantasma-Android-1.17.1.apk`](Caja-Fantasma-Android-1.17.1.apk)
 - Arquitectura: ARM64 (`arm64-v8a`).
 - Android mínimo: Android 8.0 / API 26.
-- Versión: 1.17.0 (`versionCode` 1017000).
-- Tamaño: 19.586.622 bytes.
-- SHA-256: `D1F98706D7DCB6F7B994C8CE00F0067A9F13A7C38116A1C2064180317AE4E03F`.
+- Versión: 1.17.1 (`versionCode` 1017001).
+- Tamaño: 19.594.814 bytes.
+- SHA-256: `B39703E3E976697E1C8AC1B9E24375D836A916FDA0737C16A172EE49F0D7B9EE`.
 - Firma: RSA 4096 propia de `OscarD0823`; APK Signature Scheme v2 y v3 verificadas.
 
 Descarga esta versión una vez, permite la instalación desde esa fuente cuando Android lo solicite y abre **Caja Fantasma · Once Human**. Las versiones siguientes se descargarán y verificarán dentro de la app; Android seguirá mostrando su confirmación de seguridad antes de reemplazarla. Esta APK usa el permiso de Internet para consultar la rueda pública, buscar actualizaciones y comunicarse directamente con el PC dentro de la red local; no incluye Firebase, publicidad ni telemetría.

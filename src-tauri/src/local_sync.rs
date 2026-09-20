@@ -132,9 +132,22 @@ fn read_json_line(stream: &mut TcpStream) -> Result<String, String> {
     let mut result = Vec::new();
     let mut chunk = [0_u8; 8_192];
     loop {
-        let read = stream
-            .read(&mut chunk)
-            .map_err(|error| format!("No se pudieron leer los datos: {error}"))?;
+        let read = match stream.read(&mut chunk) {
+            Ok(read) => read,
+            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                return Err(
+                    "La conexión tardó demasiado en enviar los datos. Intenta sincronizar otra vez."
+                        .into(),
+                );
+            }
+            Err(error) => return Err(format!("No se pudieron leer los datos: {error}")),
+        };
         if read == 0 {
             break;
         }
@@ -316,9 +329,20 @@ mod desktop {
 
     fn process_client(mut stream: TcpStream, peer_address: SocketAddr, state: &ServerState) {
         let timeout = Some(Duration::from_secs(4));
-        let _ = stream.set_read_timeout(timeout);
-        let _ = stream.set_write_timeout(timeout);
         let response = (|| -> Result<LocalSyncExchange, String> {
+            // En Windows, un socket aceptado puede conservar el modo no bloqueante del listener.
+            // La conexión ya existe, pero el teléfono puede necesitar unos milisegundos para
+            // enviar la primera línea. Restablecer el modo bloqueante evita WSAEWOULDBLOCK (10035)
+            // y los límites siguientes impiden que un cliente deje detenido el servidor.
+            stream
+                .set_nonblocking(false)
+                .map_err(|error| format!("No se pudo preparar la conexión local: {error}"))?;
+            stream
+                .set_read_timeout(timeout)
+                .map_err(|error| format!("No se pudo preparar la lectura local: {error}"))?;
+            stream
+                .set_write_timeout(timeout)
+                .map_err(|error| format!("No se pudo preparar el envío local: {error}"))?;
             if !is_local_ip(peer_address.ip()) {
                 return Err("La sincronización solo acepta equipos de la red local.".into());
             }
@@ -614,6 +638,34 @@ mod tests {
         )
         .expect("the local server should start");
         let address = format!("127.0.0.1:{}", info.port);
+        let socket = local_socket_address(&address).expect("the loopback address should be valid");
+        let mut delayed_stream = TcpStream::connect_timeout(&socket, Duration::from_secs(4))
+            .expect("the delayed client should connect");
+        delayed_stream
+            .set_read_timeout(Some(Duration::from_secs(4)))
+            .expect("the delayed client should configure its read timeout");
+        delayed_stream
+            .set_write_timeout(Some(Duration::from_secs(4)))
+            .expect("the delayed client should configure its write timeout");
+        std::thread::sleep(Duration::from_millis(180));
+        write_json_line(
+            &mut delayed_stream,
+            &LocalSyncRequest {
+                protocol: LOCAL_SYNC_PROTOCOL,
+                pairing_code: code.clone(),
+                action: LocalSyncAction::Status,
+                known_revision: 0,
+                updated_at: "1970-01-01T00:00:00.000Z".into(),
+                data_json: "{}".into(),
+            },
+        )
+        .expect("a client may send shortly after the server accepts the socket");
+        let delayed_response: LocalSyncExchange = serde_json::from_str(
+            &read_json_line(&mut delayed_stream)
+                .expect("the server should wait for a delayed request instead of returning 10035"),
+        )
+        .expect("the delayed response should be valid JSON");
+        assert!(delayed_response.ok, "{}", delayed_response.message);
         let older_exchange = mobile_sync_exchange_blocking(
             address.clone(),
             code.clone(),
