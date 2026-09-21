@@ -116,7 +116,7 @@ function matchesModSearch(item: ShinyModCatalogItem, search: string) {
 type TabId = "progress" | "characters" | "vision" | "devices" | "history" | "shiny" | "changes" | "settings";
 type CreatorAccess = "checking" | "locked" | "granted";
 
-type LocalSyncInfo = { enabled: boolean; address: string; port: number; pairingCode: string };
+type LocalSyncInfo = { enabled: boolean; address: string; port: number; pairingCode: string; revision: number };
 type LocalSyncSnapshot = { enabled: boolean; revision: number; updatedAt: string; dataJson: string; lastExchangeAt: number; lastMobileUpdateAt: number };
 type LocalSyncAction = "status" | "pull" | "push" | "live";
 type LocalSyncExchange = Omit<LocalSyncSnapshot, "enabled" | "lastMobileUpdateAt"> & { ok: boolean; message: string; catalogJson?: string };
@@ -161,6 +161,17 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.17.3",
+    date: "21 de septiembre de 2026",
+    title: "Recuperación automática y sincronización sin pérdidas",
+    items: [
+      "La aplicación conserva un respaldo nativo independiente del almacenamiento visual tanto en Windows como en Android.",
+      "Si el estado local aparece vacío por un fallo, el historial se recupera automáticamente desde la copia más completa disponible.",
+      "Los cambios simultáneos o atrasados del PC y el celular se combinan por registro en vez de reemplazar un historial completo.",
+      "La revisión de sincronización impide que una copia desactualizada gane por error durante el modo en vivo.",
+    ],
+  },
   {
     version: "1.17.2",
     date: "20 de septiembre de 2026",
@@ -621,6 +632,7 @@ export default function App() {
   const [localSyncInfo, setLocalSyncInfo] = useState<LocalSyncInfo>();
   const [localSyncStatus, setLocalSyncStatus] = useState("Sin conexión local");
   const [localSyncBusy, setLocalSyncBusy] = useState(false);
+  const [nativeBackupReady, setNativeBackupReady] = useState(!isTauri());
   const [creatorAccess, setCreatorAccess] = useState<CreatorAccess>("checking");
   const [creatorMessage, setCreatorMessage] = useState("Comprobando la cuenta de GitHub…");
   const initialCycle = useRef(computeCycle(state.settings));
@@ -644,6 +656,7 @@ export default function App() {
   const personalSyncJsonRef = useRef(JSON.stringify(personalSyncPayload(state)));
   const localSyncInFlightRef = useRef(false);
   const liveRevisionRef = useRef(0);
+  const desktopRevisionRef = useRef(0);
   const lastLocalExchangeRef = useRef(0);
   const lastMobileUpdateRef = useRef(0);
   const localSyncEnabledRef = useRef(state.settings.localSyncEnabled);
@@ -817,11 +830,14 @@ export default function App() {
       savePersonalSyncUpdatedAt(updatedAt);
     }
     if (!IS_ANDROID && isTauri() && state.settings.localSyncEnabled) {
-      void invoke("update_local_sync_state", {
+      void invoke<number>("update_local_sync_state", {
         dataJson: personalSyncJsonRef.current,
         updatedAt: personalSyncUpdatedAtRef.current,
         catalogJson: sharedCatalogJson,
         liveEnabled: state.settings.localSyncLiveEnabled,
+        knownRevision: desktopRevisionRef.current,
+      }).then((revision) => {
+        desktopRevisionRef.current = Math.max(desktopRevisionRef.current, revision);
       }).catch(() => undefined);
     }
   }, [personalSyncJson, sharedCatalogJson, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
@@ -850,6 +866,7 @@ export default function App() {
           if (!localSyncEnabledRef.current) void invoke("stop_local_sync").catch(() => undefined);
           return;
         }
+        desktopRevisionRef.current = info.revision;
         setLocalSyncInfo(info);
         setLocalSyncStatus(tx(`Esperando al celular en ${info.address}`, `Waiting for the phone at ${info.address}`));
       } catch (error) {
@@ -862,6 +879,7 @@ export default function App() {
       void invoke<LocalSyncSnapshot>("read_local_sync_state")
         .then((snapshot) => {
           if (!active) return;
+          desktopRevisionRef.current = Math.max(desktopRevisionRef.current, snapshot.revision);
           const hasMobileUpdate = snapshot.lastMobileUpdateAt > lastMobileUpdateRef.current;
           if (hasMobileUpdate) lastMobileUpdateRef.current = snapshot.lastMobileUpdateAt;
           const receivedChanges = hasMobileUpdate ? acceptLocalSyncSnapshot(snapshot, true) : false;
@@ -880,6 +898,7 @@ export default function App() {
   useEffect(() => {
     if (IS_ANDROID || !isTauri() || state.settings.localSyncEnabled) return;
     setLocalSyncInfo(undefined);
+    desktopRevisionRef.current = 0;
     void invoke("stop_local_sync").catch(() => undefined);
   }, [state.settings.localSyncEnabled]);
 
@@ -958,6 +977,39 @@ export default function App() {
   }, [shinyCatalogAttempt, shinyCatalogModule, tab]);
 
   useEffect(() => saveState(state), [state]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let active = true;
+    void invoke<string | null>("load_native_personal_backup")
+      .then((backupText) => {
+        if (!active || !backupText) return;
+        const backup = JSON.parse(backupText) as unknown;
+        setState((current) => {
+          if (personalHistoryCount(current) > 0 || personalHistoryCount(backup) === 0) return current;
+          const recovered = applyPersonalSyncPayload(current, backup);
+          const recoveredJson = JSON.stringify(personalSyncPayload(recovered));
+          const updatedAt = new Date().toISOString();
+          personalSyncJsonRef.current = recoveredJson;
+          personalSyncUpdatedAtRef.current = updatedAt;
+          savePersonalSyncUpdatedAt(updatedAt);
+          return recovered;
+        });
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setNativeBackupReady(true);
+      });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!isTauri() || !nativeBackupReady || personalHistoryCount(JSON.parse(personalSyncJson)) === 0) return;
+    const timer = window.setTimeout(() => {
+      void invoke("save_native_personal_backup", { dataJson: personalSyncJson }).catch(() => undefined);
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [nativeBackupReady, personalSyncJson]);
 
   useEffect(() => {
     const receiveOverlayChange = () => setState(loadState());

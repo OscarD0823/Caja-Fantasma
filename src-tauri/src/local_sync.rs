@@ -32,6 +32,7 @@ pub struct LocalSyncInfo {
     pub address: String,
     pub port: u16,
     pub pairing_code: String,
+    pub revision: u64,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -140,20 +141,173 @@ fn personal_history_count(data_json: &str) -> usize {
     let Ok(Value::Object(data)) = serde_json::from_str::<Value>(data_json) else {
         return 0;
     };
-    let array_records = ARRAY_FIELDS
+    ARRAY_FIELDS
         .iter()
         .filter_map(|field| data.get(*field).and_then(Value::as_array))
         .map(Vec::len)
-        .sum::<usize>();
-    let boundaries = data
-        .get("pointRoundBoundaries")
-        .and_then(Value::as_object)
-        .map_or(0, serde_json::Map::len);
-    array_records.saturating_add(boundaries)
+        .sum::<usize>()
 }
 
 fn would_erase_personal_history(current_json: &str, incoming_json: &str) -> bool {
     personal_history_count(current_json) > 0 && personal_history_count(incoming_json) == 0
+}
+
+fn merge_id_array(current: Option<&Value>, incoming: Option<&Value>, field: &str) -> Value {
+    let mut merged = current
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let Some(incoming) = incoming.and_then(Value::as_array) else {
+        return Value::Array(merged);
+    };
+    for candidate in incoming {
+        let Some(id) = candidate.get("id").and_then(Value::as_str) else {
+            if !merged.contains(candidate) {
+                merged.push(candidate.clone());
+            }
+            continue;
+        };
+        let Some(index) = merged
+            .iter()
+            .position(|item| item.get("id").and_then(Value::as_str) == Some(id))
+        else {
+            merged.push(candidate.clone());
+            continue;
+        };
+        if field == "shinyMods" {
+            let existing_attempts = merged[index]
+                .get("attempts")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            let incoming_attempts = candidate
+                .get("attempts")
+                .and_then(Value::as_u64)
+                .unwrap_or(0);
+            let existing_shiny = merged[index]
+                .get("isShiny")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let incoming_shiny = candidate
+                .get("isShiny")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if let Some(existing) = merged[index].as_object_mut() {
+                existing.insert(
+                    "attempts".into(),
+                    Value::Number(existing_attempts.max(incoming_attempts).into()),
+                );
+                existing.insert(
+                    "isShiny".into(),
+                    Value::Bool(existing_shiny || incoming_shiny),
+                );
+                if existing.get("obtainedAt").and_then(Value::as_str).is_none() {
+                    if let Some(obtained_at) = candidate.get("obtainedAt") {
+                        existing.insert("obtainedAt".into(), obtained_at.clone());
+                    }
+                }
+            }
+        }
+    }
+    Value::Array(merged)
+}
+
+fn merge_string_array(current: Option<&Value>, incoming: Option<&Value>) -> Value {
+    let mut merged = current
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if let Some(incoming) = incoming.and_then(Value::as_array) {
+        for candidate in incoming {
+            if candidate.is_string() && !merged.contains(candidate) {
+                merged.push(candidate.clone());
+            }
+        }
+    }
+    Value::Array(merged)
+}
+
+fn merge_live_personal_payloads(current_json: &str, incoming_json: &str) -> Result<String, String> {
+    const ID_ARRAY_FIELDS: [&str; 6] = [
+        "actions",
+        "activityHistory",
+        "boxes",
+        "pointRounds",
+        "shinyMods",
+        "characters",
+    ];
+    let Value::Object(mut current) = serde_json::from_str::<Value>(current_json)
+        .map_err(|_| "Los datos actuales no contienen JSON válido.".to_string())?
+    else {
+        return Err("Los datos actuales deben ser un objeto JSON.".into());
+    };
+    let original = Value::Object(current.clone());
+    let Value::Object(incoming) = serde_json::from_str::<Value>(incoming_json)
+        .map_err(|_| "Los datos entrantes no contienen JSON válido.".to_string())?
+    else {
+        return Err("Los datos entrantes deben ser un objeto JSON.".into());
+    };
+    for field in ID_ARRAY_FIELDS {
+        if !current.contains_key(field) && !incoming.contains_key(field) {
+            continue;
+        }
+        let value = merge_id_array(current.get(field), incoming.get(field), field);
+        current.insert(field.into(), value);
+    }
+    if current.contains_key("manualBaselinePoints") || incoming.contains_key("manualBaselinePoints")
+    {
+        let baselines = match (
+            current
+                .get("manualBaselinePoints")
+                .and_then(Value::as_array),
+            incoming
+                .get("manualBaselinePoints")
+                .and_then(Value::as_array),
+        ) {
+            (Some(existing), Some(candidate)) if candidate.len() > existing.len() => {
+                candidate.clone()
+            }
+            (Some(existing), _) => existing.clone(),
+            (None, Some(candidate)) => candidate.clone(),
+            (None, None) => Vec::new(),
+        };
+        current.insert("manualBaselinePoints".into(), Value::Array(baselines));
+    }
+    if current.contains_key("teamMemberIds") || incoming.contains_key("teamMemberIds") {
+        let team_member_ids =
+            merge_string_array(current.get("teamMemberIds"), incoming.get("teamMemberIds"));
+        current.insert("teamMemberIds".into(), team_member_ids);
+    }
+    let mut boundaries = current
+        .get("pointRoundBoundaries")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    if let Some(incoming_boundaries) = incoming
+        .get("pointRoundBoundaries")
+        .and_then(Value::as_object)
+    {
+        for (key, value) in incoming_boundaries {
+            let should_replace = match (boundaries.get(key).and_then(Value::as_str), value.as_str())
+            {
+                (Some(existing), Some(candidate)) => candidate > existing,
+                (None, Some(_)) => true,
+                _ => false,
+            };
+            if should_replace {
+                boundaries.insert(key.clone(), value.clone());
+            }
+        }
+    }
+    if current.contains_key("pointRoundBoundaries") || incoming.contains_key("pointRoundBoundaries")
+    {
+        current.insert("pointRoundBoundaries".into(), Value::Object(boundaries));
+    }
+    let merged = Value::Object(current);
+    if merged == original {
+        return Ok(current_json.to_string());
+    }
+    serde_json::to_string(&merged)
+        .map_err(|_| "No se pudieron combinar los datos personales.".into())
 }
 
 fn read_json_line(stream: &mut TcpStream) -> Result<String, String> {
@@ -454,10 +608,17 @@ mod desktop {
                         snapshot.last_mobile_update_at = exchange_at;
                     }
                 }
-                LocalSyncAction::Status
-                | LocalSyncAction::Pull
-                | LocalSyncAction::Auto
-                | LocalSyncAction::Live => {}
+                LocalSyncAction::Live => {
+                    let merged =
+                        merge_live_personal_payloads(&snapshot.data_json, &request.data_json)?;
+                    if merged != snapshot.data_json {
+                        snapshot.revision = snapshot.revision.saturating_add(1);
+                        snapshot.updated_at = request.updated_at.max(snapshot.updated_at.clone());
+                        snapshot.data_json = merged;
+                        snapshot.last_mobile_update_at = exchange_at;
+                    }
+                }
+                LocalSyncAction::Status | LocalSyncAction::Pull | LocalSyncAction::Auto => {}
             }
             let (response_updated_at, response_data_json) =
                 if request.action == LocalSyncAction::Status {
@@ -528,6 +689,11 @@ mod desktop {
     }
 
     fn info(state: &ServerState) -> Result<LocalSyncInfo, String> {
+        let revision = state
+            .snapshot
+            .lock()
+            .map_err(|_| "No se pudo leer la revisión compartida.".to_string())?
+            .revision;
         Ok(LocalSyncInfo {
             enabled: state.enabled.load(Ordering::Relaxed),
             address: format!("{}:{}", state.address, state.port),
@@ -537,6 +703,7 @@ mod desktop {
                 .lock()
                 .map_err(|_| "No se pudo leer el código de conexión.".to_string())?
                 .clone(),
+            revision,
         })
     }
 
@@ -569,7 +736,18 @@ mod desktop {
             .pairing_code
             .lock()
             .map_err(|_| "No se pudo guardar el código de conexión.".to_string())? = pairing_code;
-        update(data_json, updated_at, catalog_json, live_enabled)?;
+        let known_revision = state
+            .snapshot
+            .lock()
+            .map_err(|_| "No se pudo leer la revisión compartida.".to_string())?
+            .revision;
+        update(
+            data_json,
+            updated_at,
+            catalog_json,
+            live_enabled,
+            known_revision,
+        )?;
         info(state)
     }
 
@@ -588,7 +766,8 @@ mod desktop {
         updated_at: String,
         catalog_json: String,
         live_enabled: bool,
-    ) -> Result<(), String> {
+        known_revision: u64,
+    ) -> Result<u64, String> {
         validate_sync_payload(&data_json, &updated_at)?;
         validate_catalog_payload(&catalog_json)?;
         let state = LOCAL_SYNC_SERVER
@@ -599,23 +778,36 @@ mod desktop {
             .snapshot
             .lock()
             .map_err(|_| "No se pudieron actualizar los datos compartidos.".to_string())?;
-        if live_enabled && would_erase_personal_history(&snapshot.data_json, &data_json) {
+        let has_revision_conflict = live_enabled && known_revision != snapshot.revision;
+        let synchronized_data = if has_revision_conflict {
+            merge_live_personal_payloads(&snapshot.data_json, &data_json)?
+        } else {
+            data_json.clone()
+        };
+        let recovered_conflict = has_revision_conflict && synchronized_data != data_json;
+        if live_enabled && would_erase_personal_history(&snapshot.data_json, &synchronized_data) {
             snapshot.last_mobile_update_at = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .map(|duration| duration.as_millis() as u64)
                 .unwrap_or(snapshot.last_mobile_update_at);
             snapshot.catalog_json = catalog_json;
             snapshot.enabled = state.enabled.load(Ordering::Relaxed);
-            return Ok(());
+            return Ok(snapshot.revision);
         }
-        if updated_at != snapshot.updated_at || data_json != snapshot.data_json {
+        if updated_at != snapshot.updated_at || synchronized_data != snapshot.data_json {
             snapshot.revision = snapshot.revision.saturating_add(1);
             snapshot.updated_at = updated_at;
-            snapshot.data_json = data_json;
+            snapshot.data_json = synchronized_data;
+            if recovered_conflict {
+                snapshot.last_mobile_update_at = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|duration| duration.as_millis() as u64)
+                    .unwrap_or(snapshot.last_mobile_update_at);
+            }
         }
         snapshot.catalog_json = catalog_json;
         snapshot.enabled = state.enabled.load(Ordering::Relaxed);
-        Ok(())
+        Ok(snapshot.revision)
     }
 
     pub fn read() -> Result<LocalSyncSnapshot, String> {
@@ -663,8 +855,15 @@ pub fn update_local_sync_state(
     updated_at: String,
     catalog_json: String,
     live_enabled: bool,
-) -> Result<(), String> {
-    desktop::update(data_json, updated_at, catalog_json, live_enabled)
+    known_revision: u64,
+) -> Result<u64, String> {
+    desktop::update(
+        data_json,
+        updated_at,
+        catalog_json,
+        live_enabled,
+        known_revision,
+    )
 }
 
 #[cfg(desktop)]
@@ -676,6 +875,27 @@ pub fn read_local_sync_state() -> Result<LocalSyncSnapshot, String> {
 #[cfg(all(test, desktop))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn merges_concurrent_live_histories_without_losing_either_device() {
+        let computer = r#"{"actions":[{"id":"pc-action"}],"activityHistory":[{"id":"pc-history"}],"boxes":[],"pointRounds":[],"pointRoundBoundaries":{"solo:main":"2026-09-21T10:00:00.000Z"},"manualBaselinePoints":[],"shinyMods":[{"id":"mod-1","attempts":4,"isShiny":false}],"characters":[{"id":"main","name":"Principal"}],"teamMemberIds":["main"]}"#;
+        let phone = r#"{"actions":[{"id":"phone-action"}],"activityHistory":[{"id":"phone-history"}],"boxes":[],"pointRounds":[],"pointRoundBoundaries":{"solo:main":"2026-09-21T10:05:00.000Z"},"manualBaselinePoints":[],"shinyMods":[{"id":"mod-1","attempts":6,"isShiny":true}],"characters":[{"id":"main","name":"Principal"},{"id":"alt","name":"Alterno"}],"teamMemberIds":["alt"]}"#;
+
+        let merged =
+            merge_live_personal_payloads(computer, phone).expect("both histories should merge");
+        let value: Value = serde_json::from_str(&merged).expect("merged JSON should remain valid");
+
+        assert_eq!(value["actions"].as_array().map(Vec::len), Some(2));
+        assert_eq!(value["activityHistory"].as_array().map(Vec::len), Some(2));
+        assert_eq!(value["characters"].as_array().map(Vec::len), Some(2));
+        assert_eq!(value["shinyMods"][0]["attempts"].as_u64(), Some(6));
+        assert_eq!(value["shinyMods"][0]["isShiny"].as_bool(), Some(true));
+        assert_eq!(
+            value["pointRoundBoundaries"]["solo:main"].as_str(),
+            Some("2026-09-21T10:05:00.000Z")
+        );
+        assert_eq!(value["teamMemberIds"].as_array().map(Vec::len), Some(2));
+    }
 
     #[test]
     fn supports_explicit_sync_directions_over_loopback() {
@@ -813,6 +1033,7 @@ mod tests {
             "2026-09-13T08:05:00.000Z".into(),
             catalog,
             true,
+            phone_live.revision,
         )
         .expect("the desktop should publish its next local change without trusting its clock");
         let stale_phone = mobile_sync_exchange_blocking(
@@ -833,6 +1054,7 @@ mod tests {
             "2026-09-13T10:07:00.000Z".into(),
             "{\"catalogVersion\":41}".into(),
             true,
+            stale_phone.revision,
         )
         .expect("an empty PC may enter live mode before the phone connects");
         let recovered_from_phone = mobile_sync_exchange_blocking(
@@ -862,6 +1084,7 @@ mod tests {
             "2026-09-13T10:10:00.000Z".into(),
             "{\"catalogVersion\":41}".into(),
             true,
+            recovered_from_phone.revision,
         )
         .expect("a transient empty render must not erase the server snapshot");
         let snapshot_after_empty_desktop =
@@ -896,6 +1119,7 @@ mod tests {
             "2026-09-13T08:05:00.000Z".into(),
             "{\"catalogVersion\":42}".into(),
             false,
+            0,
         )
         .expect("live mode should be configurable while the server remains available");
         let live_disabled = mobile_sync_exchange_blocking(

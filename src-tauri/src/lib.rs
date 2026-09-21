@@ -10,18 +10,121 @@ use local_sync::{
 
 #[cfg(desktop)]
 use base64::{engine::general_purpose::STANDARD, Engine as _};
+#[cfg(mobile)]
+use serde_json::Value;
 #[cfg(desktop)]
 use serde_json::{json, Value};
+use std::fs;
 #[cfg(all(desktop, target_os = "windows"))]
 use std::os::windows::process::CommandExt;
 #[cfg(desktop)]
-use std::{fs, process::Command};
+use std::process::Command;
+use tauri::Manager;
 #[cfg(desktop)]
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, WindowEvent,
+    WindowEvent,
 };
+
+const NATIVE_BACKUP_FILE: &str = "personal-state-backup.json";
+const NATIVE_BACKUP_PREVIOUS_FILE: &str = "personal-state-backup.previous.json";
+const NATIVE_BACKUP_MAX_BYTES: usize = 8 * 1024 * 1024;
+
+fn native_backup_history_count(value: &Value) -> usize {
+    const ARRAY_FIELDS: [&str; 6] = [
+        "actions",
+        "activityHistory",
+        "boxes",
+        "pointRounds",
+        "manualBaselinePoints",
+        "shinyMods",
+    ];
+    let Some(data) = value.as_object() else {
+        return 0;
+    };
+    ARRAY_FIELDS
+        .iter()
+        .filter_map(|field| data.get(*field).and_then(Value::as_array))
+        .map(Vec::len)
+        .sum::<usize>()
+}
+
+fn valid_native_backup(text: String) -> Option<(String, usize)> {
+    if text.len() > NATIVE_BACKUP_MAX_BYTES {
+        return None;
+    }
+    let value = serde_json::from_str::<Value>(&text).ok()?;
+    value.as_object()?;
+    let count = native_backup_history_count(&value);
+    Some((text, count))
+}
+
+#[tauri::command]
+fn load_native_personal_backup(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let directory = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("No se encontró la carpeta de respaldo: {error}"))?;
+    let candidates = [
+        directory.join(NATIVE_BACKUP_FILE),
+        directory.join(NATIVE_BACKUP_PREVIOUS_FILE),
+    ];
+    let mut richest: Option<(String, usize)> = None;
+    for path in candidates {
+        let Ok(text) = fs::read_to_string(path) else {
+            continue;
+        };
+        let Some(candidate) = valid_native_backup(text) else {
+            continue;
+        };
+        if richest
+            .as_ref()
+            .is_none_or(|(_, count)| candidate.1 > *count)
+        {
+            richest = Some(candidate);
+        }
+    }
+    Ok(richest.map(|(text, _)| text))
+}
+
+#[tauri::command]
+fn save_native_personal_backup(app: tauri::AppHandle, data_json: String) -> Result<(), String> {
+    let Some((data_json, incoming_count)) = valid_native_backup(data_json) else {
+        return Err("El respaldo personal no contiene JSON válido.".into());
+    };
+    let directory = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("No se encontró la carpeta de respaldo: {error}"))?;
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("No se pudo crear la carpeta de respaldo: {error}"))?;
+    let backup_path = directory.join(NATIVE_BACKUP_FILE);
+    let previous_path = directory.join(NATIVE_BACKUP_PREVIOUS_FILE);
+    let existing = fs::read_to_string(&backup_path)
+        .ok()
+        .and_then(valid_native_backup);
+    if existing
+        .as_ref()
+        .is_some_and(|(_, existing_count)| *existing_count > incoming_count)
+    {
+        return Ok(());
+    }
+    if backup_path.exists() {
+        fs::copy(&backup_path, &previous_path)
+            .map_err(|error| format!("No se pudo rotar el respaldo anterior: {error}"))?;
+    }
+    let temporary_path = directory.join(format!("{NATIVE_BACKUP_FILE}.tmp"));
+    fs::write(&temporary_path, data_json)
+        .map_err(|error| format!("No se pudo escribir el respaldo temporal: {error}"))?;
+    if backup_path.exists() {
+        fs::remove_file(&backup_path)
+            .map_err(|error| format!("No se pudo reemplazar el respaldo anterior: {error}"))?;
+    }
+    fs::rename(&temporary_path, &backup_path)
+        .map_err(|error| format!("No se pudo activar el respaldo nuevo: {error}"))?;
+    Ok(())
+}
 
 #[cfg(desktop)]
 const REPOSITORY: &str = "OscarD0823/Caja-Fantasma";
@@ -201,7 +304,9 @@ pub fn run() {
             start_local_sync,
             stop_local_sync,
             update_local_sync_state,
-            read_local_sync_state
+            read_local_sync_state,
+            load_native_personal_backup,
+            save_native_personal_backup
         ])
         .setup(|app| {
             let open = MenuItem::with_id(app, "open", "Abrir Caja Fantasma", true, None::<&str>)?;
@@ -286,7 +391,11 @@ pub fn run() {
     let builder = builder.plugin(tauri_plugin_android_updater::init());
 
     builder
-        .invoke_handler(tauri::generate_handler![mobile_sync_exchange])
+        .invoke_handler(tauri::generate_handler![
+            mobile_sync_exchange,
+            load_native_personal_backup,
+            save_native_personal_backup
+        ])
         .run(tauri::generate_context!())
         .expect("no se pudo iniciar Caja Fantasma en Android");
 }

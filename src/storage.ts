@@ -18,9 +18,7 @@ const PERSONAL_HISTORY_ARRAY_FIELDS = ["actions", "activityHistory", "boxes", "p
 export function personalHistoryCount(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
   const record = value as Record<string, unknown>;
-  const arrayRecords = PERSONAL_HISTORY_ARRAY_FIELDS.reduce((sum, field) => sum + (Array.isArray(record[field]) ? record[field].length : 0), 0);
-  const boundaries = record.pointRoundBoundaries;
-  return arrayRecords + (boundaries && typeof boundaries === "object" && !Array.isArray(boundaries) ? Object.keys(boundaries).length : 0);
+  return PERSONAL_HISTORY_ARRAY_FIELDS.reduce((sum, field) => sum + (Array.isArray(record[field]) ? record[field].length : 0), 0);
 }
 
 export type OverlayPosition = { x: number; y: number };
@@ -247,7 +245,11 @@ export function loadState(): PersistedState {
     const backup = parseStoredState(backupText);
     const parsedIsValid = parsed?.schemaVersion === 1 && validateCatalog(parsed.catalog);
     const backupIsValid = backup?.schemaVersion === 1 && validateCatalog(backup.catalog);
-    if (!parsedIsValid && backupIsValid) {
+    const shouldRecoverEmptyState = parsedIsValid
+      && backupIsValid
+      && personalHistoryCount(parsed) === 0
+      && personalHistoryCount(backup) > 0;
+    if ((!parsedIsValid || shouldRecoverEmptyState) && backupIsValid) {
       parsed = backup;
       localStorage.setItem(STORAGE_KEY, backupText);
     }
@@ -321,8 +323,12 @@ export function saveState(state: PersistedState) {
     const previous = previousText ? JSON.parse(previousText) as unknown : null;
     const backup = backupText ? JSON.parse(backupText) as unknown : null;
     const previousCount = personalHistoryCount(previous);
-    if (previousText && previousCount > personalHistoryCount(state) && previousCount >= personalHistoryCount(backup)) {
+    const nextCount = personalHistoryCount(state);
+    const backupCount = personalHistoryCount(backup);
+    if (previousText && previousCount > nextCount && previousCount >= backupCount) {
       localStorage.setItem(SAFETY_BACKUP_KEY, previousText);
+    } else if (nextCount > 0 && nextCount >= backupCount) {
+      localStorage.setItem(SAFETY_BACKUP_KEY, nextText);
     }
   } catch {
     // Un respaldo anterior dañado nunca debe impedir que se guarde el estado actual.
