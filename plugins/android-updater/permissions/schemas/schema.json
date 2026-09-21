@@ -319,10 +319,58 @@
           "markdownDescription": "Denies the install command without any pre-configured scope."
         },
         {
-          "description": "Permite comprobar y aplicar actualizaciones firmadas de Caja Fantasma en Android.\n#### This default permission set includes:\n\n- `allow-check`\n- `allow-install`",
+          "description": "Enables the read_background_sync command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-read-background-sync",
+          "markdownDescription": "Enables the read_background_sync command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the read_background_sync command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-read-background-sync",
+          "markdownDescription": "Denies the read_background_sync command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the start_background_sync command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-start-background-sync",
+          "markdownDescription": "Enables the start_background_sync command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the start_background_sync command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-start-background-sync",
+          "markdownDescription": "Denies the start_background_sync command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the stop_background_sync command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-stop-background-sync",
+          "markdownDescription": "Enables the stop_background_sync command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the stop_background_sync command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-stop-background-sync",
+          "markdownDescription": "Denies the stop_background_sync command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the update_background_sync command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-update-background-sync",
+          "markdownDescription": "Enables the update_background_sync command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the update_background_sync command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-update-background-sync",
+          "markdownDescription": "Denies the update_background_sync command without any pre-configured scope."
+        },
+        {
+          "description": "Permite comprobar actualizaciones y mantener la sincronización local protegida en Android.\n#### This default permission set includes:\n\n- `allow-check`\n- `allow-install`\n- `allow-start-background-sync`\n- `allow-update-background-sync`\n- `allow-read-background-sync`\n- `allow-stop-background-sync`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Permite comprobar y aplicar actualizaciones firmadas de Caja Fantasma en Android.\n#### This default permission set includes:\n\n- `allow-check`\n- `allow-install`"
+          "markdownDescription": "Permite comprobar actualizaciones y mantener la sincronización local protegida en Android.\n#### This default permission set includes:\n\n- `allow-check`\n- `allow-install`\n- `allow-start-background-sync`\n- `allow-update-background-sync`\n- `allow-read-background-sync`\n- `allow-stop-background-sync`"
         }
       ]
     }

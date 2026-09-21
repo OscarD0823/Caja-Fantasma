@@ -4,7 +4,7 @@
 
 Caja Fantasma puede reutilizar su interfaz React y su núcleo Tauri para generar una APK. No conviene copiar el paquete Android de Lankdea: aquel proyecto usa Python, Kivy y Buildozer, mientras Caja Fantasma usa React, TypeScript, Rust y Tauri 2.
 
-La sincronización de Caja Fantasma no usará Firebase, servicios en la nube, cuentas ni servidores externos. Solo funcionará cuando la aplicación esté abierta simultáneamente en el PC y en el celular y exista una conexión local entre ambos. Los datos personales nunca se enviarán a GitHub.
+La sincronización de Caja Fantasma no usa Firebase, servicios en la nube, cuentas ni servidores externos. El programa de Windows debe permanecer en ejecución y debe existir una conexión local entre ambos dispositivos; en Android, el modo Datos en vivo puede continuar mediante un servicio nativo aunque la interfaz de la aplicación ya no esté visible. Los datos personales nunca se envían a GitHub.
 
 ## Conexión local implementada
 
@@ -26,14 +26,15 @@ Un cable USB en modo normal de carga o transferencia de archivos no crea por sí
 4. Cada intercambio valida código, versión del protocolo, fecha, JSON y un límite máximo de 8 MB.
 5. El teléfono decide la dirección: **PC → Celular** descarga y reemplaza la copia personal del teléfono; **Celular → PC** carga y reemplaza la copia personal del PC. La hora del dispositivo no decide cuál gana.
 6. Si **Sincronización en vivo** está apagada, la APK comprueba la conexión cada cinco segundos sin transferir ni reemplazar datos personales. Los botones manuales siguen disponibles.
-7. Si se activa en ambos dispositivos, la APK intercambia cambios cada segundo y medio. Una revisión monotónica del PC impide que una copia atrasada lo sobrescriba: el teléfono primero recibe la revisión nueva y solo puede enviar después de haberla reconocido.
+7. Si se activa en ambos dispositivos, un servicio nativo Android intercambia cambios aproximadamente cada segundo y medio, incluso al usar otra aplicación. Una revisión monotónica del PC impide que una copia atrasada lo sobrescriba; si ambos lados cambiaron, los registros con identificador se combinan antes de confirmar una nueva revisión.
 8. La respuesta del PC incluye su catálogo público vigente para que espera, duración activa, fase y transición también lleguen al teléfono por la conexión local.
+9. Android declara el servicio como `connectedDevice`, muestra una notificación silenciosa obligatoria mientras está activo y vuelve a intentar la conexión cada cuatro segundos cuando el PC no está disponible.
 
 El canal no se publica en Internet ni utiliza Firebase. En esta versión el contenido viaja dentro de la red local sin cifrado adicional, por lo que debe usarse únicamente en una red Wi-Fi de confianza o mediante USB tethering. El código evita accesos accidentales de otros dispositivos, pero no sustituye el cifrado de una red segura.
 
 ## Qué se sincroniza
 
-Cada equipo mantiene su copia local. En modo manual, los datos solo se reemplazan cuando la persona pulsa una de las dos direcciones. En modo en vivo, se reflejan mientras ambas aplicaciones están abiertas y la opción está habilitada en las dos:
+Cada equipo mantiene su copia local. En modo manual, los datos solo se reemplazan cuando la persona pulsa una de las dos direcciones. En modo en vivo, se reflejan mientras Windows siga ejecutándose, el servicio Android esté habilitado y ambos dispositivos conserven la conexión local; la pantalla de la APK no necesita permanecer abierta:
 
 - recompensas, puntos, resumen diario y ranking histórico;
 - personajes y equipos;
@@ -43,7 +44,13 @@ Cada equipo mantiene su copia local. En modo manual, los datos solo se reemplaza
 
 El acceso de administrador, GitHub CLI, claves de publicación, bandeja de Windows, autoinicio y posición de la ventana flotante nunca se envían al teléfono.
 
-Mientras no haya conexión, cada dispositivo conserva su copia local. Al reconectar en modo manual no se reemplaza nada automáticamente. Al iniciar el modo en vivo, el celular recibe primero la copia vigente del PC; si debe conservarse antes la copia del teléfono, se usa **Celular → PC** y luego se activa el modo en vivo. Esta implementación ordena cambios por revisión, pero todavía no fusiona dos ediciones hechas exactamente al mismo tiempo durante una desconexión.
+Mientras no haya conexión, cada dispositivo conserva su copia local. Al reconectar en modo manual no se reemplaza nada automáticamente. En modo en vivo, las colecciones personales con identificador se unen y nunca se permite que una copia sin historial borre automáticamente otra que sí contiene registros. Los reemplazos completos e intencionales permanecen reservados para **PC → Celular** y **Celular → PC**, ambos con confirmación.
+
+## Ejecución en segundo plano de Android
+
+Al activar **Sincronización en vivo**, la APK inicia un servicio de primer plano de tipo dispositivo conectado. Android exige que este tipo de trabajo continuo muestre una notificación: el canal usa prioridad baja, no produce sonido ni vibración y desaparece al desactivar Datos en vivo. La notificación cambia entre **PC conectado** y **Buscando el PC** sin generar avisos repetidos.
+
+El servicio guarda de forma privada la IP, el código, la revisión confirmada y la última copia sincronizada. Si la interfaz queda suspendida, sigue comunicándose directamente con el anfitrión TCP; cuando la persona vuelve a la app, la interfaz recoge esa copia, aplica solo datos válidos y actualiza el respaldo nativo. Android puede recrear el servicio después de finalizar su proceso, pero no se inicia por sí solo después de reiniciar el teléfono: se activa al abrir la app con Datos en vivo habilitado.
 
 ## Configuración pública
 
@@ -59,14 +66,14 @@ Android no permite que una aplicación distribuida fuera de Google Play se reemp
 
 ## Estado comprobado del equipo
 
-La APK con sincronización local, modo en vivo protegido y actualización integrada se genera y verifica para la versión 1.17.3:
+La APK con sincronización local, modo en vivo protegido, servicio Android en segundo plano y actualización integrada se genera y verifica para la versión 1.18.0:
 
 - Android SDK 35/36, Build Tools 35/36 y NDK 29 están instalados y las licencias fueron aceptadas.
 - El destino Rust `aarch64-linux-android` compila la biblioteca nativa optimizada.
 - La bandeja, el inicio automático, el actualizador de Windows, la ventana flotante y el acceso del administrador mediante GitHub CLI quedan aislados bajo `cfg(desktop)`.
 - Android usa una sola ventana, navegación inferior adaptable y guarda los datos personales localmente.
 - La APK ARM64 de distribución está alineada, firmada con un certificado propio de OscarD0823 y verificada con `apksigner`.
-- El teléfono no estaba conectado por ADB durante la compilación, por lo que todavía corresponde realizar una prueba física de instalación, navegación y persistencia.
+- El módulo Android compila el servicio Kotlin, fusiona sus permisos y manifiesto y supera `lintVital`; todavía corresponde validar en el teléfono físico la permanencia de la conexión al cambiar de aplicación.
 - El anfitrión local, el cliente Android, el código de emparejamiento, la restricción a IP privadas y el intercambio bidireccional cuentan con pruebas automáticas por bucle local. Las pruebas cubren PC→celular, celular→PC, el inicio seguro del modo en vivo, cambios desde ambos lados, rechazo de revisiones atrasadas y del código incorrecto, el puerto predeterminado y los rangos privados 10.x, 172.16–31.x y 192.168.x.
 
 ## Trabajo por etapas
@@ -76,13 +83,14 @@ La APK con sincronización local, modo en vivo protegido y actualización integr
 3. Completado: SDK, Platform Tools, Build Tools, NDK y firma privada de distribución.
 4. Completado: anfitrión TCP local en Rust, cliente móvil, código de conexión, sincronización manual por dirección y modo en vivo por revisiones.
 5. Completado: pruebas de intercambio manual y en vivo por bucle local, rechazo de IP pública y compilación ARM64.
-6. Pendiente: validar la APK y el flujo del instalador del sistema en un teléfono físico mediante Wi-Fi y USB tethering.
-7. Futuro: cifrado de aplicación punto a punto, descubrimiento automático y fusión de operaciones simultáneas desconectadas.
-8. Futuro: generar un AAB firmado si se decide distribuir mediante Google Play.
+6. Completado: servicio Android `connectedDevice`, notificación silenciosa, reconexión automática y entrega de cambios al reabrir la interfaz.
+7. Pendiente: validar la APK 1.18.0 en un teléfono físico al cambiar de aplicación, apagar la pantalla y reconectar Wi-Fi o USB tethering.
+8. Futuro: cifrado de aplicación punto a punto y descubrimiento automático.
+9. Futuro: generar un AAB firmado si se decide distribuir mediante Google Play.
 
 ## Pruebas obligatorias
 
-- Ningún dato se transmite cuando una de las dos aplicaciones está cerrada.
+- Ningún dato se transmite cuando Windows está cerrado o la conexión local está desactivada; ocultar la interfaz Android no detiene el servicio de Datos en vivo.
 - Al desconectar, el PC rechaza de inmediato cualquier intercambio aunque el proceso conserve su listener local hasta cerrarse.
 - Un teléfono sin el código vigente no puede leer ni modificar datos.
 - **Celular → PC** reemplaza los datos personales del PC aunque el reloj del teléfono sea anterior.
@@ -92,6 +100,7 @@ La APK con sincronización local, modo en vivo protegido y actualización integr
 - Desactivar el modo en vivo en el PC rechaza intercambios automáticos sin deshabilitar los botones manuales.
 - Las configuraciones exclusivas del PC y el modo administrador nunca llegan al teléfono.
 - La conexión funciona sin Internet usando el punto de acceso local o USB tethering.
+- El servicio Android permanece activo al enviar la app al fondo, muestra una única notificación silenciosa y entrega a la interfaz los cambios recibidos cuando vuelve a abrirse.
 
 ## Referencias oficiales
 
@@ -101,3 +110,5 @@ La APK con sincronización local, modo en vivo protegido y actualización integr
 - [Descubrimiento de servicios en la red local de Android](https://developer.android.com/develop/connectivity/wifi/use-nsd)
 - [Permiso de red local de Android](https://developer.android.com/privacy-and-security/local-network-permission)
 - [Modos USB compatibles con Android](https://developer.android.com/develop/connectivity/usb)
+- [Tipos de servicios de primer plano en Android](https://developer.android.com/develop/background-work/services/fgs/service-types)
+- [Declarar un servicio de primer plano](https://developer.android.com/develop/background-work/services/fgs/declare)

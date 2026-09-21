@@ -1,5 +1,12 @@
 "$schema" = "schemas/schema.json"
 
 [default]
-description = "Permite comprobar y aplicar actualizaciones firmadas de Caja Fantasma en Android."
-permissions = ["allow-check", "allow-install"]
+description = "Permite comprobar actualizaciones y mantener la sincronización local protegida en Android."
+permissions = [
+  "allow-check",
+  "allow-install",
+  "allow-start-background-sync",
+  "allow-update-background-sync",
+  "allow-read-background-sync",
+  "allow-stop-background-sync",
+]

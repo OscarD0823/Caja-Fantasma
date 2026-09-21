@@ -120,6 +120,16 @@ type LocalSyncInfo = { enabled: boolean; address: string; port: number; pairingC
 type LocalSyncSnapshot = { enabled: boolean; revision: number; updatedAt: string; dataJson: string; lastExchangeAt: number; lastMobileUpdateAt: number };
 type LocalSyncAction = "status" | "pull" | "push" | "live";
 type LocalSyncExchange = Omit<LocalSyncSnapshot, "enabled" | "lastMobileUpdateAt"> & { ok: boolean; message: string; catalogJson?: string };
+type BackgroundSyncStatus = {
+  active: boolean;
+  connected: boolean;
+  revision: number;
+  updatedAt: string;
+  dataJson: string;
+  catalogJson: string;
+  lastExchangeAt: number;
+  message: string;
+};
 
 const REMOTE_CATALOG_API_URL = "https://api.github.com/repos/OscarD0823/Caja-Fantasma/contents/catalog/visions.json?ref=main";
 const IS_ANDROID = /Android/i.test(navigator.userAgent);
@@ -161,6 +171,17 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.18.0",
+    date: "21 de septiembre de 2026",
+    title: "Datos en vivo en segundo plano en Android",
+    items: [
+      "Android mantiene la conexión local con el PC aunque cambies de aplicación y la interfaz deje de estar visible.",
+      "Un servicio nativo de dispositivo conectado continúa intercambiando cambios sin Firebase, nube ni la interfaz abierta.",
+      "La notificación silenciosa indica si el PC está conectado o si el teléfono está esperando para reconectarse.",
+      "El servicio conserva la copia con historial, evita reemplazos vacíos y entrega los cambios acumulados cuando vuelves a abrir la aplicación.",
+    ],
+  },
   {
     version: "1.17.3",
     date: "21 de septiembre de 2026",
@@ -782,6 +803,31 @@ export default function App() {
     setState((current) => applyRemoteCatalog(current, catalog));
   }, [tx]);
 
+  const acceptBackgroundSyncStatus = useCallback((background: BackgroundSyncStatus) => {
+    liveRevisionRef.current = Math.max(liveRevisionRef.current, background.revision);
+    if (background.catalogJson && background.catalogJson !== "{}") {
+      try {
+        acceptLocalSyncCatalog(background.catalogJson);
+      } catch {
+        // El servicio conserva el último catálogo válido y volverá a solicitarlo al PC.
+      }
+    }
+    if (background.dataJson && background.dataJson !== "{}") {
+      try {
+        const receivedChanges = acceptLocalSyncSnapshot(background, true);
+        if (receivedChanges) {
+          setLocalSyncStatus(tx("Cambios del PC recibidos en segundo plano", "PC changes received in the background"));
+          return;
+        }
+      } catch {
+        // Una respuesta incompleta nunca debe reemplazar el estado local.
+      }
+    }
+    setLocalSyncStatus(background.message || (background.connected
+      ? tx("PC conectado · datos en vivo al día", "PC connected · live data up to date")
+      : tx("Buscando el PC en la red local", "Looking for the PC on the local network")));
+  }, [acceptLocalSyncCatalog, acceptLocalSyncSnapshot, tx]);
+
   const exchangeWithComputer = useCallback(async (action: LocalSyncAction, showBusy = true) => {
     if (!IS_ANDROID || !isTauri() || localSyncInFlightRef.current) return;
     const address = state.settings.localSyncAddress.trim();
@@ -792,7 +838,14 @@ export default function App() {
     }
     localSyncInFlightRef.current = true;
     if (showBusy) setLocalSyncBusy(true);
+    const resumeBackgroundSync = IS_ANDROID && state.settings.localSyncLiveEnabled && (action === "pull" || action === "push");
+    let backgroundDataJson = personalSyncJsonRef.current;
+    let backgroundUpdatedAt = personalSyncUpdatedAtRef.current;
+    let backgroundRevision = liveRevisionRef.current;
     try {
+      if (resumeBackgroundSync) {
+        await invoke<BackgroundSyncStatus>("plugin:android-updater|stop_background_sync").catch(() => undefined);
+      }
       const exchange = await invoke<LocalSyncExchange>("mobile_sync_exchange", {
         address,
         pairingCode,
@@ -802,6 +855,11 @@ export default function App() {
         updatedAt: action === "push" || action === "live" ? personalSyncUpdatedAtRef.current : "1970-01-01T00:00:00.000Z",
       });
       if (action !== "status") liveRevisionRef.current = exchange.revision;
+      if (resumeBackgroundSync) {
+        backgroundDataJson = exchange.dataJson;
+        backgroundUpdatedAt = exchange.updatedAt;
+        backgroundRevision = exchange.revision;
+      }
       acceptLocalSyncCatalog(exchange.catalogJson);
       if (action === "pull") {
         const receivedChanges = acceptLocalSyncSnapshot(exchange, true, true);
@@ -817,10 +875,19 @@ export default function App() {
     } catch (error) {
       setLocalSyncStatus(error instanceof Error ? error.message : String(error));
     } finally {
+      if (resumeBackgroundSync) {
+        void invoke<BackgroundSyncStatus>("plugin:android-updater|start_background_sync", {
+          address,
+          pairingCode,
+          dataJson: backgroundDataJson,
+          updatedAt: backgroundUpdatedAt,
+          knownRevision: backgroundRevision,
+        }).then(acceptBackgroundSyncStatus).catch(() => undefined);
+      }
       localSyncInFlightRef.current = false;
       if (showBusy) setLocalSyncBusy(false);
     }
-  }, [acceptLocalSyncCatalog, acceptLocalSyncSnapshot, state.settings.localSyncAddress, state.settings.localSyncCode, tx]);
+  }, [acceptBackgroundSyncStatus, acceptLocalSyncCatalog, acceptLocalSyncSnapshot, state.settings.localSyncAddress, state.settings.localSyncCode, state.settings.localSyncLiveEnabled, tx]);
 
   useEffect(() => {
     if (personalSyncJsonRef.current !== personalSyncJson) {
@@ -903,13 +970,67 @@ export default function App() {
   }, [state.settings.localSyncEnabled]);
 
   useEffect(() => {
-    if (!IS_ANDROID || !state.settings.localSyncEnabled) return;
-    const action: LocalSyncAction = state.settings.localSyncLiveEnabled ? "live" : "status";
-    if (!state.settings.localSyncLiveEnabled) liveRevisionRef.current = 0;
-    void exchangeWithComputer(action, false);
-    const timer = window.setInterval(() => void exchangeWithComputer(action, false), state.settings.localSyncLiveEnabled ? 1_500 : 5_000);
+    if (!IS_ANDROID || !state.settings.localSyncEnabled || state.settings.localSyncLiveEnabled) return;
+    liveRevisionRef.current = 0;
+    void exchangeWithComputer("status", false);
+    const timer = window.setInterval(() => void exchangeWithComputer("status", false), 5_000);
     return () => window.clearInterval(timer);
   }, [exchangeWithComputer, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
+
+  useEffect(() => {
+    if (!IS_ANDROID || !isTauri()) return;
+    if (!state.settings.localSyncEnabled || !state.settings.localSyncLiveEnabled) {
+      void invoke<BackgroundSyncStatus>("plugin:android-updater|stop_background_sync").catch(() => undefined);
+      return;
+    }
+    const address = state.settings.localSyncAddress.trim();
+    const pairingCode = state.settings.localSyncCode.trim();
+    if (!isValidLocalSyncAddress(address) || !/^\d{6}$/.test(pairingCode)) {
+      void invoke<BackgroundSyncStatus>("plugin:android-updater|stop_background_sync").catch(() => undefined);
+      return;
+    }
+    let active = true;
+    const applyStatus = (background: BackgroundSyncStatus) => {
+      if (active) acceptBackgroundSyncStatus(background);
+    };
+    const readStatus = () => {
+      void invoke<BackgroundSyncStatus>("plugin:android-updater|read_background_sync")
+        .then(applyStatus)
+        .catch(() => undefined);
+    };
+    void invoke<BackgroundSyncStatus>("plugin:android-updater|start_background_sync", {
+      address,
+      pairingCode,
+      dataJson: personalSyncJsonRef.current,
+      updatedAt: personalSyncUpdatedAtRef.current,
+      knownRevision: liveRevisionRef.current,
+    }).then(applyStatus).catch((error) => {
+      if (active) setLocalSyncStatus(error instanceof Error ? error.message : String(error));
+    });
+    const timer = window.setInterval(readStatus, 1_500);
+    window.addEventListener("focus", readStatus);
+    document.addEventListener("visibilitychange", readStatus);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", readStatus);
+      document.removeEventListener("visibilitychange", readStatus);
+    };
+  }, [acceptBackgroundSyncStatus, state.settings.localSyncAddress, state.settings.localSyncCode, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
+
+  useEffect(() => {
+    if (!IS_ANDROID || !isTauri() || !state.settings.localSyncEnabled || !state.settings.localSyncLiveEnabled) return;
+    const address = state.settings.localSyncAddress.trim();
+    const pairingCode = state.settings.localSyncCode.trim();
+    if (!isValidLocalSyncAddress(address) || !/^\d{6}$/.test(pairingCode)) return;
+    void invoke<BackgroundSyncStatus>("plugin:android-updater|update_background_sync", {
+      address,
+      pairingCode,
+      dataJson: personalSyncJsonRef.current,
+      updatedAt: personalSyncUpdatedAtRef.current,
+      knownRevision: liveRevisionRef.current,
+    }).then(acceptBackgroundSyncStatus).catch(() => undefined);
+  }, [acceptBackgroundSyncStatus, personalSyncJson, state.settings.localSyncAddress, state.settings.localSyncCode, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
 
   const checkCreatorAccess = useCallback(async () => {
     if (IS_ANDROID) {
@@ -1902,10 +2023,10 @@ export default function App() {
               </>}
               <div className={`local-live-sync-option ${state.settings.localSyncLiveEnabled ? "enabled" : ""}`}>
                 <span className="local-live-sync-icon"><Zap size={19} /></span>
-                <span><strong>{tx("Sincronización en vivo", "Live synchronization")}</strong><small>{tx("Refleja automáticamente los cambios de puntos, cajas, personajes y módulos mientras PC y celular estén abiertos. Los botones manuales siguen disponibles.", "Automatically mirrors points, crates, characters, and mods while PC and phone are open. Manual buttons remain available.")}</small></span>
+                <span><strong>{tx("Sincronización en vivo", "Live synchronization")}</strong><small>{tx(IS_ANDROID ? "Sigue conectada al PC en segundo plano aunque uses otra aplicación." : "Refleja automáticamente los cambios de puntos, cajas, personajes y módulos mientras el PC esté encendido.", IS_ANDROID ? "Stays connected to the PC in the background while you use another app." : "Automatically mirrors points, crates, characters, and mods while the PC is running.")}</small></span>
                 <button type="button" className={`switch ${state.settings.localSyncLiveEnabled ? "on" : ""}`} disabled={!state.settings.localSyncEnabled} aria-label={tx("Activar sincronización en vivo", "Enable live synchronization")} aria-pressed={state.settings.localSyncLiveEnabled} onClick={() => { liveRevisionRef.current = 0; commitState((current) => ({ ...current, settings: { ...current.settings, localSyncLiveEnabled: !current.settings.localSyncLiveEnabled } })); }}><span /></button>
               </div>
-              {state.settings.localSyncLiveEnabled && <p className="local-live-sync-note"><RadioTower size={15} /> {tx("Debe estar activada en ambos dispositivos. Si uno aparece vacío, se conserva automáticamente la copia que tenga historial; los reemplazos vacíos solo se permiten con los botones manuales y su confirmación.", "Enable it on both devices. If one appears empty, the copy containing history is preserved automatically; empty replacements are only allowed through the confirmed manual buttons.")}</p>}
+              {state.settings.localSyncLiveEnabled && <p className="local-live-sync-note"><RadioTower size={15} /> {tx(IS_ANDROID ? "Android mostrará una notificación silenciosa mientras trabaja en segundo plano. Si un dispositivo aparece vacío, se conserva la copia que tenga historial." : "Debe estar activada en ambos dispositivos. Si uno aparece vacío, se conserva automáticamente la copia que tenga historial.", IS_ANDROID ? "Android shows a silent notification while working in the background. If a device appears empty, the copy containing history is preserved." : "Enable it on both devices. If one appears empty, the copy containing history is preserved automatically.")}</p>}
               <p className="local-sync-message" role="status">{localSyncStatus}</p>
               <small>{tx("Usa una red Wi‑Fi de confianza o el anclaje USB del teléfono. Los cambios públicos del administrador también viajan del PC al celular mientras estén conectados.", "Use a trusted Wi-Fi network or USB tethering. Public administrator changes also travel from the PC to the phone while connected.")}</small>
             </article>

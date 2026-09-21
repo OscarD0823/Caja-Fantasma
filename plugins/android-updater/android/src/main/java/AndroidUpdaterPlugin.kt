@@ -1,10 +1,14 @@
 package com.oscard0823.cajafantasma.updater
 
 import android.app.Activity
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
@@ -35,8 +39,69 @@ class InstallArgs {
     lateinit var sha256: String
 }
 
+@InvokeArg
+class BackgroundSyncArgs {
+    lateinit var address: String
+    lateinit var pairingCode: String
+    lateinit var dataJson: String
+    lateinit var updatedAt: String
+    var knownRevision: Long = 0
+}
+
 @TauriPlugin
 class AndroidUpdaterPlugin(private val activity: Activity) : Plugin(activity) {
+    @Command
+    fun startBackgroundSync(invoke: Invoke) {
+        val args = parseBackgroundSyncArgs(invoke) ?: return
+        try {
+            BackgroundSyncStore.configure(activity, args, preserveNewerData = true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                activity.runOnUiThread {
+                    ActivityCompat.requestPermissions(
+                        activity,
+                        arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+                        BACKGROUND_SYNC_NOTIFICATION_PERMISSION_REQUEST,
+                    )
+                }
+            }
+            ContextCompat.startForegroundService(
+                activity,
+                Intent(activity, BackgroundSyncService::class.java)
+                    .setAction(BackgroundSyncService.ACTION_START),
+            )
+            invoke.resolve(BackgroundSyncStore.status(activity))
+        } catch (error: Exception) {
+            invoke.reject(error.message ?: "No se pudo iniciar la sincronización en segundo plano.")
+        }
+    }
+
+    @Command
+    fun updateBackgroundSync(invoke: Invoke) {
+        val args = parseBackgroundSyncArgs(invoke) ?: return
+        try {
+            BackgroundSyncStore.configure(activity, args, preserveNewerData = true)
+            BackgroundSyncRuntime.wake()
+            invoke.resolve(BackgroundSyncStore.status(activity))
+        } catch (error: Exception) {
+            invoke.reject(error.message ?: "No se pudo actualizar la sincronización en segundo plano.")
+        }
+    }
+
+    @Command
+    fun readBackgroundSync(invoke: Invoke) {
+        invoke.resolve(BackgroundSyncStore.status(activity))
+    }
+
+    @Command
+    fun stopBackgroundSync(invoke: Invoke) {
+        BackgroundSyncStore.setActive(activity, false)
+        BackgroundSyncRuntime.wake()
+        activity.stopService(Intent(activity, BackgroundSyncService::class.java))
+        invoke.resolve(BackgroundSyncStore.status(activity))
+    }
+
     @Command
     fun check(invoke: Invoke) {
         Thread {
@@ -216,6 +281,26 @@ class AndroidUpdaterPlugin(private val activity: Activity) : Plugin(activity) {
             output.write(buffer, 0, count)
         }
         return output.toByteArray()
+    }
+
+    private fun parseBackgroundSyncArgs(invoke: Invoke): BackgroundSyncArgs? {
+        val args = try {
+            invoke.parseArgs(BackgroundSyncArgs::class.java)
+        } catch (_: Exception) {
+            invoke.reject("La configuración de sincronización no es válida.")
+            return null
+        }
+        return try {
+            BackgroundSyncStore.validate(args)
+            args
+        } catch (error: Exception) {
+            invoke.reject(error.message ?: "La configuración de sincronización no es válida.")
+            null
+        }
+    }
+
+    companion object {
+        private const val BACKGROUND_SYNC_NOTIFICATION_PERMISSION_REQUEST = 47183
     }
 }
 

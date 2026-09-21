@@ -1,4 +1,11 @@
-const COMMANDS: &[&str] = &["check", "install"];
+const COMMANDS: &[&str] = &[
+    "check",
+    "install",
+    "start_background_sync",
+    "update_background_sync",
+    "read_background_sync",
+    "stop_background_sync",
+];
 
 fn main() {
     tauri_plugin::Builder::new(COMMANDS)

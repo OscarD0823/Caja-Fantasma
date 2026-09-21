@@ -25,6 +25,29 @@ struct InstallArgs {
     sha256: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BackgroundSyncArgs {
+    address: String,
+    pairing_code: String,
+    data_json: String,
+    updated_at: String,
+    known_revision: u64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackgroundSyncStatus {
+    pub active: bool,
+    pub connected: bool,
+    pub revision: u64,
+    pub updated_at: String,
+    pub data_json: String,
+    pub catalog_json: String,
+    pub last_exchange_at: u64,
+    pub message: String,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstallResult {
@@ -61,6 +84,78 @@ async fn install<R: Runtime>(
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+async fn start_background_sync<R: Runtime>(
+    app: AppHandle<R>,
+    address: String,
+    pairing_code: String,
+    data_json: String,
+    updated_at: String,
+    known_revision: u64,
+) -> Result<BackgroundSyncStatus, String> {
+    app.state::<AndroidUpdater<R>>()
+        .0
+        .run_mobile_plugin_async(
+            "startBackgroundSync",
+            BackgroundSyncArgs {
+                address,
+                pairing_code,
+                data_json,
+                updated_at,
+                known_revision,
+            },
+        )
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn update_background_sync<R: Runtime>(
+    app: AppHandle<R>,
+    address: String,
+    pairing_code: String,
+    data_json: String,
+    updated_at: String,
+    known_revision: u64,
+) -> Result<BackgroundSyncStatus, String> {
+    app.state::<AndroidUpdater<R>>()
+        .0
+        .run_mobile_plugin_async(
+            "updateBackgroundSync",
+            BackgroundSyncArgs {
+                address,
+                pairing_code,
+                data_json,
+                updated_at,
+                known_revision,
+            },
+        )
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn read_background_sync<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<BackgroundSyncStatus, String> {
+    app.state::<AndroidUpdater<R>>()
+        .0
+        .run_mobile_plugin_async("readBackgroundSync", ())
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn stop_background_sync<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<BackgroundSyncStatus, String> {
+    app.state::<AndroidUpdater<R>>()
+        .0
+        .run_mobile_plugin_async("stopBackgroundSync", ())
+        .await
+        .map_err(|error| error.to_string())
+}
+
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::<R>::new("android-updater")
         .setup(|app, api| {
@@ -68,6 +163,13 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             app.manage(AndroidUpdater(handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![check, install])
+        .invoke_handler(tauri::generate_handler![
+            check,
+            install,
+            start_background_sync,
+            update_background_sync,
+            read_background_sync,
+            stop_background_sync
+        ])
         .build()
 }
