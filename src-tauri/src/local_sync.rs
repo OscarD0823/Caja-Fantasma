@@ -446,10 +446,7 @@ mod desktop {
                 LocalSyncAction::Live if request.known_revision == snapshot.revision => {
                     if (request.updated_at != snapshot.updated_at
                         || request.data_json != snapshot.data_json)
-                        && !would_erase_personal_history(
-                            &snapshot.data_json,
-                            &request.data_json,
-                        )
+                        && !would_erase_personal_history(&snapshot.data_json, &request.data_json)
                     {
                         snapshot.revision = snapshot.revision.saturating_add(1);
                         snapshot.updated_at = request.updated_at;
