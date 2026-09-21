@@ -59,7 +59,7 @@ Android no permite que una aplicación distribuida fuera de Google Play se reemp
 
 ## Estado comprobado del equipo
 
-La APK con sincronización local, modo en vivo y actualización integrada se genera y verifica para la versión 1.17.1:
+La APK con sincronización local, modo en vivo protegido y actualización integrada se genera y verifica para la versión 1.17.2:
 
 - Android SDK 35/36, Build Tools 35/36 y NDK 29 están instalados y las licencias fueron aceptadas.
 - El destino Rust `aarch64-linux-android` compila la biblioteca nativa optimizada.

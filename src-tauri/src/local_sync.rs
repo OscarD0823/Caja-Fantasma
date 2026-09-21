@@ -128,6 +128,34 @@ fn validate_catalog_payload(catalog_json: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn personal_history_count(data_json: &str) -> usize {
+    const ARRAY_FIELDS: [&str; 6] = [
+        "actions",
+        "activityHistory",
+        "boxes",
+        "pointRounds",
+        "manualBaselinePoints",
+        "shinyMods",
+    ];
+    let Ok(Value::Object(data)) = serde_json::from_str::<Value>(data_json) else {
+        return 0;
+    };
+    let array_records = ARRAY_FIELDS
+        .iter()
+        .filter_map(|field| data.get(*field).and_then(Value::as_array))
+        .map(Vec::len)
+        .sum::<usize>();
+    let boundaries = data
+        .get("pointRoundBoundaries")
+        .and_then(Value::as_object)
+        .map_or(0, serde_json::Map::len);
+    array_records.saturating_add(boundaries)
+}
+
+fn would_erase_personal_history(current_json: &str, incoming_json: &str) -> bool {
+    personal_history_count(current_json) > 0 && personal_history_count(incoming_json) == 0
+}
+
 fn read_json_line(stream: &mut TcpStream) -> Result<String, String> {
     let mut result = Vec::new();
     let mut chunk = [0_u8; 8_192];
@@ -393,15 +421,35 @@ mod desktop {
                     snapshot.data_json = request.data_json;
                     snapshot.last_mobile_update_at = exchange_at;
                 }
-                LocalSyncAction::Auto if request.updated_at > snapshot.updated_at => {
+                LocalSyncAction::Auto
+                    if request.updated_at > snapshot.updated_at
+                        && !would_erase_personal_history(
+                            &snapshot.data_json,
+                            &request.data_json,
+                        ) =>
+                {
                     snapshot.updated_at = request.updated_at;
                     snapshot.data_json = request.data_json;
                     snapshot.revision = snapshot.revision.saturating_add(1);
                     snapshot.last_mobile_update_at = exchange_at;
                 }
+                LocalSyncAction::Live
+                    if request.known_revision == 0
+                        && personal_history_count(&snapshot.data_json) == 0
+                        && personal_history_count(&request.data_json) > 0 =>
+                {
+                    snapshot.revision = snapshot.revision.saturating_add(1);
+                    snapshot.updated_at = request.updated_at;
+                    snapshot.data_json = request.data_json;
+                    snapshot.last_mobile_update_at = exchange_at;
+                }
                 LocalSyncAction::Live if request.known_revision == snapshot.revision => {
-                    if request.updated_at != snapshot.updated_at
-                        || request.data_json != snapshot.data_json
+                    if (request.updated_at != snapshot.updated_at
+                        || request.data_json != snapshot.data_json)
+                        && !would_erase_personal_history(
+                            &snapshot.data_json,
+                            &request.data_json,
+                        )
                     {
                         snapshot.revision = snapshot.revision.saturating_add(1);
                         snapshot.updated_at = request.updated_at;
@@ -554,6 +602,15 @@ mod desktop {
             .snapshot
             .lock()
             .map_err(|_| "No se pudieron actualizar los datos compartidos.".to_string())?;
+        if live_enabled && would_erase_personal_history(&snapshot.data_json, &data_json) {
+            snapshot.last_mobile_update_at = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|duration| duration.as_millis() as u64)
+                .unwrap_or(snapshot.last_mobile_update_at);
+            snapshot.catalog_json = catalog_json;
+            snapshot.enabled = state.enabled.load(Ordering::Relaxed);
+            return Ok(());
+        }
         if updated_at != snapshot.updated_at || data_json != snapshot.data_json {
             snapshot.revision = snapshot.revision.saturating_add(1);
             snapshot.updated_at = updated_at;
@@ -771,6 +828,71 @@ mod tests {
         )
         .expect("a stale phone should receive the newer PC revision without overwriting it");
         assert_eq!(stale_phone.data_json, "{\"points\":4}");
+
+        let empty_personal = "{\"actions\":[],\"activityHistory\":[],\"boxes\":[],\"pointRounds\":[],\"pointRoundBoundaries\":{},\"manualBaselinePoints\":[],\"shinyMods\":[]}";
+        let phone_history = "{\"actions\":[],\"activityHistory\":[{\"id\":\"recovered-phone-record\"}],\"boxes\":[],\"pointRounds\":[],\"pointRoundBoundaries\":{},\"manualBaselinePoints\":[],\"shinyMods\":[]}";
+        desktop::update(
+            empty_personal.into(),
+            "2026-09-13T10:07:00.000Z".into(),
+            "{\"catalogVersion\":41}".into(),
+            true,
+        )
+        .expect("an empty PC may enter live mode before the phone connects");
+        let recovered_from_phone = mobile_sync_exchange_blocking(
+            address.clone(),
+            code.clone(),
+            LocalSyncAction::Live,
+            0,
+            phone_history.into(),
+            "2026-09-13T10:08:00.000Z".into(),
+        )
+        .expect("the first live handshake should recover a rich phone into an empty PC");
+        assert_eq!(recovered_from_phone.data_json, phone_history);
+
+        let protected_phone = mobile_sync_exchange_blocking(
+            address.clone(),
+            code.clone(),
+            LocalSyncAction::Live,
+            0,
+            empty_personal.into(),
+            "2026-09-13T10:09:00.000Z".into(),
+        )
+        .expect("an empty phone must receive the PC history on its first live handshake");
+        assert_eq!(protected_phone.data_json, phone_history);
+
+        desktop::update(
+            empty_personal.into(),
+            "2026-09-13T10:10:00.000Z".into(),
+            "{\"catalogVersion\":41}".into(),
+            true,
+        )
+        .expect("a transient empty render must not erase the server snapshot");
+        let snapshot_after_empty_desktop =
+            desktop::read().expect("the server should retain its rich snapshot");
+        assert_eq!(snapshot_after_empty_desktop.data_json, phone_history);
+        assert!(snapshot_after_empty_desktop.last_mobile_update_at > 0);
+
+        let protected_pc = mobile_sync_exchange_blocking(
+            address.clone(),
+            code.clone(),
+            LocalSyncAction::Live,
+            snapshot_after_empty_desktop.revision,
+            empty_personal.into(),
+            "2026-09-13T10:11:00.000Z".into(),
+        )
+        .expect("an empty live payload must not erase the acknowledged PC history");
+        assert_eq!(protected_pc.data_json, phone_history);
+
+        let explicit_empty = mobile_sync_exchange_blocking(
+            address.clone(),
+            code.clone(),
+            LocalSyncAction::Push,
+            0,
+            empty_personal.into(),
+            "2026-09-13T10:12:00.000Z".into(),
+        )
+        .expect("the confirmed manual Phone to PC action must remain authoritative");
+        assert_eq!(explicit_empty.data_json, empty_personal);
 
         desktop::update(
             "{\"points\":4}".into(),

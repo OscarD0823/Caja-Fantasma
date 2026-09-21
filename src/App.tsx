@@ -86,7 +86,7 @@ import {
   splitPlatformCarryover,
   validateCatalog,
 } from "./model";
-import { applyPersonalSyncPayload, exportState, importState, loadPersonalSyncUpdatedAt, loadState, personalSyncPayload, savePersonalSyncUpdatedAt, saveState } from "./storage";
+import { applyPersonalSyncPayload, exportState, importState, loadPersonalSyncUpdatedAt, loadState, personalHistoryCount, personalSyncPayload, savePersonalSyncUpdatedAt, saveState } from "./storage";
 import { isValidLocalSyncAddress, splitLocalSyncAddress } from "./localSyncAddress";
 import type { ShinyModCatalogItem } from "./shinyModsCatalog";
 
@@ -161,6 +161,16 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.17.2",
+    date: "20 de septiembre de 2026",
+    title: "Protección del historial entre PC y celular",
+    items: [
+      "La sincronización en vivo ya no permite que un estado vacío borre automáticamente un historial existente en el otro dispositivo.",
+      "Al conectar por primera vez, si solo uno de los equipos conserva registros, esa copia se adopta y se devuelve al equipo vacío.",
+      "Se guarda una copia local de seguridad antes de cualquier reducción importante del historial y los botones manuales conservan su confirmación explícita.",
+    ],
+  },
   {
     version: "1.17.1",
     date: "20 de septiembre de 2026",
@@ -729,7 +739,7 @@ export default function App() {
     document.documentElement.lang = language;
   }, [language]);
 
-  const acceptLocalSyncSnapshot = useCallback((snapshot: Pick<LocalSyncSnapshot, "updatedAt" | "dataJson">, force = false) => {
+  const acceptLocalSyncSnapshot = useCallback((snapshot: Pick<LocalSyncSnapshot, "updatedAt" | "dataJson">, force = false, allowEmptyOverwrite = false) => {
     const remoteUpdatedAt = Date.parse(snapshot.updatedAt);
     const localUpdatedAt = Date.parse(personalSyncUpdatedAtRef.current);
     if (!Number.isFinite(remoteUpdatedAt) || (!force && Number.isFinite(localUpdatedAt) && remoteUpdatedAt <= localUpdatedAt)) return false;
@@ -742,6 +752,7 @@ export default function App() {
     }
     const value = JSON.parse(snapshot.dataJson) as unknown;
     setState((current) => {
+      if (!allowEmptyOverwrite && personalHistoryCount(current) > 0 && personalHistoryCount(value) === 0) return current;
       const synchronized = applyPersonalSyncPayload(current, value);
       personalSyncJsonRef.current = JSON.stringify(personalSyncPayload(synchronized));
       personalSyncUpdatedAtRef.current = snapshot.updatedAt;
@@ -780,7 +791,7 @@ export default function App() {
       if (action !== "status") liveRevisionRef.current = exchange.revision;
       acceptLocalSyncCatalog(exchange.catalogJson);
       if (action === "pull") {
-        const receivedChanges = acceptLocalSyncSnapshot(exchange, true);
+        const receivedChanges = acceptLocalSyncSnapshot(exchange, true, true);
         setLocalSyncStatus(receivedChanges ? tx("Datos del PC copiados al celular", "PC data copied to this phone") : tx("El celular ya tenía los mismos datos del PC", "The phone already had the same PC data"));
       } else if (action === "push") {
         setLocalSyncStatus(tx("Datos del celular copiados al PC", "Phone data copied to the PC"));
@@ -1842,7 +1853,7 @@ export default function App() {
                 <span><strong>{tx("Sincronización en vivo", "Live synchronization")}</strong><small>{tx("Refleja automáticamente los cambios de puntos, cajas, personajes y módulos mientras PC y celular estén abiertos. Los botones manuales siguen disponibles.", "Automatically mirrors points, crates, characters, and mods while PC and phone are open. Manual buttons remain available.")}</small></span>
                 <button type="button" className={`switch ${state.settings.localSyncLiveEnabled ? "on" : ""}`} disabled={!state.settings.localSyncEnabled} aria-label={tx("Activar sincronización en vivo", "Enable live synchronization")} aria-pressed={state.settings.localSyncLiveEnabled} onClick={() => { liveRevisionRef.current = 0; commitState((current) => ({ ...current, settings: { ...current.settings, localSyncLiveEnabled: !current.settings.localSyncLiveEnabled } })); }}><span /></button>
               </div>
-              {state.settings.localSyncLiveEnabled && <p className="local-live-sync-note"><RadioTower size={15} /> {tx("Debe estar activada en ambos dispositivos. Al iniciarla, el celular recibe primero la copia del PC; usa Celular → PC antes si quieres conservar primero la copia del teléfono.", "Enable it on both devices. When it starts, the phone first receives the PC copy; use Phone → PC beforehand if you need to preserve the phone copy first.")}</p>}
+              {state.settings.localSyncLiveEnabled && <p className="local-live-sync-note"><RadioTower size={15} /> {tx("Debe estar activada en ambos dispositivos. Si uno aparece vacío, se conserva automáticamente la copia que tenga historial; los reemplazos vacíos solo se permiten con los botones manuales y su confirmación.", "Enable it on both devices. If one appears empty, the copy containing history is preserved automatically; empty replacements are only allowed through the confirmed manual buttons.")}</p>}
               <p className="local-sync-message" role="status">{localSyncStatus}</p>
               <small>{tx("Usa una red Wi‑Fi de confianza o el anclaje USB del teléfono. Los cambios públicos del administrador también viajan del PC al celular mientras estén conectados.", "Use a trusted Wi-Fi network or USB tethering. Public administrator changes also travel from the PC to the phone while connected.")}</small>
             </article>

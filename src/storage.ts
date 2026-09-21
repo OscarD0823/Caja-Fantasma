@@ -3,6 +3,7 @@ import type { ActivityHistoryRecord, BoxRecord, Catalog, CharacterProfile, Overl
 import { VISION_CYCLE_WAIT_STARTED_AT, applyRemoteCatalog, clampNumber, createInitialCharacterTracking, resolveTransitionDelayMilliseconds, sharedVisionId, validateCatalog } from "./model";
 
 const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
+const SAFETY_BACKUP_KEY = "caja-fantasma.once-human.safety-backup.v1";
 const OVERLAY_POSITION_KEY = "caja-fantasma.once-human.overlay-position.v1";
 const PERSONAL_SYNC_UPDATED_AT_KEY = "caja-fantasma.once-human.personal-sync-updated-at.v1";
 export const PERSONAL_SYNC_INITIAL_DATE = "1970-01-01T00:00:00.000Z";
@@ -12,8 +13,26 @@ const OVERLAY_COUNTER_STYLES = new Set<OverlayCounterStyle>(["digital", "compact
 const WHALE_COUNTER_STYLES = new Set<WhaleCounterStyle>(["digital", "compact", "ring", "beam"]);
 const OVERLAY_NAME_MODES = new Set<OverlayNameMode>(["spanish", "english", "custom"]);
 const POINT_ROUND_TRIGGERS = new Set<PointRoundTrigger>(["event-start", "manual", "whale-end"]);
+const PERSONAL_HISTORY_ARRAY_FIELDS = ["actions", "activityHistory", "boxes", "pointRounds", "manualBaselinePoints", "shinyMods"] as const;
+
+export function personalHistoryCount(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
+  const record = value as Record<string, unknown>;
+  const arrayRecords = PERSONAL_HISTORY_ARRAY_FIELDS.reduce((sum, field) => sum + (Array.isArray(record[field]) ? record[field].length : 0), 0);
+  const boundaries = record.pointRoundBoundaries;
+  return arrayRecords + (boundaries && typeof boundaries === "object" && !Array.isArray(boundaries) ? Object.keys(boundaries).length : 0);
+}
 
 export type OverlayPosition = { x: number; y: number };
+
+function parseStoredState(text: string): Partial<PersistedState> | null {
+  try {
+    const value = JSON.parse(text) as unknown;
+    return value && typeof value === "object" && !Array.isArray(value) ? value as Partial<PersistedState> : null;
+  } catch {
+    return null;
+  }
+}
 
 function sanitizeShinyMods(value: unknown): ShinyModRecord[] {
   if (!Array.isArray(value)) return [];
@@ -222,7 +241,16 @@ export function initialState(): PersistedState {
 
 export function loadState(): PersistedState {
   try {
-    const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as Partial<PersistedState> | null;
+    const storedText = localStorage.getItem(STORAGE_KEY) ?? "null";
+    const backupText = localStorage.getItem(SAFETY_BACKUP_KEY) ?? "null";
+    let parsed = parseStoredState(storedText);
+    const backup = parseStoredState(backupText);
+    const parsedIsValid = parsed?.schemaVersion === 1 && validateCatalog(parsed.catalog);
+    const backupIsValid = backup?.schemaVersion === 1 && validateCatalog(backup.catalog);
+    if (!parsedIsValid && backupIsValid) {
+      parsed = backup;
+      localStorage.setItem(STORAGE_KEY, backupText);
+    }
     if (!parsed || parsed.schemaVersion !== 1 || !validateCatalog(parsed.catalog)) return initialState();
     const fresh = initialState();
     const settings = { ...fresh.settings, ...(parsed.settings ?? {}), notificationsEnabled: false };
@@ -286,7 +314,20 @@ export function loadState(): PersistedState {
 }
 
 export function saveState(state: PersistedState) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const nextText = JSON.stringify(state);
+  try {
+    const previousText = localStorage.getItem(STORAGE_KEY);
+    const backupText = localStorage.getItem(SAFETY_BACKUP_KEY);
+    const previous = previousText ? JSON.parse(previousText) as unknown : null;
+    const backup = backupText ? JSON.parse(backupText) as unknown : null;
+    const previousCount = personalHistoryCount(previous);
+    if (previousText && previousCount > personalHistoryCount(state) && previousCount >= personalHistoryCount(backup)) {
+      localStorage.setItem(SAFETY_BACKUP_KEY, previousText);
+    }
+  } catch {
+    // Un respaldo anterior dañado nunca debe impedir que se guarde el estado actual.
+  }
+  localStorage.setItem(STORAGE_KEY, nextText);
   window.dispatchEvent(new CustomEvent("caja-fantasma-state", { detail: state }));
 }
 
