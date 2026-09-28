@@ -14,11 +14,18 @@ const WHALE_COUNTER_STYLES = new Set<WhaleCounterStyle>(["digital", "compact", "
 const OVERLAY_NAME_MODES = new Set<OverlayNameMode>(["spanish", "english", "custom"]);
 const POINT_ROUND_TRIGGERS = new Set<PointRoundTrigger>(["event-start", "manual", "whale-end"]);
 const PERSONAL_HISTORY_ARRAY_FIELDS = ["actions", "activityHistory", "boxes", "pointRounds", "manualBaselinePoints", "shinyMods"] as const;
+const PERSONAL_DURABLE_HISTORY_ARRAY_FIELDS = ["activityHistory", "boxes", "pointRounds", "manualBaselinePoints", "shinyMods"] as const;
 
 export function personalHistoryCount(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
   const record = value as Record<string, unknown>;
   return PERSONAL_HISTORY_ARRAY_FIELDS.reduce((sum, field) => sum + (Array.isArray(record[field]) ? record[field].length : 0), 0);
+}
+
+export function personalDurableHistoryCount(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
+  const record = value as Record<string, unknown>;
+  return PERSONAL_DURABLE_HISTORY_ARRAY_FIELDS.reduce((sum, field) => sum + (Array.isArray(record[field]) ? record[field].length : 0), 0);
 }
 
 export type OverlayPosition = { x: number; y: number };
@@ -322,9 +329,9 @@ export function saveState(state: PersistedState) {
     const backupText = localStorage.getItem(SAFETY_BACKUP_KEY);
     const previous = previousText ? JSON.parse(previousText) as unknown : null;
     const backup = backupText ? JSON.parse(backupText) as unknown : null;
-    const previousCount = personalHistoryCount(previous);
-    const nextCount = personalHistoryCount(state);
-    const backupCount = personalHistoryCount(backup);
+    const previousCount = personalDurableHistoryCount(previous);
+    const nextCount = personalDurableHistoryCount(state);
+    const backupCount = personalDurableHistoryCount(backup);
     if (previousText && previousCount > nextCount && previousCount >= backupCount) {
       localStorage.setItem(SAFETY_BACKUP_KEY, previousText);
     } else if (nextCount > 0 && nextCount >= backupCount) {
@@ -453,6 +460,83 @@ export function applyPersonalSyncPayload(current: PersistedState, value: unknown
   return {
     ...current,
     ...personalSyncPayload(imported),
+  };
+}
+
+function mergeRecordsById<T extends { id: string }>(current: T[], incoming: T[], merge?: (existing: T, candidate: T) => T) {
+  const records = current.map((record) => ({ ...record }));
+  const indexes = new Map(records.map((record, index) => [record.id, index]));
+  for (const candidate of incoming) {
+    const index = indexes.get(candidate.id);
+    if (index === undefined) {
+      indexes.set(candidate.id, records.length);
+      records.push({ ...candidate });
+    } else if (merge) {
+      records[index] = merge(records[index], candidate);
+    }
+  }
+  return records;
+}
+
+function durableRecordIds(value: PersonalSyncPayload) {
+  const ids = new Set<string>();
+  for (const [field, records] of [
+    ["activityHistory", value.activityHistory],
+    ["boxes", value.boxes],
+    ["pointRounds", value.pointRounds],
+  ] as const) {
+    records.forEach((record, index) => ids.add(`${field}:${record.id || `index-${index}:${JSON.stringify(record)}`}`));
+  }
+  return ids;
+}
+
+function isSubset(left: ReadonlySet<string>, right: ReadonlySet<string>) {
+  for (const value of left) if (!right.has(value)) return false;
+  return true;
+}
+
+export function mergePersonalSyncPayload(current: PersistedState, value: unknown, preferIncomingOnEqual = false): PersistedState {
+  const imported = applyPersonalSyncPayload(current, value);
+  const currentPayload = personalSyncPayload(current);
+  const incomingPayload = personalSyncPayload(imported);
+  const currentDurableIds = durableRecordIds(currentPayload);
+  const incomingDurableIds = durableRecordIds(incomingPayload);
+  const currentContainsIncoming = isSubset(incomingDurableIds, currentDurableIds);
+  const incomingContainsCurrent = isSubset(currentDurableIds, incomingDurableIds);
+  const currentDominates = currentContainsIncoming && !incomingContainsCurrent;
+  const incomingDominates = incomingContainsCurrent && !currentContainsIncoming;
+  const useIncomingContext = incomingDominates || (!currentDominates && !incomingDominates && preferIncomingOnEqual);
+  const actions = currentDominates
+    ? currentPayload.actions
+    : incomingDominates || (currentContainsIncoming && preferIncomingOnEqual)
+      ? incomingPayload.actions
+      : mergeRecordsById(currentPayload.actions, incomingPayload.actions);
+  const boundaries = { ...currentPayload.pointRoundBoundaries };
+  for (const [key, candidate] of Object.entries(incomingPayload.pointRoundBoundaries)) {
+    if (!boundaries[key] || candidate > boundaries[key]) boundaries[key] = candidate;
+  }
+  const shinyMods = mergeRecordsById(currentPayload.shinyMods, incomingPayload.shinyMods, (existing, candidate) => ({
+    ...existing,
+    attempts: Math.max(existing.attempts, candidate.attempts),
+    isShiny: existing.isShiny || candidate.isShiny,
+    obtainedAt: existing.obtainedAt ?? candidate.obtainedAt,
+  }));
+  return {
+    ...current,
+    actions,
+    activityHistory: mergeRecordsById(currentPayload.activityHistory, incomingPayload.activityHistory),
+    boxes: mergeRecordsById(currentPayload.boxes, incomingPayload.boxes),
+    pointRounds: mergeRecordsById(currentPayload.pointRounds, incomingPayload.pointRounds),
+    pointRoundBoundaries: boundaries,
+    manualBaselinePoints: incomingPayload.manualBaselinePoints.length > currentPayload.manualBaselinePoints.length
+      ? incomingPayload.manualBaselinePoints
+      : currentPayload.manualBaselinePoints,
+    shinyMods,
+    characters: mergeRecordsById(currentPayload.characters, incomingPayload.characters, (existing, candidate) => useIncomingContext ? candidate : existing),
+    activeCharacterId: useIncomingContext ? incomingPayload.activeCharacterId : currentPayload.activeCharacterId,
+    trackingMode: useIncomingContext ? incomingPayload.trackingMode : currentPayload.trackingMode,
+    teamMemberIds: [...new Set([...currentPayload.teamMemberIds, ...incomingPayload.teamMemberIds])],
+    activeTeamSessionId: useIncomingContext ? incomingPayload.activeTeamSessionId : currentPayload.activeTeamSessionId,
   };
 }
 

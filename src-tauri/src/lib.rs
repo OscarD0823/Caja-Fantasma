@@ -32,8 +32,7 @@ const NATIVE_BACKUP_PREVIOUS_FILE: &str = "personal-state-backup.previous.json";
 const NATIVE_BACKUP_MAX_BYTES: usize = 8 * 1024 * 1024;
 
 fn native_backup_history_count(value: &Value) -> usize {
-    const ARRAY_FIELDS: [&str; 6] = [
-        "actions",
+    const ARRAY_FIELDS: [&str; 5] = [
         "activityHistory",
         "boxes",
         "pointRounds",

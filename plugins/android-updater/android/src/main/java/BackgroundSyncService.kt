@@ -79,7 +79,7 @@ internal object BackgroundSyncStore {
             val existingActive = preferences.getBoolean("active", false)
             val preserveExisting = existingActive && preserveNewerData && (
                 existingUpdatedAt > args.updatedAt ||
-                    (personalHistoryCount(existingJson) > 0 && personalHistoryCount(args.dataJson) == 0)
+                    wouldLoseDurableHistory(existingJson, args.dataJson)
                 )
             preferences.edit()
                 .putBoolean("active", true)
@@ -141,7 +141,7 @@ internal object BackgroundSyncStore {
                 .putString("catalogJson", catalogJson)
                 .putLong("lastExchangeAt", lastExchangeAt)
                 .putString("message", message)
-            if (dataUnchangedDuringExchange && !wouldEraseHistory(request.dataJson, dataJson)) {
+            if (dataUnchangedDuringExchange && !wouldLoseDurableHistory(request.dataJson, dataJson)) {
                 editor.putString("dataJson", dataJson).putString("updatedAt", updatedAt)
             }
             editor.apply()
@@ -172,16 +172,33 @@ internal object BackgroundSyncStore {
         }
     }
 
-    private fun personalHistoryCount(dataJson: String): Int = try {
+    private fun durableRecordIds(dataJson: String): Set<String> = try {
         val data = JSONObject(dataJson)
-        listOf("actions", "activityHistory", "boxes", "pointRounds", "manualBaselinePoints", "shinyMods")
-            .sumOf { field -> data.optJSONArray(field)?.length() ?: 0 }
+        buildSet {
+            listOf("activityHistory", "boxes", "pointRounds", "shinyMods", "characters").forEach { field ->
+                val records = data.optJSONArray(field) ?: return@forEach
+                for (index in 0 until records.length()) {
+                    val record = records.optJSONObject(index)
+                    val id = record?.optString("id")?.takeIf { it.isNotBlank() }
+                        ?: "index-$index:${records.opt(index)}"
+                    add("$field:$id")
+                }
+            }
+            val baseline = data.optJSONArray("manualBaselinePoints")
+            if (baseline != null) {
+                for (index in 0 until baseline.length()) add("manualBaselinePoints:$index:${baseline.opt(index)}")
+            }
+        }
     } catch (_: Exception) {
-        0
+        emptySet()
     }
 
-    private fun wouldEraseHistory(currentJson: String, incomingJson: String): Boolean =
-        personalHistoryCount(currentJson) > 0 && personalHistoryCount(incomingJson) == 0
+    private fun wouldLoseDurableHistory(currentJson: String, incomingJson: String): Boolean {
+        val current = durableRecordIds(currentJson)
+        if (current.isEmpty()) return false
+        val incoming = durableRecordIds(incomingJson)
+        return !incoming.containsAll(current)
+    }
 
     private fun isIsoTimestamp(value: String): Boolean =
         value.matches(Regex("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"))

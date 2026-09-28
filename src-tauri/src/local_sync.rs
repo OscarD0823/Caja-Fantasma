@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeSet;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::time::Duration;
@@ -129,27 +130,23 @@ fn validate_catalog_payload(catalog_json: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn personal_history_count(data_json: &str) -> usize {
-    const ARRAY_FIELDS: [&str; 6] = [
-        "actions",
-        "activityHistory",
-        "boxes",
-        "pointRounds",
-        "manualBaselinePoints",
-        "shinyMods",
-    ];
-    let Ok(Value::Object(data)) = serde_json::from_str::<Value>(data_json) else {
-        return 0;
-    };
-    ARRAY_FIELDS
-        .iter()
-        .filter_map(|field| data.get(*field).and_then(Value::as_array))
-        .map(Vec::len)
-        .sum::<usize>()
-}
-
-fn would_erase_personal_history(current_json: &str, incoming_json: &str) -> bool {
-    personal_history_count(current_json) > 0 && personal_history_count(incoming_json) == 0
+fn durable_record_ids(data: &serde_json::Map<String, Value>) -> BTreeSet<String> {
+    const FIELDS: [&str; 3] = ["activityHistory", "boxes", "pointRounds"];
+    let mut ids = BTreeSet::new();
+    for field in FIELDS {
+        let Some(records) = data.get(field).and_then(Value::as_array) else {
+            continue;
+        };
+        for (index, record) in records.iter().enumerate() {
+            let identity = record
+                .get("id")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+                .unwrap_or_else(|| format!("index-{index}:{record}"));
+            ids.insert(format!("{field}:{identity}"));
+        }
+    }
+    ids
 }
 
 fn merge_id_array(current: Option<&Value>, incoming: Option<&Value>, field: &str) -> Value {
@@ -226,9 +223,12 @@ fn merge_string_array(current: Option<&Value>, incoming: Option<&Value>) -> Valu
     Value::Array(merged)
 }
 
-fn merge_live_personal_payloads(current_json: &str, incoming_json: &str) -> Result<String, String> {
-    const ID_ARRAY_FIELDS: [&str; 6] = [
-        "actions",
+pub(crate) fn merge_live_personal_payloads(
+    current_json: &str,
+    incoming_json: &str,
+    prefer_incoming_on_equal: bool,
+) -> Result<String, String> {
+    const ID_ARRAY_FIELDS: [&str; 5] = [
         "activityHistory",
         "boxes",
         "pointRounds",
@@ -246,6 +246,54 @@ fn merge_live_personal_payloads(current_json: &str, incoming_json: &str) -> Resu
     else {
         return Err("Los datos entrantes deben ser un objeto JSON.".into());
     };
+    let known_personal_fields = [
+        "actions",
+        "activityHistory",
+        "boxes",
+        "pointRounds",
+        "manualBaselinePoints",
+        "shinyMods",
+        "characters",
+    ];
+    if !known_personal_fields
+        .iter()
+        .any(|field| current.contains_key(*field) || incoming.contains_key(*field))
+    {
+        return Ok(if prefer_incoming_on_equal {
+            incoming_json.to_string()
+        } else {
+            current_json.to_string()
+        });
+    }
+    let current_durable_ids = durable_record_ids(&current);
+    let incoming_durable_ids = durable_record_ids(&incoming);
+    let current_contains_incoming = incoming_durable_ids.is_subset(&current_durable_ids);
+    let incoming_contains_current = current_durable_ids.is_subset(&incoming_durable_ids);
+    let incoming_dominates = incoming_contains_current && !current_contains_incoming;
+    let current_dominates = current_contains_incoming && !incoming_contains_current;
+
+    if current.contains_key("actions") || incoming.contains_key("actions") {
+        let actions = if current_dominates {
+            current
+                .get("actions")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default()
+        } else if incoming_dominates || (current_contains_incoming && prefer_incoming_on_equal) {
+            incoming
+                .get("actions")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default()
+        } else {
+            merge_id_array(current.get("actions"), incoming.get("actions"), "actions")
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+        };
+        current.insert("actions".into(), Value::Array(actions));
+    }
+
     for field in ID_ARRAY_FIELDS {
         if !current.contains_key(field) && !incoming.contains_key(field) {
             continue;
@@ -301,6 +349,15 @@ fn merge_live_personal_payloads(current_json: &str, incoming_json: &str) -> Resu
     if current.contains_key("pointRoundBoundaries") || incoming.contains_key("pointRoundBoundaries")
     {
         current.insert("pointRoundBoundaries".into(), Value::Object(boundaries));
+    }
+
+    if incoming_dominates || (!current_dominates && !incoming_dominates && prefer_incoming_on_equal)
+    {
+        for field in ["activeCharacterId", "trackingMode", "activeTeamSessionId"] {
+            if let Some(value) = incoming.get(field) {
+                current.insert(field.into(), value.clone());
+            }
+        }
     }
     let merged = Value::Object(current);
     if merged == original {
@@ -575,42 +632,27 @@ mod desktop {
                     snapshot.data_json = request.data_json;
                     snapshot.last_mobile_update_at = exchange_at;
                 }
-                LocalSyncAction::Auto
-                    if request.updated_at > snapshot.updated_at
-                        && !would_erase_personal_history(
-                            &snapshot.data_json,
-                            &request.data_json,
-                        ) =>
-                {
-                    snapshot.updated_at = request.updated_at;
-                    snapshot.data_json = request.data_json;
-                    snapshot.revision = snapshot.revision.saturating_add(1);
-                    snapshot.last_mobile_update_at = exchange_at;
-                }
-                LocalSyncAction::Live
-                    if request.known_revision == 0
-                        && personal_history_count(&snapshot.data_json) == 0
-                        && personal_history_count(&request.data_json) > 0 =>
-                {
-                    snapshot.revision = snapshot.revision.saturating_add(1);
-                    snapshot.updated_at = request.updated_at;
-                    snapshot.data_json = request.data_json;
-                    snapshot.last_mobile_update_at = exchange_at;
-                }
-                LocalSyncAction::Live if request.known_revision == snapshot.revision => {
-                    if (request.updated_at != snapshot.updated_at
-                        || request.data_json != snapshot.data_json)
-                        && !would_erase_personal_history(&snapshot.data_json, &request.data_json)
-                    {
+                LocalSyncAction::Auto if request.updated_at > snapshot.updated_at => {
+                    let merged = merge_live_personal_payloads(
+                        &snapshot.data_json,
+                        &request.data_json,
+                        true,
+                    )?;
+                    if merged != snapshot.data_json {
+                        snapshot.data_json = merged;
                         snapshot.revision = snapshot.revision.saturating_add(1);
-                        snapshot.updated_at = request.updated_at;
-                        snapshot.data_json = request.data_json;
                         snapshot.last_mobile_update_at = exchange_at;
                     }
+                    snapshot.updated_at = request.updated_at.max(snapshot.updated_at.clone());
                 }
                 LocalSyncAction::Live => {
-                    let merged =
-                        merge_live_personal_payloads(&snapshot.data_json, &request.data_json)?;
+                    let acknowledged_current =
+                        request.known_revision != 0 && request.known_revision == snapshot.revision;
+                    let merged = merge_live_personal_payloads(
+                        &snapshot.data_json,
+                        &request.data_json,
+                        acknowledged_current,
+                    )?;
                     if merged != snapshot.data_json {
                         snapshot.revision = snapshot.revision.saturating_add(1);
                         snapshot.updated_at = request.updated_at.max(snapshot.updated_at.clone());
@@ -778,22 +820,14 @@ mod desktop {
             .snapshot
             .lock()
             .map_err(|_| "No se pudieron actualizar los datos compartidos.".to_string())?;
-        let has_revision_conflict = live_enabled && known_revision != snapshot.revision;
-        let synchronized_data = if has_revision_conflict {
-            merge_live_personal_payloads(&snapshot.data_json, &data_json)?
+        let acknowledged_current =
+            live_enabled && known_revision != 0 && known_revision == snapshot.revision;
+        let synchronized_data = if live_enabled {
+            merge_live_personal_payloads(&snapshot.data_json, &data_json, acknowledged_current)?
         } else {
             data_json.clone()
         };
-        let recovered_conflict = has_revision_conflict && synchronized_data != data_json;
-        if live_enabled && would_erase_personal_history(&snapshot.data_json, &synchronized_data) {
-            snapshot.last_mobile_update_at = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|duration| duration.as_millis() as u64)
-                .unwrap_or(snapshot.last_mobile_update_at);
-            snapshot.catalog_json = catalog_json;
-            snapshot.enabled = state.enabled.load(Ordering::Relaxed);
-            return Ok(snapshot.revision);
-        }
+        let recovered_conflict = live_enabled && synchronized_data != data_json;
         if updated_at != snapshot.updated_at || synchronized_data != snapshot.data_json {
             snapshot.revision = snapshot.revision.saturating_add(1);
             snapshot.updated_at = updated_at;
@@ -876,13 +910,19 @@ pub fn read_local_sync_state() -> Result<LocalSyncSnapshot, String> {
 mod tests {
     use super::*;
 
+    fn assert_json_eq(left: &str, right: &str) {
+        let left: Value = serde_json::from_str(left).expect("left JSON should be valid");
+        let right: Value = serde_json::from_str(right).expect("right JSON should be valid");
+        assert_eq!(left, right);
+    }
+
     #[test]
     fn merges_concurrent_live_histories_without_losing_either_device() {
         let computer = r#"{"actions":[{"id":"pc-action"}],"activityHistory":[{"id":"pc-history"}],"boxes":[],"pointRounds":[],"pointRoundBoundaries":{"solo:main":"2026-09-21T10:00:00.000Z"},"manualBaselinePoints":[],"shinyMods":[{"id":"mod-1","attempts":4,"isShiny":false}],"characters":[{"id":"main","name":"Principal"}],"teamMemberIds":["main"]}"#;
         let phone = r#"{"actions":[{"id":"phone-action"}],"activityHistory":[{"id":"phone-history"}],"boxes":[],"pointRounds":[],"pointRoundBoundaries":{"solo:main":"2026-09-21T10:05:00.000Z"},"manualBaselinePoints":[],"shinyMods":[{"id":"mod-1","attempts":6,"isShiny":true}],"characters":[{"id":"main","name":"Principal"},{"id":"alt","name":"Alterno"}],"teamMemberIds":["alt"]}"#;
 
-        let merged =
-            merge_live_personal_payloads(computer, phone).expect("both histories should merge");
+        let merged = merge_live_personal_payloads(computer, phone, false)
+            .expect("both histories should merge");
         let value: Value = serde_json::from_str(&merged).expect("merged JSON should remain valid");
 
         assert_eq!(value["actions"].as_array().map(Vec::len), Some(2));
@@ -895,6 +935,43 @@ mod tests {
             Some("2026-09-21T10:05:00.000Z")
         );
         assert_eq!(value["teamMemberIds"].as_array().map(Vec::len), Some(2));
+    }
+
+    #[test]
+    fn rejects_a_nonempty_but_stale_live_snapshot() {
+        let rich = r#"{"actions":[{"id":"a"},{"id":"b"},{"id":"c"}],"activityHistory":[{"id":"a"},{"id":"b"},{"id":"c"}],"boxes":[],"pointRounds":[{"id":"round-a"}],"manualBaselinePoints":[],"shinyMods":[],"characters":[]}"#;
+        let stale = r#"{"actions":[{"id":"a"}],"activityHistory":[{"id":"a"}],"boxes":[],"pointRounds":[],"manualBaselinePoints":[],"shinyMods":[],"characters":[]}"#;
+
+        let protected_pc = merge_live_personal_payloads(rich, stale, true)
+            .expect("an acknowledged stale phone must not replace richer PC data");
+        let protected_pc: Value = serde_json::from_str(&protected_pc).expect("valid JSON");
+        assert_eq!(protected_pc["actions"].as_array().map(Vec::len), Some(3));
+        assert_eq!(
+            protected_pc["activityHistory"].as_array().map(Vec::len),
+            Some(3)
+        );
+
+        let recovered_pc = merge_live_personal_payloads(stale, rich, false)
+            .expect("a richer phone must recover a stale PC even during a revision conflict");
+        let recovered_pc: Value = serde_json::from_str(&recovered_pc).expect("valid JSON");
+        assert_eq!(recovered_pc["actions"].as_array().map(Vec::len), Some(3));
+        assert_eq!(
+            recovered_pc["pointRounds"].as_array().map(Vec::len),
+            Some(1)
+        );
+    }
+
+    #[test]
+    fn keeps_an_intentional_attempt_reset_when_a_box_is_newer() {
+        let before_box = r#"{"actions":[{"id":"a"},{"id":"b"}],"activityHistory":[{"id":"a"},{"id":"b"}],"boxes":[],"pointRounds":[],"manualBaselinePoints":[],"shinyMods":[],"characters":[]}"#;
+        let after_box = r#"{"actions":[],"activityHistory":[{"id":"a"},{"id":"b"}],"boxes":[{"id":"box-a"}],"pointRounds":[],"manualBaselinePoints":[],"shinyMods":[],"characters":[]}"#;
+
+        let merged = merge_live_personal_payloads(before_box, after_box, true)
+            .expect("a newer box should remain authoritative for the active attempt");
+        let merged: Value = serde_json::from_str(&merged).expect("valid JSON");
+        assert_eq!(merged["actions"].as_array().map(Vec::len), Some(0));
+        assert_eq!(merged["activityHistory"].as_array().map(Vec::len), Some(2));
+        assert_eq!(merged["boxes"].as_array().map(Vec::len), Some(1));
     }
 
     #[test]
@@ -1049,12 +1126,20 @@ mod tests {
 
         let empty_personal = "{\"actions\":[],\"activityHistory\":[],\"boxes\":[],\"pointRounds\":[],\"pointRoundBoundaries\":{},\"manualBaselinePoints\":[],\"shinyMods\":[]}";
         let phone_history = "{\"actions\":[],\"activityHistory\":[{\"id\":\"recovered-phone-record\"}],\"boxes\":[],\"pointRounds\":[],\"pointRoundBoundaries\":{},\"manualBaselinePoints\":[],\"shinyMods\":[]}";
-        desktop::update(
+        let cleared_revision = desktop::update(
             empty_personal.into(),
             "2026-09-13T10:07:00.000Z".into(),
             "{\"catalogVersion\":41}".into(),
+            false,
+            0,
+        )
+        .expect("an explicit local reset may clear the test snapshot");
+        desktop::update(
+            empty_personal.into(),
+            "2026-09-13T10:07:01.000Z".into(),
+            "{\"catalogVersion\":41}".into(),
             true,
-            stale_phone.revision,
+            cleared_revision,
         )
         .expect("an empty PC may enter live mode before the phone connects");
         let recovered_from_phone = mobile_sync_exchange_blocking(
@@ -1066,7 +1151,7 @@ mod tests {
             "2026-09-13T10:08:00.000Z".into(),
         )
         .expect("the first live handshake should recover a rich phone into an empty PC");
-        assert_eq!(recovered_from_phone.data_json, phone_history);
+        assert_json_eq(&recovered_from_phone.data_json, phone_history);
 
         let protected_phone = mobile_sync_exchange_blocking(
             address.clone(),
@@ -1077,7 +1162,7 @@ mod tests {
             "2026-09-13T10:09:00.000Z".into(),
         )
         .expect("an empty phone must receive the PC history on its first live handshake");
-        assert_eq!(protected_phone.data_json, phone_history);
+        assert_json_eq(&protected_phone.data_json, phone_history);
 
         desktop::update(
             empty_personal.into(),
@@ -1089,7 +1174,7 @@ mod tests {
         .expect("a transient empty render must not erase the server snapshot");
         let snapshot_after_empty_desktop =
             desktop::read().expect("the server should retain its rich snapshot");
-        assert_eq!(snapshot_after_empty_desktop.data_json, phone_history);
+        assert_json_eq(&snapshot_after_empty_desktop.data_json, phone_history);
         assert!(snapshot_after_empty_desktop.last_mobile_update_at > 0);
 
         let protected_pc = mobile_sync_exchange_blocking(
@@ -1101,7 +1186,7 @@ mod tests {
             "2026-09-13T10:11:00.000Z".into(),
         )
         .expect("an empty live payload must not erase the acknowledged PC history");
-        assert_eq!(protected_pc.data_json, phone_history);
+        assert_json_eq(&protected_pc.data_json, phone_history);
 
         let explicit_empty = mobile_sync_exchange_blocking(
             address.clone(),

@@ -86,7 +86,7 @@ import {
   splitPlatformCarryover,
   validateCatalog,
 } from "./model";
-import { applyPersonalSyncPayload, exportState, importState, loadPersonalSyncUpdatedAt, loadState, personalHistoryCount, personalSyncPayload, savePersonalSyncUpdatedAt, saveState } from "./storage";
+import { applyPersonalSyncPayload, exportState, importState, loadPersonalSyncUpdatedAt, loadState, mergePersonalSyncPayload, personalDurableHistoryCount, personalHistoryCount, personalSyncPayload, savePersonalSyncUpdatedAt, saveState } from "./storage";
 import { isValidLocalSyncAddress, splitLocalSyncAddress } from "./localSyncAddress";
 import type { ShinyModCatalogItem } from "./shinyModsCatalog";
 
@@ -171,6 +171,16 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.18.2",
+    date: "28 de septiembre de 2026",
+    title: "Sincronización en vivo sin pérdida de registros",
+    items: [
+      "Una copia atrasada del PC o del celular ya no puede reemplazar un historial más completo aunque contenga algunos registros.",
+      "Los cambios independientes se combinan por identificador y el cierre de una caja conserva correctamente el reinicio del intento activo.",
+      "El respaldo nativo y el servicio en segundo plano de Android aplican la misma protección al historial duradero.",
+    ],
+  },
   {
     version: "1.18.1",
     date: "27 de septiembre de 2026",
@@ -783,7 +793,7 @@ export default function App() {
     document.documentElement.lang = language;
   }, [language]);
 
-  const acceptLocalSyncSnapshot = useCallback((snapshot: Pick<LocalSyncSnapshot, "updatedAt" | "dataJson">, force = false, allowEmptyOverwrite = false) => {
+  const acceptLocalSyncSnapshot = useCallback((snapshot: Pick<LocalSyncSnapshot, "updatedAt" | "dataJson">, force = false, mode: "merge" | "replace" = "merge") => {
     const remoteUpdatedAt = Date.parse(snapshot.updatedAt);
     const localUpdatedAt = Date.parse(personalSyncUpdatedAtRef.current);
     if (!Number.isFinite(remoteUpdatedAt) || (!force && Number.isFinite(localUpdatedAt) && remoteUpdatedAt <= localUpdatedAt)) return false;
@@ -796,8 +806,10 @@ export default function App() {
     }
     const value = JSON.parse(snapshot.dataJson) as unknown;
     setState((current) => {
-      if (!allowEmptyOverwrite && personalHistoryCount(current) > 0 && personalHistoryCount(value) === 0) return current;
-      const synchronized = applyPersonalSyncPayload(current, value);
+      if (mode === "merge" && personalHistoryCount(current) > 0 && personalHistoryCount(value) === 0) return current;
+      const synchronized = mode === "replace"
+        ? applyPersonalSyncPayload(current, value)
+        : mergePersonalSyncPayload(current, value, true);
       personalSyncJsonRef.current = JSON.stringify(personalSyncPayload(synchronized));
       personalSyncUpdatedAtRef.current = snapshot.updatedAt;
       savePersonalSyncUpdatedAt(snapshot.updatedAt);
@@ -872,7 +884,7 @@ export default function App() {
       }
       acceptLocalSyncCatalog(exchange.catalogJson);
       if (action === "pull") {
-        const receivedChanges = acceptLocalSyncSnapshot(exchange, true, true);
+        const receivedChanges = acceptLocalSyncSnapshot(exchange, true, "replace");
         setLocalSyncStatus(receivedChanges ? tx("Datos del PC copiados al celular", "PC data copied to this phone") : tx("El celular ya tenía los mismos datos del PC", "The phone already had the same PC data"));
       } else if (action === "push") {
         setLocalSyncStatus(tx("Datos del celular copiados al PC", "Phone data copied to the PC"));
@@ -1117,8 +1129,8 @@ export default function App() {
         if (!active || !backupText) return;
         const backup = JSON.parse(backupText) as unknown;
         setState((current) => {
-          if (personalHistoryCount(current) > 0 || personalHistoryCount(backup) === 0) return current;
-          const recovered = applyPersonalSyncPayload(current, backup);
+          if (personalDurableHistoryCount(backup) <= personalDurableHistoryCount(current)) return current;
+          const recovered = mergePersonalSyncPayload(current, backup);
           const recoveredJson = JSON.stringify(personalSyncPayload(recovered));
           const updatedAt = new Date().toISOString();
           personalSyncJsonRef.current = recoveredJson;
