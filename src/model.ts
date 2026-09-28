@@ -198,9 +198,11 @@ export type CountdownTransitionSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.18.0";
+export const APP_VERSION = "1.18.1";
 export const AUTHOR = "OscarD0823";
 export const DEFAULT_CHARACTER_ID = "character-main";
+export const GAME_DAY_TIME_ZONE = "America/Bogota";
+export const GAME_DAY_RESET_HOUR = 8;
 export const REPOSITORY_URL = "https://github.com/OscarD0823/Caja-Fantasma";
 export const ANDROID_APK_URL = `${REPOSITORY_URL}/releases/download/v${APP_VERSION}/Caja-Fantasma-Android-${APP_VERSION}.apk`;
 export const REMOTE_CATALOG_URL = "https://raw.githubusercontent.com/OscarD0823/Caja-Fantasma/main/catalog/visions.json";
@@ -484,12 +486,29 @@ export function localDateKey(value: string | number | Date) {
   return `${year}-${month}-${day}`;
 }
 
+export function gameDayKey(value: string | number | Date) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  const shifted = new Date(date.getTime() - GAME_DAY_RESET_HOUR * 60 * 60_000);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: GAME_DAY_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(shifted);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
+  const year = part("year");
+  const month = part("month");
+  const day = part("day");
+  return year && month && day ? `${year}-${month}-${day}` : "";
+}
+
 export function activityHistorySummary(records: ActivityHistoryRecord[], today = new Date()) {
-  const todayKey = localDateKey(today);
+  const todayKey = gameDayKey(today);
   const daily = new Map<string, { date: string; count: number; points: number }>();
   const ranking = new Map<string, { key: string; name: string; count: number; todayCount: number; points: number }>();
   for (const record of records) {
-    const date = localDateKey(record.occurredAt);
+    const date = gameDayKey(record.occurredAt);
     if (!date) continue;
     const count = Math.max(0, Math.round(Number(record.count) || 0));
     const points = Math.max(0, Math.round(Number(record.points) || 0));

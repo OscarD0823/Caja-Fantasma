@@ -66,14 +66,14 @@ Android no permite que una aplicación distribuida fuera de Google Play se reemp
 
 ## Estado comprobado del equipo
 
-La APK con sincronización local, modo en vivo protegido, servicio Android en segundo plano y actualización integrada se genera y verifica para la versión 1.18.0:
+La APK con sincronización local, modo en vivo protegido, servicio Android en segundo plano y actualización integrada se genera y verifica para la versión 1.18.1:
 
 - Android SDK 35/36, Build Tools 35/36 y NDK 29 están instalados y las licencias fueron aceptadas.
 - El destino Rust `aarch64-linux-android` compila la biblioteca nativa optimizada.
 - La bandeja, el inicio automático, el actualizador de Windows, la ventana flotante y el acceso del administrador mediante GitHub CLI quedan aislados bajo `cfg(desktop)`.
 - Android usa una sola ventana, navegación inferior adaptable y guarda los datos personales localmente.
 - La APK ARM64 de distribución está alineada, firmada con un certificado propio de OscarD0823 y verificada con `apksigner`.
-- El módulo Android compila el servicio Kotlin, fusiona sus permisos y manifiesto y supera `lintVital`; todavía corresponde validar en el teléfono físico la permanencia de la conexión al cambiar de aplicación.
+- El módulo Android compila el servicio Kotlin, fusiona sus permisos y manifiesto y supera `lintVital`; la permanencia de la conexión al cambiar de aplicación fue validada en un teléfono físico desde la versión 1.18.0.
 - El anfitrión local, el cliente Android, el código de emparejamiento, la restricción a IP privadas y el intercambio bidireccional cuentan con pruebas automáticas por bucle local. Las pruebas cubren PC→celular, celular→PC, el inicio seguro del modo en vivo, cambios desde ambos lados, rechazo de revisiones atrasadas y del código incorrecto, el puerto predeterminado y los rangos privados 10.x, 172.16–31.x y 192.168.x.
 
 ## Trabajo por etapas
@@ -84,7 +84,7 @@ La APK con sincronización local, modo en vivo protegido, servicio Android en se
 4. Completado: anfitrión TCP local en Rust, cliente móvil, código de conexión, sincronización manual por dirección y modo en vivo por revisiones.
 5. Completado: pruebas de intercambio manual y en vivo por bucle local, rechazo de IP pública y compilación ARM64.
 6. Completado: servicio Android `connectedDevice`, notificación silenciosa, reconexión automática y entrega de cambios al reabrir la interfaz.
-7. Pendiente: validar la APK 1.18.0 en un teléfono físico al cambiar de aplicación, apagar la pantalla y reconectar Wi-Fi o USB tethering.
+7. Completado: validación de la APK en un teléfono físico al cambiar de aplicación y mantener Datos en vivo en segundo plano.
 8. Futuro: cifrado de aplicación punto a punto y descubrimiento automático.
 9. Futuro: generar un AAB firmado si se decide distribuir mediante Google Play.
 

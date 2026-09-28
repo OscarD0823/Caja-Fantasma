@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import catalog from "../catalog/visions.json" with { type: "json" };
-import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, activityHistorySummary, applyRemoteCatalog, boxStatistics, buildBreakdown, buildPointRoundBreakdown, computeCountdownTransition, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, overlayVisionName, parseManualBaseline, pointActionsInRound, resolveTransitionDelayMilliseconds, sharedEventTimingFromSettings, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type ActivityHistoryRecord, type BoxRecord, type Catalog, type PersistedState, type PointAction, type Settings } from "../src/model.ts";
+import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, activityHistorySummary, applyRemoteCatalog, boxStatistics, buildBreakdown, buildPointRoundBreakdown, computeCountdownTransition, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, gameDayKey, overlayVisionName, parseManualBaseline, pointActionsInRound, resolveTransitionDelayMilliseconds, sharedEventTimingFromSettings, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type ActivityHistoryRecord, type BoxRecord, type Catalog, type PersistedState, type PointAction, type Settings } from "../src/model.ts";
 import { overlayDesignSize, whaleCounterLayoutWithinWindow, whaleCounterScaleWithinWindow, whaleScaleWithinWindow } from "../src/overlayGeometry.ts";
 import { completeLocalSyncAddress, isValidLocalSyncAddress, joinLocalSyncAddress, splitLocalSyncAddress } from "../src/localSyncAddress.ts";
 import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesModSearch, normalizeModSearch } from "../src/shinyModsCatalog.ts";
@@ -183,14 +183,17 @@ for (const shape of ["event", "rectangle", "square", "vertical", "round"] as con
 }
 
 const activityHistory: ActivityHistoryRecord[] = [
-  { id: "a1", activityId: "platform", activityName: "Plataformas", points: 4, count: 1, occurredAt: new Date(2026, 8, 18, 23, 59).toISOString() },
-  { id: "a2", activityId: "platform", activityName: "Plataformas", points: 12, count: 3, occurredAt: new Date(2026, 8, 19, 8).toISOString() },
-  { id: "a3", activityId: "forsaken", activityName: "Desamparado", points: 200, count: 200, occurredAt: new Date(2026, 8, 19, 9).toISOString() },
+  { id: "a1", activityId: "platform", activityName: "Plataformas", points: 4, count: 1, occurredAt: "2026-09-19T12:59:59.000Z" },
+  { id: "a2", activityId: "platform", activityName: "Plataformas", points: 12, count: 3, occurredAt: "2026-09-19T13:00:00.000Z" },
+  { id: "a3", activityId: "forsaken", activityName: "Desamparado", points: 200, count: 200, occurredAt: "2026-09-19T14:00:00.000Z" },
 ];
-const dailyActivity = activityHistorySummary(activityHistory, new Date(2026, 8, 19, 12));
-assert.equal(dailyActivity.today.count, 203, "El resumen diario debe separar las actividades por fecha local.");
+assert.equal(gameDayKey("2026-09-19T12:59:59.000Z"), "2026-09-18", "Antes de las 8:00 a. m. de Colombia todavía debe ser el día de juego anterior.");
+assert.equal(gameDayKey("2026-09-19T13:00:00.000Z"), "2026-09-19", "A las 8:00 a. m. de Colombia debe comenzar un nuevo día de juego.");
+const dailyActivity = activityHistorySummary(activityHistory, new Date("2026-09-19T15:00:00.000Z"));
+assert.equal(dailyActivity.today.count, 203, "El resumen diario debe usar el corte de las 8:00 a. m. de Colombia.");
 assert.equal(dailyActivity.today.points, 212);
 assert.equal(dailyActivity.totalCount, 204);
+assert.equal(dailyActivity.days.find((day) => day.date === "2026-09-18")?.count, 1);
 assert.equal(dailyActivity.ranking[0].name, "Desamparado", "El ranking histórico debe ordenar por cantidad completada.");
 assert.equal(dailyActivity.ranking.find((item) => item.key === "pro:platform")?.todayCount, 3);
 

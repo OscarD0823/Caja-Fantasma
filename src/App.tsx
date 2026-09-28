@@ -76,7 +76,7 @@ import {
   detachCharacterFromActions,
   formatCompactDuration,
   formatDuration,
-  localDateKey,
+  gameDayKey,
   overlayVisionName,
   parseManualBaseline,
   pointActionsInRound,
@@ -171,6 +171,16 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.18.1",
+    date: "27 de septiembre de 2026",
+    title: "Día del juego desde las 8:00 a. m. de Colombia",
+    items: [
+      "Los puntos, actividades y contadores diarios cambian de día a las 8:00 a. m. según la hora de Colombia.",
+      "Todo lo registrado antes de las 8:00 a. m. permanece dentro del día de juego anterior.",
+      "El mismo corte se aplica en Windows y Android sin depender de la zona horaria configurada en cada dispositivo.",
+    ],
+  },
   {
     version: "1.18.0",
     date: "21 de septiembre de 2026",
@@ -709,7 +719,7 @@ export default function App() {
   const currentPointRoundPoints = useMemo(() => currentPointRoundActions.reduce((sum, action) => sum + action.points, 0), [currentPointRoundActions]);
   const visiblePointRounds = useMemo(() => state.pointRounds.filter((record) => isTeamMode ? record.trackingMode === "team" : record.trackingMode === "solo" && record.characterId === activeCharacter.id), [activeCharacter.id, isTeamMode, state.pointRounds]);
   const savedPointRoundTotal = useMemo(() => visiblePointRounds.reduce((sum, record) => sum + record.points, 0), [visiblePointRounds]);
-  const todayKey = localDateKey(now);
+  const todayKey = gameDayKey(now);
   const activitySummary = useMemo(() => activityHistorySummary(state.activityHistory, new Date(`${todayKey}T12:00:00`)), [state.activityHistory, todayKey]);
   const activityCount = (activity: Activity, vision?: Vision) => activitySummary.ranking.find((item) => item.key === `${vision?.id ?? "pro"}:${activity.id}`) ?? { todayCount: 0, count: 0 };
   const breakdown = useMemo(() => buildBreakdown(currentActions), [currentActions]);
@@ -1775,7 +1785,7 @@ export default function App() {
 
             <section className="activity-insights-grid" aria-label={tx("Estadísticas de recompensas", "Reward statistics")}>
               <article className="daily-points-panel panel">
-                <div className="panel-title"><div><span className="eyebrow"><Clock3 size={14} /> {tx("PUNTUACIÓN POR DÍA", "POINTS BY DAY")}</span><h2>{tx("Actividad de hoy", "Today's activity")}</h2></div><span className="daily-date-badge">{new Date(`${todayKey}T12:00:00`).toLocaleDateString(english ? "en-US" : "es-CO", { day: "2-digit", month: "short" })}</span></div>
+                <div className="panel-title"><div><span className="eyebrow"><Clock3 size={14} /> {tx("PUNTUACIÓN POR DÍA", "POINTS BY DAY")}</span><h2>{tx("Actividad de hoy", "Today's activity")}</h2><small>{tx("El día del juego cambia a las 8:00 a. m. (hora de Colombia).", "The game day changes at 8:00 a.m. Colombia time.")}</small></div><span className="daily-date-badge">{new Date(`${todayKey}T12:00:00`).toLocaleDateString(english ? "en-US" : "es-CO", { day: "2-digit", month: "short" })}</span></div>
                 <div className="daily-score-cards"><span><small>{tx("Puntos de hoy", "Points today")}</small><strong>{activitySummary.today.points}</strong></span><span><small>{tx("Jefes y recompensas", "Bosses and rewards")}</small><strong>{activitySummary.today.count}</strong></span><span><small>{tx("Puntos históricos", "All-time points")}</small><strong>{activitySummary.totalPoints}</strong></span><span><small>{tx("Registros históricos", "All-time records")}</small><strong>{activitySummary.totalCount}</strong></span></div>
                 {activitySummary.days.length > 0 ? <div className="daily-history-list">{activitySummary.days.slice(0, 7).map((day) => <div key={day.date}><span>{new Date(`${day.date}T12:00:00`).toLocaleDateString(english ? "en-US" : "es-CO", { weekday: "short", day: "2-digit", month: "short" })}</span><strong>{day.points} pts</strong><small>{day.count} {tx("actividades", "activities")}</small></div>)}</div> : <p className="empty-inline">{tx("El primer registro de actividad creará el resumen diario.", "Your first activity will create the daily summary.")}</p>}
               </article>
