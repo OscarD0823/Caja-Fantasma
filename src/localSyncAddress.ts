@@ -36,6 +36,11 @@ export function isValidLocalSyncAddress(value: string) {
   return octets.every((part) => part >= 0 && part <= 255) && port >= 1 && port <= 65_535;
 }
 
+export function localSyncTargetAddressSpace(value: string): "loopback" | "local" {
+  const host = cleanAddress(value).split(":", 1)[0];
+  return host === "localhost" || host.startsWith("127.") ? "loopback" : "local";
+}
+
 export function completeLocalSyncAddress(value: string) {
   if (!isValidLocalSyncAddress(value)) return undefined;
   const parts = splitLocalSyncAddress(value);

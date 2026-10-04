@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import catalog from "../catalog/visions.json" with { type: "json" };
 import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, activityHistorySummary, applyRemoteCatalog, boxStatistics, buildBreakdown, buildPointRoundBreakdown, computeCountdownTransition, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, gameDayKey, overlayVisionName, parseManualBaseline, pointActionsInRound, resolveTransitionDelayMilliseconds, sharedEventTimingFromSettings, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type ActivityHistoryRecord, type BoxRecord, type Catalog, type PersistedState, type PointAction, type Settings } from "../src/model.ts";
 import { overlayDesignSize, whaleCounterLayoutWithinWindow, whaleCounterScaleWithinWindow, whaleScaleWithinWindow } from "../src/overlayGeometry.ts";
-import { completeLocalSyncAddress, isValidLocalSyncAddress, joinLocalSyncAddress, splitLocalSyncAddress } from "../src/localSyncAddress.ts";
+import { completeLocalSyncAddress, isValidLocalSyncAddress, joinLocalSyncAddress, localSyncTargetAddressSpace, splitLocalSyncAddress } from "../src/localSyncAddress.ts";
 import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesModSearch, normalizeModSearch } from "../src/shinyModsCatalog.ts";
 
 const freshState = { ...createInitialCharacterTracking(Date.parse("2026-09-11T00:00:00Z")), actions: [] as PointAction[] };
@@ -17,6 +17,8 @@ assert.equal(completeLocalSyncAddress("http://10.0.0.8:47183/")?.address, "10.0.
 assert.equal(isValidLocalSyncAddress("172.20.10.2:47183"), true);
 assert.equal(isValidLocalSyncAddress("192.168.1.999:47183"), false);
 assert.equal(isValidLocalSyncAddress("192.168.1.20:70000"), false);
+assert.equal(localSyncTargetAddressSpace("127.0.0.1:48183"), "loopback", "La página debe declarar explícitamente el acceso al puente del mismo PC.");
+assert.equal(localSyncTargetAddressSpace("192.168.1.20:48183"), "local", "Una IP de la red debe solicitar acceso a la red local.");
 
 assert.equal(validateCatalog(catalog), true, "El catálogo incluido debe ser válido.");
 assert.equal(sharedVisionId(catalog), catalog.eventTiming.selectedVisionId, "La rueda pública debe ser la que eligió el administrador.");

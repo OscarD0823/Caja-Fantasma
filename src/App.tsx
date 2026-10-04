@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -90,7 +91,7 @@ import {
   validateCatalog,
 } from "./model";
 import { applyPersonalSyncPayload, exportState, importState, loadPersonalSyncUpdatedAt, loadState, mergePersonalSyncPayload, personalDurableHistoryCount, personalHistoryCount, personalSyncPayload, savePersonalSyncUpdatedAt, saveState } from "./storage";
-import { isValidLocalSyncAddress, splitLocalSyncAddress } from "./localSyncAddress";
+import { isValidLocalSyncAddress, localSyncTargetAddressSpace, splitLocalSyncAddress } from "./localSyncAddress";
 import { UI_LANGUAGES, localeForLanguage, translate, type UiLanguage } from "./i18n";
 import type { ShinyModCatalogItem } from "./shinyModsCatalog";
 import { loadWebPersonalBackup, readWebStorageStatus, requestPersistentWebStorage, saveWebPersonalBackup, type WebStorageStatus } from "./webStorage";
@@ -125,6 +126,7 @@ type LocalSyncInfo = { enabled: boolean; address: string; port: number; webAddre
 type LocalSyncSnapshot = { enabled: boolean; revision: number; updatedAt: string; dataJson: string; lastExchangeAt: number; lastMobileUpdateAt: number };
 type LocalSyncAction = "status" | "pull" | "push" | "live";
 type LocalSyncExchange = Omit<LocalSyncSnapshot, "enabled" | "lastMobileUpdateAt"> & { ok: boolean; message: string; catalogJson?: string };
+type LocalNetworkRequestInit = RequestInit & { targetAddressSpace?: "loopback" | "local" };
 type BackgroundSyncStatus = {
   active: boolean;
   connected: boolean;
@@ -177,6 +179,17 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.20.1",
+    date: "4 de octubre de 2026",
+    title: "Página visible y puente web recuperado",
+    items: [
+      "Abrir página web lleva el navegador al frente al minimizar la aplicación de Windows y ahora informa cualquier fallo real del sistema.",
+      "La página solicita correctamente el permiso de red local que requieren los navegadores actuales para comunicarse con el puente del PC.",
+      "Una conexión bloqueada deja de esperar indefinidamente y muestra cómo habilitar el permiso sin borrar ni reemplazar datos personales.",
+      "Dispositivos explica el recorrido Celular ↔ PC ↔ Página y recuerda que la aplicación de Windows debe permanecer abierta.",
+    ],
+  },
   {
     version: "1.20.0",
     date: "3 de octubre de 2026",
@@ -896,6 +909,7 @@ export default function App() {
     }
     localSyncInFlightRef.current = true;
     if (showBusy) setLocalSyncBusy(true);
+    if (action === "status") setLocalSyncStatus(tx("Conectando con el puente local del PC…", "Connecting to the PC local bridge…"));
     const resumeBackgroundSync = IS_ANDROID && state.settings.localSyncLiveEnabled && (action === "pull" || action === "push");
     let backgroundDataJson = personalSyncJsonRef.current;
     let backgroundUpdatedAt = personalSyncUpdatedAtRef.current;
@@ -913,11 +927,38 @@ export default function App() {
         updatedAt: action === "push" || action === "live" ? personalSyncUpdatedAtRef.current : "1970-01-01T00:00:00.000Z",
       };
       const exchange = IS_WEB
-        ? await fetch(`http://${address}/sync`, { method: "POST", mode: "cors", cache: "no-store", headers: { "Content-Type": "text/plain;charset=UTF-8" }, body: JSON.stringify(request) }).then(async (response) => {
-            const result = await response.json() as LocalSyncExchange;
-            if (!response.ok || !result.ok) throw new Error(result.message || `HTTP ${response.status}`);
-            return result;
-          })
+        ? await (async () => {
+            const controller = new AbortController();
+            const timeout = window.setTimeout(() => controller.abort(), 8_000);
+            const init: LocalNetworkRequestInit = {
+              method: "POST",
+              mode: "cors",
+              cache: "no-store",
+              credentials: "omit",
+              headers: { "Content-Type": "text/plain;charset=UTF-8" },
+              body: JSON.stringify(request),
+              signal: controller.signal,
+              // Chromium necesita conocer de antemano que una página HTTPS va a hablar
+              // con el puente privado del PC. Los navegadores antiguos ignoran esta opción.
+              targetAddressSpace: localSyncTargetAddressSpace(address),
+            };
+            try {
+              const response = await fetch(`http://${address}/sync`, init);
+              const result = await response.json() as LocalSyncExchange;
+              if (!response.ok || !result.ok) throw new Error(result.message || `HTTP ${response.status}`);
+              return result;
+            } catch (error) {
+              if (error instanceof Error && error.name === "AbortError") {
+                throw new Error(tx("El navegador no pudo entrar al puente del PC. Mantén Caja Fantasma abierta y permite el acceso a la red local cuando lo solicite.", "The browser could not reach the PC bridge. Keep Caja Fantasma open and allow local network access when prompted."));
+              }
+              if (error instanceof TypeError) {
+                throw new Error(tx("El navegador bloqueó la red local. Permite el acceso de esta página a dispositivos de tu red y vuelve a conectar.", "The browser blocked local network access. Allow this page to access devices on your network and reconnect."));
+              }
+              throw error;
+            } finally {
+              window.clearTimeout(timeout);
+            }
+          })()
         : await invoke<LocalSyncExchange>("mobile_sync_exchange", {
             address,
             pairingCode,
@@ -1750,18 +1791,36 @@ export default function App() {
     else await disable();
   };
 
-  const openExternalAddress = (url: string) => {
-    if (isTauri()) void openUrl(url);
-    else window.open(url, "_blank", "noopener,noreferrer");
+  const openExternalAddress = async (url: string) => {
+    try {
+      if (isTauri()) {
+        await openUrl(url);
+      } else {
+        const opened = window.open(url, "_blank", "noopener,noreferrer");
+        if (!opened) window.location.assign(url);
+      }
+      return true;
+    } catch (error) {
+      setToast(tx(`No se pudo abrir el enlace: ${error instanceof Error ? error.message : String(error)}`, `Could not open the link: ${error instanceof Error ? error.message : String(error)}`));
+      window.setTimeout(() => setToast(""), 4_000);
+      return false;
+    }
   };
 
-  const openRepository = () => openExternalAddress(REPOSITORY_URL);
+  const openRepository = () => void openExternalAddress(REPOSITORY_URL);
 
-  const openAndroidDownload = () => openExternalAddress(ANDROID_APK_URL);
+  const openAndroidDownload = () => void openExternalAddress(ANDROID_APK_URL);
 
-  const openWindowsDownload = () => openExternalAddress(WINDOWS_DOWNLOAD_URL);
+  const openWindowsDownload = () => void openExternalAddress(WINDOWS_DOWNLOAD_URL);
 
-  const openWebApp = () => openExternalAddress(WEB_APP_URL);
+  const openWebApp = () => {
+    void openExternalAddress(WEB_APP_URL).then((opened) => {
+      if (!opened || !isTauri() || IS_ANDROID) return;
+      setToast(tx("Página abierta en tu navegador", "Web app opened in your browser"));
+      window.setTimeout(() => setToast(""), 2_400);
+      window.setTimeout(() => void getCurrentWindow().minimize().catch(() => undefined), 180);
+    });
+  };
 
   const onImport = async (file?: File) => {
     if (!file) return;
@@ -2152,6 +2211,7 @@ export default function App() {
               </div>
               {state.settings.localSyncLiveEnabled && <p className="local-live-sync-note"><RadioTower size={15} /> {tx(IS_ANDROID ? "Android mostrará una notificación silenciosa mientras trabaja en segundo plano. Si un dispositivo aparece vacío, se conserva la copia que tenga historial." : "Debe estar activada en ambos dispositivos. Si uno aparece vacío, se conserva automáticamente la copia que tenga historial.", IS_ANDROID ? "Android shows a silent notification while working in the background. If a device appears empty, the copy containing history is preserved." : "Enable it on both devices. If one appears empty, the copy containing history is preserved automatically.")}</p>}
               <p className="local-sync-message" role="status">{localSyncStatus}</p>
+              {IS_WEB && <p className="local-live-sync-note"><RadioTower size={15} /> {tx("Recorrido de los datos: Celular ↔ PC ↔ Página. Caja Fantasma debe permanecer abierta en este mismo PC y el navegador debe tener permiso de red local.", "Data path: Phone ↔ PC ↔ Web. Caja Fantasma must stay open on this same PC and the browser must have local network permission.")}</p>}
               <small>{tx("Usa una red Wi‑Fi de confianza o el anclaje USB del teléfono. Los cambios públicos del administrador también viajan del PC al celular mientras estén conectados.", "Use a trusted Wi-Fi network or USB tethering. Public administrator changes also travel from the PC to the phone while connected.")}</small>
             </article>
 
