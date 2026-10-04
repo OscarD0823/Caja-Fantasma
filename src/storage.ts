@@ -1,6 +1,7 @@
 import defaultCatalog from "../catalog/visions.json";
 import type { ActivityHistoryRecord, BoxRecord, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, PointRoundRecord, PointRoundTrigger, ShinyModRecord, WhaleCounterStyle } from "./model";
 import { VISION_CYCLE_WAIT_STARTED_AT, applyRemoteCatalog, clampNumber, createInitialCharacterTracking, resolveTransitionDelayMilliseconds, sharedVisionId, validateCatalog } from "./model";
+import { isUiLanguage } from "./i18n";
 
 const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
 const SAFETY_BACKUP_KEY = "caja-fantasma.once-human.safety-backup.v1";
@@ -263,7 +264,7 @@ export function loadState(): PersistedState {
     if (!parsed || parsed.schemaVersion !== 1 || !validateCatalog(parsed.catalog)) return initialState();
     const fresh = initialState();
     const settings = { ...fresh.settings, ...(parsed.settings ?? {}), notificationsEnabled: false };
-    settings.uiLanguage = parsed.settings?.uiLanguage === "en" ? "en" : "es";
+    settings.uiLanguage = isUiLanguage(parsed.settings?.uiLanguage) ? parsed.settings.uiLanguage : "es";
     if ((parsed.settings?.timingPresetVersion ?? 0) < 4) {
       const timing = fresh.catalog.eventTiming;
       settings.selectedVisionId = timing?.selectedVisionId ?? "gravity";
@@ -393,7 +394,7 @@ export function importState(text: string): PersistedState {
     settings: {
       ...fresh.settings,
       ...(parsed.settings ?? {}),
-      uiLanguage: parsed.settings?.uiLanguage === "en" ? "en" : "es",
+      uiLanguage: isUiLanguage(parsed.settings?.uiLanguage) ? parsed.settings.uiLanguage : "es",
       selectedVisionId: sharedVisionId(catalog),
       overlayScale: clampNumber(Number(parsed.settings?.overlayScale) || 1, .2, 1.5),
       overlayAddonScale: clampNumber(Number(parsed.settings?.overlayAddonScale) || 1, .2, 1),

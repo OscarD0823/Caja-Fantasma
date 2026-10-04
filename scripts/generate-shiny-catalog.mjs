@@ -4,8 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const SOURCE_URL = "https://wikily.gg/es-la/once-human/mods/";
 const EXPECTED_COUNTS = {
-  total: 1_825,
-  legacy: 207,
+  total: 1_618,
   normal: 809,
   shiny: 809,
 };
@@ -82,7 +81,7 @@ function catalogGroup(entry) {
 
 function normalizeEntry(entry, index) {
   const group = catalogGroup(entry);
-  const system = entry.system === "legacy" ? "legacy" : "new";
+  const system = "new";
   const isCatalogShiny = entry.is_shiny === true;
   const rawId = String(entry.id).replace(/[\[\]]/g, "").replace(/[^a-zA-Z0-9]+/g, "-");
   const baseEnglishName = String(entry.english_name ?? "").replace(/\s*<.*>\s*$/, "").trim();
@@ -107,11 +106,13 @@ function normalizeEntry(entry, index) {
 const response = await fetch(SOURCE_URL);
 if (!response.ok) throw new Error(`La fuente respondió HTTP ${response.status}.`);
 const rawEntries = decodeEmbeddedMods(await response.text());
-const records = rawEntries.map(normalizeEntry);
+// El sistema anterior quedó obsoleto con la renovación de enero de 2026.
+// El catálogo distribuido contiene solamente los módulos actuales y sus
+// equivalentes Brillantes; los seguimientos personales existentes no se tocan.
+const records = rawEntries.filter((entry) => entry.system !== "legacy").map(normalizeEntry);
 
 const counts = {
   total: records.length,
-  legacy: records.filter((entry) => entry.system === "legacy").length,
   normal: records.filter((entry) => entry.system === "new" && !entry.isCatalogShiny).length,
   shiny: records.filter((entry) => entry.system === "new" && entry.isCatalogShiny).length,
 };

@@ -276,16 +276,14 @@ const platformSplit = splitPlatformCarryover(platformActions, Date.parse("2026-0
 assert.deepEqual(platformSplit.completedAttempt.map((action) => action.id), ["old"]);
 assert.deepEqual(platformSplit.carryOver.map((action) => action.id), ["new-1", "new-2"]);
 
-assert.equal(SHINY_MOD_CATALOG.length, 1_825, "El catálogo debe contener los 1.825 registros exactos.");
+assert.equal(SHINY_MOD_CATALOG.length, 1_618, "El catálogo debe contener los 1.618 registros del sistema actual.");
 assert.deepEqual(SHINY_MOD_CATALOG_META, {
   sourceUrl: "https://wikily.gg/es-la/once-human/mods/",
   sourceCheckedAt: SHINY_MOD_CATALOG_META.sourceCheckedAt,
-  total: 1_825,
-  legacy: 207,
+  total: 1_618,
   normal: 809,
   shiny: 809,
 });
-assert.equal(SHINY_MOD_CATALOG.filter((item) => item.system === "legacy").length, 207);
 assert.equal(SHINY_MOD_CATALOG.filter((item) => item.system === "new" && !item.isCatalogShiny).length, 809);
 assert.equal(SHINY_MOD_CATALOG.filter((item) => item.system === "new" && item.isCatalogShiny).length, 809);
 assert.equal(new Set(SHINY_MOD_CATALOG.map((item) => item.id)).size, SHINY_MOD_CATALOG.length);

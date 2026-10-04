@@ -1,6 +1,6 @@
 import catalogData from "../catalog/shiny-mods.json" with { type: "json" };
 
-export type ShinyModSystem = "legacy" | "new";
+export type ShinyModSystem = "new";
 
 export type ShinyModCatalogItem = {
   id: string;
@@ -34,7 +34,6 @@ type ShinyCatalogDocument = {
   sourceCheckedAt: string;
   counts: {
     total: number;
-    legacy: number;
     normal: number;
     shiny: number;
   };
@@ -102,8 +101,8 @@ export function catalogStatusLabel(item: Pick<ShinyModCatalogItem, "levelLabel">
   return item.levelLabel;
 }
 
-export function catalogOriginLabel(item: Pick<ShinyModCatalogItem, "system">) {
-  return item.system === "legacy" ? "Sistema anterior" : "Sistema 2.0";
+export function catalogOriginLabel(_item: Pick<ShinyModCatalogItem, "system">) {
+  return "Sistema actual";
 }
 
 export function normalizeModSearch(value: string) {

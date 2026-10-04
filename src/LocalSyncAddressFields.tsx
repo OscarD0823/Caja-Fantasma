@@ -1,15 +1,16 @@
 import { useRef } from "react";
 import type { ClipboardEvent, KeyboardEvent } from "react";
 import { completeLocalSyncAddress, isValidLocalSyncAddress, joinLocalSyncAddress, splitLocalSyncAddress, type LocalSyncAddressParts } from "./localSyncAddress";
+import type { UiLanguage } from "./i18n";
 
 type Props = {
   value: string;
   onChange: (value: string) => void;
-  language?: "es" | "en";
+  language?: UiLanguage;
 };
 
 export default function LocalSyncAddressFields({ value, onChange, language = "es" }: Props) {
-  const english = language === "en";
+  const english = language !== "es";
   const parts = splitLocalSyncAddress(value);
   const octetRefs = useRef<Array<HTMLInputElement | null>>([]);
   const portRef = useRef<HTMLInputElement>(null);

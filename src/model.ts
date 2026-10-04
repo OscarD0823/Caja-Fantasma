@@ -1,3 +1,5 @@
+import type { UiLanguage } from "./i18n";
+
 export type Activity = {
   id: string;
   name: string;
@@ -123,7 +125,7 @@ export type ShinyModRecord = {
 };
 
 export type Settings = {
-  uiLanguage: "es" | "en";
+  uiLanguage: UiLanguage;
   selectedVisionId: string;
   waitMinutes: number;
   activeMinutes: number;
@@ -198,7 +200,7 @@ export type CountdownTransitionSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.18.2";
+export const APP_VERSION = "1.20.0";
 export const AUTHOR = "OscarD0823";
 export const DEFAULT_CHARACTER_ID = "character-main";
 export const GAME_DAY_TIME_ZONE = "America/Bogota";

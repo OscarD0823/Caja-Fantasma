@@ -9,6 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 const LOCAL_SYNC_PROTOCOL: u8 = 1;
 const DEFAULT_LOCAL_SYNC_PORT: u16 = 47_183;
+const DEFAULT_WEB_SYNC_PORT: u16 = 48_183;
 const MAX_SYNC_BYTES: usize = 8 * 1024 * 1024;
 const MAX_CATALOG_BYTES: usize = 512 * 1024;
 
@@ -32,6 +33,8 @@ pub struct LocalSyncInfo {
     pub enabled: bool,
     pub address: String,
     pub port: u16,
+    pub web_address: String,
+    pub web_port: u16,
     pub pairing_code: String,
     pub revision: u64,
 }
@@ -528,6 +531,7 @@ mod desktop {
         snapshot: Arc<Mutex<LocalSyncSnapshot>>,
         address: String,
         port: u16,
+        web_port: u16,
     }
 
     static LOCAL_SYNC_SERVER: OnceLock<ServerState> = OnceLock::new();
@@ -552,6 +556,78 @@ mod desktop {
             }
         }
         Err("No se encontró un puerto disponible para conectar el celular.".into())
+    }
+
+    fn bind_web_listener() -> Result<(TcpListener, u16), String> {
+        for port in DEFAULT_WEB_SYNC_PORT..=DEFAULT_WEB_SYNC_PORT + 10 {
+            if let Ok(listener) = TcpListener::bind(("127.0.0.1", port)) {
+                listener.set_nonblocking(true).map_err(|error| error.to_string())?;
+                return Ok((listener, port));
+            }
+        }
+        Err("No se encontró un puerto disponible para conectar la página web.".into())
+    }
+
+    fn write_http_response(stream: &mut TcpStream, status: &str, origin: &str, body: &str) {
+        let response = format!(
+            "HTTP/1.1 {status}\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: {origin}\r\nAccess-Control-Allow-Methods: POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nAccess-Control-Allow-Private-Network: true\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+        let _ = stream.write_all(response.as_bytes());
+        let _ = stream.flush();
+    }
+
+    fn process_web_client(mut stream: TcpStream, peer_address: SocketAddr, raw_port: u16) {
+        let timeout = Some(Duration::from_secs(4));
+        let _ = stream.set_nonblocking(false);
+        let _ = stream.set_read_timeout(timeout);
+        let _ = stream.set_write_timeout(timeout);
+        if !peer_address.ip().is_loopback() { return; }
+
+        let mut request_bytes = Vec::new();
+        let mut chunk = [0_u8; 8_192];
+        let mut header_end = None;
+        let mut content_length = 0usize;
+        loop {
+            let Ok(read) = stream.read(&mut chunk) else { return; };
+            if read == 0 { break; }
+            request_bytes.extend_from_slice(&chunk[..read]);
+            if request_bytes.len() > MAX_SYNC_BYTES + 16_384 { return; }
+            if header_end.is_none() {
+                header_end = request_bytes.windows(4).position(|window| window == b"\r\n\r\n").map(|index| index + 4);
+                if let Some(end) = header_end {
+                    let headers = String::from_utf8_lossy(&request_bytes[..end]);
+                    content_length = headers.lines().find_map(|line| line.strip_prefix("Content-Length:").or_else(|| line.strip_prefix("content-length:"))).and_then(|value| value.trim().parse().ok()).unwrap_or(0);
+                }
+            }
+            if let Some(end) = header_end {
+                if request_bytes.len() >= end.saturating_add(content_length) { break; }
+            }
+        }
+        let Some(end) = header_end else { return; };
+        let headers = String::from_utf8_lossy(&request_bytes[..end]);
+        let origin = headers.lines().find_map(|line| line.strip_prefix("Origin:").or_else(|| line.strip_prefix("origin:"))).map(str::trim).unwrap_or("");
+        let allowed_origin = matches!(origin, "https://oscard0823.github.io" | "http://localhost:1420" | "http://127.0.0.1:1420");
+        let response_origin = if allowed_origin { origin } else { "null" };
+        if headers.starts_with("OPTIONS ") {
+            write_http_response(&mut stream, "204 No Content", response_origin, "");
+            return;
+        }
+        if !allowed_origin || !headers.starts_with("POST /sync ") {
+            write_http_response(&mut stream, "403 Forbidden", response_origin, r#"{"ok":false,"message":"Origen web no autorizado."}"#);
+            return;
+        }
+        let body_end = end.saturating_add(content_length).min(request_bytes.len());
+        let request = serde_json::from_slice::<LocalSyncRequest>(&request_bytes[end..body_end]);
+        let exchange = match request {
+            Ok(request) if request.protocol == LOCAL_SYNC_PROTOCOL => mobile_sync_exchange_blocking(
+                format!("127.0.0.1:{raw_port}"), request.pairing_code, request.action,
+                request.known_revision, request.data_json, request.updated_at,
+            ).unwrap_or_else(error_exchange),
+            _ => error_exchange("La solicitud de la página no es válida.".into()),
+        };
+        let body = serde_json::to_string(&exchange).unwrap_or_else(|_| r#"{"ok":false,"message":"No se pudo preparar la respuesta."}"#.into());
+        write_http_response(&mut stream, if exchange.ok { "200 OK" } else { "400 Bad Request" }, response_origin, &body);
     }
 
     fn error_exchange(message: String) -> LocalSyncExchange {
@@ -623,13 +699,20 @@ mod desktop {
             snapshot.last_exchange_at = exchange_at;
             match request.action {
                 LocalSyncAction::Push => {
-                    if request.updated_at != snapshot.updated_at
-                        || request.data_json != snapshot.data_json
-                    {
+                    // Una transferencia manual también combina los historiales conocidos. Así,
+                    // un navegador recién abierto o un teléfono atrasado nunca puede borrar la
+                    // copia más completa del PC. Los payloads antiguos se conservan como reemplazo
+                    // por compatibilidad con clientes previos al formato de historial.
+                    let protected_data = merge_live_personal_payloads(
+                        &snapshot.data_json,
+                        &request.data_json,
+                        true,
+                    ).unwrap_or_else(|_| request.data_json.clone());
+                    if request.updated_at != snapshot.updated_at || protected_data != snapshot.data_json {
                         snapshot.revision = snapshot.revision.saturating_add(1);
                     }
                     snapshot.updated_at = request.updated_at;
-                    snapshot.data_json = request.data_json;
+                    snapshot.data_json = protected_data;
                     snapshot.last_mobile_update_at = exchange_at;
                 }
                 LocalSyncAction::Auto if request.updated_at > snapshot.updated_at => {
@@ -696,6 +779,7 @@ mod desktop {
         live_enabled: bool,
     ) -> Result<ServerState, String> {
         let (listener, port) = bind_listener()?;
+        let (web_listener, web_port) = bind_web_listener()?;
         let state = ServerState {
             enabled: Arc::new(AtomicBool::new(true)),
             live_enabled: Arc::new(AtomicBool::new(live_enabled)),
@@ -711,6 +795,7 @@ mod desktop {
             })),
             address: local_ip_address(),
             port,
+            web_port,
         };
         let thread_state = state.clone();
         thread::Builder::new()
@@ -727,6 +812,16 @@ mod desktop {
                 }
             })
             .map_err(|error| format!("No se pudo iniciar la conexión local: {error}"))?;
+        thread::Builder::new()
+            .name("caja-fantasma-web-bridge".into())
+            .spawn(move || loop {
+                match web_listener.accept() {
+                    Ok((stream, peer_address)) => process_web_client(stream, peer_address, port),
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => thread::sleep(Duration::from_millis(90)),
+                    Err(_) => thread::sleep(Duration::from_millis(250)),
+                }
+            })
+            .map_err(|error| format!("No se pudo iniciar el puente web: {error}"))?;
         Ok(state)
     }
 
@@ -740,6 +835,8 @@ mod desktop {
             enabled: state.enabled.load(Ordering::Relaxed),
             address: format!("{}:{}", state.address, state.port),
             port: state.port,
+            web_address: format!("127.0.0.1:{}", state.web_port),
+            web_port: state.web_port,
             pairing_code: state
                 .pairing_code
                 .lock()
@@ -989,6 +1086,23 @@ mod tests {
         )
         .expect("the local server should start");
         let address = format!("127.0.0.1:{}", info.port);
+        let web_address = format!("127.0.0.1:{}", info.web_port);
+        let web_body = serde_json::to_string(&LocalSyncRequest {
+            protocol: LOCAL_SYNC_PROTOCOL,
+            pairing_code: code.clone(),
+            action: LocalSyncAction::Status,
+            known_revision: 0,
+            updated_at: "1970-01-01T00:00:00.000Z".into(),
+            data_json: "{}".into(),
+        }).expect("the browser request should serialize");
+        let mut web_stream = TcpStream::connect(web_address).expect("the loopback web bridge should accept connections");
+        web_stream.set_read_timeout(Some(Duration::from_secs(4))).expect("web timeout");
+        write!(web_stream, "POST /sync HTTP/1.1\r\nHost: 127.0.0.1\r\nOrigin: https://oscard0823.github.io\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", web_body.len(), web_body).expect("the HTTP request should be written");
+        let mut web_response = String::new();
+        web_stream.read_to_string(&mut web_response).expect("the HTTP response should be readable");
+        assert!(web_response.starts_with("HTTP/1.1 200 OK"));
+        assert!(web_response.contains("Access-Control-Allow-Private-Network: true"));
+        assert!(web_response.contains("\"ok\":true"));
         let socket = local_socket_address(&address).expect("the loopback address should be valid");
         let mut delayed_stream = TcpStream::connect_timeout(&socket, Duration::from_secs(4))
             .expect("the delayed client should connect");
@@ -1188,7 +1302,7 @@ mod tests {
         .expect("an empty live payload must not erase the acknowledged PC history");
         assert_json_eq(&protected_pc.data_json, phone_history);
 
-        let explicit_empty = mobile_sync_exchange_blocking(
+        let protected_manual_push = mobile_sync_exchange_blocking(
             address.clone(),
             code.clone(),
             LocalSyncAction::Push,
@@ -1196,8 +1310,8 @@ mod tests {
             empty_personal.into(),
             "2026-09-13T10:12:00.000Z".into(),
         )
-        .expect("the confirmed manual Phone to PC action must remain authoritative");
-        assert_eq!(explicit_empty.data_json, empty_personal);
+        .expect("a manual push must also protect an existing nonempty history");
+        assert_json_eq(&protected_manual_push.data_json, phone_history);
 
         desktop::update(
             "{\"points\":4}".into(),
