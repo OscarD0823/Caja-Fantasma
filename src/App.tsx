@@ -62,6 +62,8 @@ import {
   DEFAULT_CHARACTER_ID,
   REMOTE_CATALOG_URL,
   REPOSITORY_URL,
+  WEB_APP_URL,
+  WINDOWS_DOWNLOAD_URL,
   actionCharacterIds,
   activityHistorySummary,
   applyRemoteCatalog,
@@ -1748,15 +1750,18 @@ export default function App() {
     else await disable();
   };
 
-  const openRepository = () => {
-    if (isTauri() && !IS_ANDROID) void openUrl(REPOSITORY_URL);
-    else window.open(REPOSITORY_URL, "_blank", "noopener,noreferrer");
+  const openExternalAddress = (url: string) => {
+    if (isTauri()) void openUrl(url);
+    else window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  const openAndroidDownload = () => {
-    if (isTauri() && !IS_ANDROID) void openUrl(ANDROID_APK_URL);
-    else window.open(ANDROID_APK_URL, "_blank", "noopener,noreferrer");
-  };
+  const openRepository = () => openExternalAddress(REPOSITORY_URL);
+
+  const openAndroidDownload = () => openExternalAddress(ANDROID_APK_URL);
+
+  const openWindowsDownload = () => openExternalAddress(WINDOWS_DOWNLOAD_URL);
+
+  const openWebApp = () => openExternalAddress(WEB_APP_URL);
 
   const onImport = async (file?: File) => {
     if (!file) return;
@@ -2152,7 +2157,14 @@ export default function App() {
 
             {IS_WEB && <article className="backup-panel panel"><div><span className="eyebrow">{tx("ALMACENAMIENTO WEB", "WEB STORAGE")}</span><h2>{tx("Copia local recuperable", "Recoverable local copy")}</h2><p>{tx("Se guarda en localStorage e IndexedDB y la aplicación queda en caché para abrir sin conexión. No se sube a ningún servidor.", "Data is stored in localStorage and IndexedDB, and the app shell is cached for offline use. Nothing is uploaded to a server.")}</p></div><div><span className="version-current-badge">{webStorageStatus?.persisted ? tx("PROTEGIDO", "PERSISTENT") : tx("LOCAL", "LOCAL")}</span><button type="button" className="secondary" onClick={() => void requestPersistentWebStorage().then(setWebStorageStatus)}><ShieldCheck size={17} /> {tx("Proteger almacenamiento", "Protect storage")}</button></div></article>}
 
-            {!IS_ANDROID && <article className="android-download-panel panel"><div><span className="eyebrow"><Download size={15} /> {tx("APLICACIÓN COMPAÑERA", "COMPANION APP")}</span><h2>{tx("Instalar en Android", "Install on Android")}</h2><p>{tx("Descarga la APK firmada una sola vez. Después recibirá las siguientes actualizaciones dentro de la aplicación.", "Download the signed APK once. Future updates will then arrive inside the app.")}</p></div><button type="button" className="primary" onClick={openAndroidDownload}><Download size={18} /> {tx("Descargar APK", "Download APK")} v{APP_VERSION}</button></article>}
+            <article className="android-download-panel download-hub-panel panel">
+              <div><span className="eyebrow"><Download size={15} /> {tx("CAJA FANTASMA EN TUS DISPOSITIVOS", "CAJA FANTASMA ON YOUR DEVICES")}</span><h2>{tx("Descargas y versión web", "Downloads and web app")}</h2><p>{tx("Abre la última publicación oficial para descargar Windows o Android, o entra directamente a la página gratuita.", "Open the latest official release for Windows or Android, or launch the free web app directly.")}</p></div>
+              <div className="platform-download-actions">
+                {(IS_ANDROID || IS_WEB) && <button type="button" className="primary" onClick={openWindowsDownload}><MonitorUp size={18} /> {tx("Descargar para PC", "Download for PC")}</button>}
+                {!IS_ANDROID && <button type="button" className="primary" onClick={openAndroidDownload}><Smartphone size={18} /> {tx("Descargar APK", "Download APK")}</button>}
+                {!IS_WEB && <button type="button" className="secondary" onClick={openWebApp}><ExternalLink size={18} /> {tx("Abrir página web", "Open web app")}</button>}
+              </div>
+            </article>
           </section>
         )}
 

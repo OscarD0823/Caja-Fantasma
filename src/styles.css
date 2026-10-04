@@ -611,6 +611,8 @@ input { width: 100%; min-height: 34px; margin-top: 5px; padding: 0 10px; border:
 .local-device-sync > small { color: #668087; font-size: 8px; line-height: 1.5; }
 .android-download-panel { min-height: 126px; margin-top: 15px; padding: 23px; display: flex; align-items: center; justify-content: space-between; gap: 18px; background: radial-gradient(circle at 90% 50%, rgba(93, 220, 204, .09), transparent 33%), rgba(7, 24, 33, .86); }
 .android-download-panel button { flex: 0 0 auto; }
+.platform-download-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
+.platform-download-actions button { white-space: nowrap; }
 .spin { animation: spin 1s linear infinite; }
 .character-manager { margin-top: 15px; padding: 23px; }
 .characters-page .character-manager { margin-top: 0; }
@@ -937,6 +939,7 @@ html.overlay-document, body.overlay-document, body.overlay-document #root { over
   .history-record { grid-template-columns: 43px 1fr; }
   .history-record details { grid-column: 2; }
   .catalog-toolbar, .backup-panel, .android-download-panel { align-items: stretch; flex-direction: column; }
+  .platform-download-actions { justify-content: flex-start; }
   .device-version-panel { grid-template-columns: 50px minmax(0, 1fr); }
   .version-current-badge { grid-column: 2; justify-self: start; }
   .public-catalog-heading, .public-catalog-actions { align-items: flex-start; flex-direction: column; }
