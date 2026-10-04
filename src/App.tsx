@@ -191,6 +191,16 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 
 const CHANGELOG = [
   {
+    version: "1.20.3",
+    date: "4 de octubre de 2026",
+    title: "Una sola conexión para PC, página y Android",
+    items: [
+      "La página y Android usan simultáneamente la misma IP, el mismo puerto y el mismo código mostrados por Windows.",
+      "El puerto principal acepta tanto la conexión directa de Android como la conexión HTTP protegida del navegador.",
+      "El puente anterior de la página continúa disponible durante la transición para no interrumpir conexiones guardadas.",
+    ],
+  },
+  {
     version: "1.20.2",
     date: "4 de octubre de 2026",
     title: "Arranque de Windows reparado",
@@ -859,11 +869,6 @@ export default function App() {
   useEffect(() => {
     document.documentElement.lang = language;
   }, [language]);
-
-  useEffect(() => {
-    if (!IS_WEB || state.settings.localSyncAddress) return;
-    commitState((current) => ({ ...current, settings: { ...current.settings, localSyncAddress: "127.0.0.1:48183" } }));
-  }, [commitState, state.settings.localSyncAddress]);
 
   const acceptLocalSyncSnapshot = useCallback((snapshot: Pick<LocalSyncSnapshot, "updatedAt" | "dataJson">, force = false, mode: "merge" | "replace" = "merge") => {
     const remoteUpdatedAt = Date.parse(snapshot.updatedAt);
@@ -2217,14 +2222,15 @@ export default function App() {
               {!IS_ANDROID && !IS_WEB ? <>
                 <div className="local-sync-desktop-grid">
                   <div><small>{tx("IP DEL PC", "PC IP")}</small><strong>{localSyncInfo ? desktopLocalAddress.octets.join(".") : tx("Se mostrará al activar", "Shown after enabling")}</strong></div>
-                  <div><small>{tx("PUERTO", "PORT")}</small><strong>{localSyncInfo?.port ?? "—"}</strong></div>
-                  <div><small>{tx("PUERTO WEB LOCAL", "LOCAL WEB PORT")}</small><strong>{localSyncInfo?.webPort ?? "—"}</strong></div>
+                  <div><small>{tx("PUERTO WEB Y ANDROID", "WEB AND ANDROID PORT")}</small><strong>{localSyncInfo?.port ?? "—"}</strong></div>
                   <div><small>{tx("CÓDIGO DE CONEXIÓN", "PAIRING CODE")}</small><strong className="pairing-code">{state.settings.localSyncCode || "—— —— ——"}</strong></div>
                 </div>
                 <div className="local-sync-actions"><button type="button" className={state.settings.localSyncEnabled ? "secondary" : "primary"} onClick={() => commitState((current) => { const enabling = !current.settings.localSyncEnabled; return { ...current, settings: { ...current.settings, localSyncEnabled: enabling, localSyncCode: enabling && !/^\d{6}$/.test(current.settings.localSyncCode) ? createPairingCode() : current.settings.localSyncCode } }; })}>{state.settings.localSyncEnabled ? <WifiOff size={17} /> : <Wifi size={17} />}{state.settings.localSyncEnabled ? tx("Detener conexión", "Stop connection") : tx("Compartir con el celular", "Share with phone")}</button>{state.settings.localSyncEnabled && <button type="button" className="secondary" onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncCode: createPairingCode() } }))}><RefreshCw size={16} /> {tx("Cambiar código", "Change code")}</button>}</div>
               </> : <>
-                {IS_WEB && !state.settings.localSyncAddress && <button type="button" className="secondary compact" onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncAddress: "127.0.0.1:48183" } }))}>{tx("Usar este PC", "Use this PC")}</button>}
-                <div className="local-sync-mobile-fields"><LocalSyncAddressFields language={language} value={state.settings.localSyncAddress} onChange={(address) => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncAddress: address.slice(0, 80) } }))} /><label className="local-pairing-field">{tx("Código de 6 números", "Six-digit code")}<input inputMode="numeric" maxLength={6} value={state.settings.localSyncCode} placeholder="000000" onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncCode: event.target.value.replace(/\D/g, "").slice(0, 6) } }))} /></label></div>
+                <div className="local-sync-mobile-fields">
+                  <LocalSyncAddressFields language={language} value={state.settings.localSyncAddress} onChange={(address) => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncAddress: address.slice(0, 80) } }))} />
+                  <label className="local-pairing-field">{tx("Código de 6 números", "Six-digit code")}<input inputMode="numeric" maxLength={6} value={state.settings.localSyncCode} placeholder="000000" onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncCode: event.target.value.replace(/\D/g, "").slice(0, 6) } }))} /></label>
+                </div>
                 <div className="local-sync-actions"><button type="button" disabled={localSyncBusy} className={state.settings.localSyncEnabled ? "secondary" : "primary"} onClick={() => { const enabling = !state.settings.localSyncEnabled; if (enabling && (!localSyncAddressReady || !/^\d{6}$/.test(state.settings.localSyncCode))) { setLocalSyncStatus(tx("Completa los cuatro bloques de la IP, el puerto y el código del PC", "Enter all four IP blocks, the port, and the PC code")); return; } commitState((current) => ({ ...current, settings: { ...current.settings, localSyncEnabled: enabling } })); if (enabling) window.setTimeout(() => void exchangeWithComputer("status"), 0); }}>{state.settings.localSyncEnabled ? <WifiOff size={17} /> : <Wifi size={17} />}{state.settings.localSyncEnabled ? tx("Desconectar", "Disconnect") : tx("Conectar con el PC", "Connect to PC")}</button>{IS_WEB && state.settings.localSyncEnabled && <button type="button" disabled={localSyncBusy} className="secondary" onClick={() => void exchangeWithComputer("status")}><RefreshCw size={16} /> {tx("Volver a conectar", "Reconnect")}</button>}</div>
                 {state.settings.localSyncEnabled && <div className="local-sync-direction-grid">
                   <button type="button" className="secondary" disabled={localSyncBusy} onClick={() => { if (window.confirm(tx("Los datos personales de este dispositivo se reemplazarán por los datos actuales del PC. ¿Continuar?", "This device's personal data will be replaced with the current PC data. Continue?"))) void exchangeWithComputer("pull"); }}><Download size={18} /><span><strong>{tx(IS_WEB ? "PC → Página" : "PC → Celular", IS_WEB ? "PC → Web" : "PC → Phone")}</strong><small>{tx("Traer los datos del PC", "Get data from the PC")}</small></span></button>
@@ -2238,7 +2244,7 @@ export default function App() {
               </div>
               {state.settings.localSyncLiveEnabled && <p className="local-live-sync-note"><RadioTower size={15} /> {tx(IS_ANDROID ? "Android mostrará una notificación silenciosa mientras trabaja en segundo plano. Si un dispositivo aparece vacío, se conserva la copia que tenga historial." : "Debe estar activada en ambos dispositivos. Si uno aparece vacío, se conserva automáticamente la copia que tenga historial.", IS_ANDROID ? "Android shows a silent notification while working in the background. If a device appears empty, the copy containing history is preserved." : "Enable it on both devices. If one appears empty, the copy containing history is preserved automatically.")}</p>}
               <p className="local-sync-message" role="status">{localSyncStatus}</p>
-              {IS_WEB && <p className="local-live-sync-note"><RadioTower size={15} /> {tx("Recorrido de los datos: Celular ↔ PC ↔ Página. Caja Fantasma debe permanecer abierta en este mismo PC y el navegador debe tener permiso de red local.", "Data path: Phone ↔ PC ↔ Web. Caja Fantasma must stay open on this same PC and the browser must have local network permission.")}</p>}
+              {IS_WEB && <p className="local-live-sync-note"><RadioTower size={15} /> {tx("Usa aquí la misma IP, puerto y código que muestra Windows para Android. Caja Fantasma debe permanecer abierta y el navegador debe tener permiso de red local.", "Use the same IP, port, and code shown by Windows for Android. Caja Fantasma must stay open and the browser must have local network permission.")}</p>}
               <small>{tx("Usa una red Wi‑Fi de confianza o el anclaje USB del teléfono. Los cambios públicos del administrador también viajan del PC al celular mientras estén conectados.", "Use a trusted Wi-Fi network or USB tethering. Public administrator changes also travel from the PC to the phone while connected.")}</small>
             </article>
 

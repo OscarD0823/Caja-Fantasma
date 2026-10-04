@@ -579,12 +579,12 @@ mod desktop {
         let _ = stream.flush();
     }
 
-    fn process_web_client(mut stream: TcpStream, peer_address: SocketAddr, raw_port: u16) {
+    fn process_web_client(mut stream: TcpStream, peer_address: SocketAddr, state: &ServerState) {
         let timeout = Some(Duration::from_secs(4));
         let _ = stream.set_nonblocking(false);
         let _ = stream.set_read_timeout(timeout);
         let _ = stream.set_write_timeout(timeout);
-        if !peer_address.ip().is_loopback() {
+        if !is_local_ip(peer_address.ip()) {
             return;
         }
 
@@ -659,16 +659,8 @@ mod desktop {
         let body_end = end.saturating_add(content_length).min(request_bytes.len());
         let request = serde_json::from_slice::<LocalSyncRequest>(&request_bytes[end..body_end]);
         let exchange = match request {
-            Ok(request) if request.protocol == LOCAL_SYNC_PROTOCOL => {
-                mobile_sync_exchange_blocking(
-                    format!("127.0.0.1:{raw_port}"),
-                    request.pairing_code,
-                    request.action,
-                    request.known_revision,
-                    request.data_json,
-                    request.updated_at,
-                )
-                .unwrap_or_else(error_exchange)
+            Ok(request) => {
+                process_sync_request(request, peer_address, state).unwrap_or_else(error_exchange)
             }
             _ => error_exchange("La solicitud de la página no es válida.".into()),
         };
@@ -699,13 +691,114 @@ mod desktop {
         }
     }
 
+    fn process_sync_request(
+        request: LocalSyncRequest,
+        peer_address: SocketAddr,
+        state: &ServerState,
+    ) -> Result<LocalSyncExchange, String> {
+        if !is_local_ip(peer_address.ip()) {
+            return Err("La sincronización solo acepta equipos de la red local.".into());
+        }
+        if !state.enabled.load(Ordering::Relaxed) {
+            return Err("La sincronización está desactivada en el PC.".into());
+        }
+        if request.protocol != LOCAL_SYNC_PROTOCOL {
+            return Err(
+                "La versión de sincronización no coincide. Actualiza ambas aplicaciones.".into(),
+            );
+        }
+        validate_pairing_code(&request.pairing_code)?;
+        let expected_code = state
+            .pairing_code
+            .lock()
+            .map_err(|_| "No se pudo comprobar el código.".to_string())?
+            .clone();
+        if request.pairing_code != expected_code {
+            return Err("El código de conexión no coincide con el del PC.".into());
+        }
+        if request.action == LocalSyncAction::Live && !state.live_enabled.load(Ordering::Relaxed) {
+            return Err("Activa Sincronización en vivo también en el PC.".into());
+        }
+        validate_sync_payload(&request.data_json, &request.updated_at)?;
+        let mut snapshot = state
+            .snapshot
+            .lock()
+            .map_err(|_| "No se pudieron abrir los datos compartidos.".to_string())?;
+        let exchange_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_millis() as u64)
+            .unwrap_or(0);
+        snapshot.last_exchange_at = exchange_at;
+        match request.action {
+            LocalSyncAction::Push => {
+                // Una transferencia manual también combina los historiales conocidos. Así,
+                // una página o un teléfono atrasados nunca pueden borrar la copia más completa.
+                let protected_data =
+                    merge_live_personal_payloads(&snapshot.data_json, &request.data_json, true)
+                        .unwrap_or_else(|_| request.data_json.clone());
+                if request.updated_at != snapshot.updated_at || protected_data != snapshot.data_json
+                {
+                    snapshot.revision = snapshot.revision.saturating_add(1);
+                }
+                snapshot.updated_at = request.updated_at;
+                snapshot.data_json = protected_data;
+                snapshot.last_mobile_update_at = exchange_at;
+            }
+            LocalSyncAction::Auto if request.updated_at > snapshot.updated_at => {
+                let merged =
+                    merge_live_personal_payloads(&snapshot.data_json, &request.data_json, true)?;
+                if merged != snapshot.data_json {
+                    snapshot.data_json = merged;
+                    snapshot.revision = snapshot.revision.saturating_add(1);
+                    snapshot.last_mobile_update_at = exchange_at;
+                }
+                snapshot.updated_at = request.updated_at.max(snapshot.updated_at.clone());
+            }
+            LocalSyncAction::Live => {
+                let acknowledged_current =
+                    request.known_revision != 0 && request.known_revision == snapshot.revision;
+                let merged = merge_live_personal_payloads(
+                    &snapshot.data_json,
+                    &request.data_json,
+                    acknowledged_current,
+                )?;
+                if merged != snapshot.data_json {
+                    snapshot.revision = snapshot.revision.saturating_add(1);
+                    snapshot.updated_at = request.updated_at.max(snapshot.updated_at.clone());
+                    snapshot.data_json = merged;
+                    snapshot.last_mobile_update_at = exchange_at;
+                }
+            }
+            LocalSyncAction::Status | LocalSyncAction::Pull | LocalSyncAction::Auto => {}
+        }
+        let (response_updated_at, response_data_json) = if request.action == LocalSyncAction::Status
+        {
+            ("1970-01-01T00:00:00.000Z".into(), "{}".into())
+        } else {
+            (snapshot.updated_at.clone(), snapshot.data_json.clone())
+        };
+        Ok(LocalSyncExchange {
+            ok: true,
+            message: match request.action {
+                LocalSyncAction::Status => "PC conectado.".into(),
+                LocalSyncAction::Pull => "Datos del PC listos para el dispositivo.".into(),
+                LocalSyncAction::Push => "Datos del dispositivo guardados en el PC.".into(),
+                LocalSyncAction::Live => "Cambios en vivo sincronizados.".into(),
+                LocalSyncAction::Auto => "Datos sincronizados directamente con el PC.".into(),
+            },
+            revision: snapshot.revision,
+            updated_at: response_updated_at,
+            data_json: response_data_json,
+            catalog_json: snapshot.catalog_json.clone(),
+            last_exchange_at: snapshot.last_exchange_at,
+        })
+    }
+
     fn process_client(mut stream: TcpStream, peer_address: SocketAddr, state: &ServerState) {
         let timeout = Some(Duration::from_secs(4));
         let response = (|| -> Result<LocalSyncExchange, String> {
-            // En Windows, un socket aceptado puede conservar el modo no bloqueante del listener.
-            // La conexión ya existe, pero el teléfono puede necesitar unos milisegundos para
-            // enviar la primera línea. Restablecer el modo bloqueante evita WSAEWOULDBLOCK (10035)
-            // y los límites siguientes impiden que un cliente deje detenido el servidor.
+            // Un socket aceptado puede conservar el modo no bloqueante del listener. Volverlo
+            // bloqueante evita WSAEWOULDBLOCK (10035) y los timeouts limitan cada cliente.
             stream
                 .set_nonblocking(false)
                 .map_err(|error| format!("No se pudo preparar la conexión local: {error}"))?;
@@ -715,117 +808,27 @@ mod desktop {
             stream
                 .set_write_timeout(timeout)
                 .map_err(|error| format!("No se pudo preparar el envío local: {error}"))?;
-            if !is_local_ip(peer_address.ip()) {
-                return Err("La sincronización solo acepta equipos de la red local.".into());
-            }
-            if !state.enabled.load(Ordering::Relaxed) {
-                return Err("La sincronización está desactivada en el PC.".into());
-            }
             let body = read_json_line(&mut stream)?;
             let request: LocalSyncRequest = serde_json::from_str(&body)
                 .map_err(|_| "La solicitud del celular no es válida.".to_string())?;
-            if request.protocol != LOCAL_SYNC_PROTOCOL {
-                return Err(
-                    "La versión de sincronización no coincide. Actualiza ambas aplicaciones."
-                        .into(),
-                );
-            }
-            validate_pairing_code(&request.pairing_code)?;
-            let expected_code = state
-                .pairing_code
-                .lock()
-                .map_err(|_| "No se pudo comprobar el código.".to_string())?
-                .clone();
-            if request.pairing_code != expected_code {
-                return Err("El código de conexión no coincide con el del PC.".into());
-            }
-            if request.action == LocalSyncAction::Live
-                && !state.live_enabled.load(Ordering::Relaxed)
-            {
-                return Err("Activa Sincronización en vivo también en el PC.".into());
-            }
-            validate_sync_payload(&request.data_json, &request.updated_at)?;
-            let mut snapshot = state
-                .snapshot
-                .lock()
-                .map_err(|_| "No se pudieron abrir los datos compartidos.".to_string())?;
-            let exchange_at = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|duration| duration.as_millis() as u64)
-                .unwrap_or(0);
-            snapshot.last_exchange_at = exchange_at;
-            match request.action {
-                LocalSyncAction::Push => {
-                    // Una transferencia manual también combina los historiales conocidos. Así,
-                    // un navegador recién abierto o un teléfono atrasado nunca puede borrar la
-                    // copia más completa del PC. Los payloads antiguos se conservan como reemplazo
-                    // por compatibilidad con clientes previos al formato de historial.
-                    let protected_data =
-                        merge_live_personal_payloads(&snapshot.data_json, &request.data_json, true)
-                            .unwrap_or_else(|_| request.data_json.clone());
-                    if request.updated_at != snapshot.updated_at
-                        || protected_data != snapshot.data_json
-                    {
-                        snapshot.revision = snapshot.revision.saturating_add(1);
-                    }
-                    snapshot.updated_at = request.updated_at;
-                    snapshot.data_json = protected_data;
-                    snapshot.last_mobile_update_at = exchange_at;
-                }
-                LocalSyncAction::Auto if request.updated_at > snapshot.updated_at => {
-                    let merged = merge_live_personal_payloads(
-                        &snapshot.data_json,
-                        &request.data_json,
-                        true,
-                    )?;
-                    if merged != snapshot.data_json {
-                        snapshot.data_json = merged;
-                        snapshot.revision = snapshot.revision.saturating_add(1);
-                        snapshot.last_mobile_update_at = exchange_at;
-                    }
-                    snapshot.updated_at = request.updated_at.max(snapshot.updated_at.clone());
-                }
-                LocalSyncAction::Live => {
-                    let acknowledged_current =
-                        request.known_revision != 0 && request.known_revision == snapshot.revision;
-                    let merged = merge_live_personal_payloads(
-                        &snapshot.data_json,
-                        &request.data_json,
-                        acknowledged_current,
-                    )?;
-                    if merged != snapshot.data_json {
-                        snapshot.revision = snapshot.revision.saturating_add(1);
-                        snapshot.updated_at = request.updated_at.max(snapshot.updated_at.clone());
-                        snapshot.data_json = merged;
-                        snapshot.last_mobile_update_at = exchange_at;
-                    }
-                }
-                LocalSyncAction::Status | LocalSyncAction::Pull | LocalSyncAction::Auto => {}
-            }
-            let (response_updated_at, response_data_json) =
-                if request.action == LocalSyncAction::Status {
-                    ("1970-01-01T00:00:00.000Z".into(), "{}".into())
-                } else {
-                    (snapshot.updated_at.clone(), snapshot.data_json.clone())
-                };
-            Ok(LocalSyncExchange {
-                ok: true,
-                message: match request.action {
-                    LocalSyncAction::Status => "PC conectado.".into(),
-                    LocalSyncAction::Pull => "Datos del PC listos para el celular.".into(),
-                    LocalSyncAction::Push => "Datos del celular guardados en el PC.".into(),
-                    LocalSyncAction::Live => "Cambios en vivo sincronizados.".into(),
-                    LocalSyncAction::Auto => "Datos sincronizados directamente con el PC.".into(),
-                },
-                revision: snapshot.revision,
-                updated_at: response_updated_at,
-                data_json: response_data_json,
-                catalog_json: snapshot.catalog_json.clone(),
-                last_exchange_at: snapshot.last_exchange_at,
-            })
+            process_sync_request(request, peer_address, state)
         })()
         .unwrap_or_else(error_exchange);
         let _ = write_json_line(&mut stream, &response);
+    }
+
+    fn process_unified_client(stream: TcpStream, peer_address: SocketAddr, state: &ServerState) {
+        let timeout = Some(Duration::from_secs(4));
+        let _ = stream.set_nonblocking(false);
+        let _ = stream.set_read_timeout(timeout);
+        let mut first_byte = [0_u8; 1];
+        let is_http =
+            matches!(stream.peek(&mut first_byte), Ok(1)) && matches!(first_byte[0], b'O' | b'P');
+        if is_http {
+            process_web_client(stream, peer_address, state);
+        } else {
+            process_client(stream, peer_address, state);
+        }
     }
 
     fn create_server(
@@ -836,7 +839,7 @@ mod desktop {
         live_enabled: bool,
     ) -> Result<ServerState, String> {
         let (listener, port) = bind_listener()?;
-        let (web_listener, web_port) = bind_web_listener()?;
+        let (web_listener, _legacy_web_port) = bind_web_listener()?;
         let state = ServerState {
             enabled: Arc::new(AtomicBool::new(true)),
             live_enabled: Arc::new(AtomicBool::new(live_enabled)),
@@ -852,7 +855,7 @@ mod desktop {
             })),
             address: local_ip_address(),
             port,
-            web_port,
+            web_port: port,
         };
         let thread_state = state.clone();
         thread::Builder::new()
@@ -860,7 +863,7 @@ mod desktop {
             .spawn(move || loop {
                 match listener.accept() {
                     Ok((stream, peer_address)) => {
-                        process_client(stream, peer_address, &thread_state)
+                        process_unified_client(stream, peer_address, &thread_state)
                     }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(90));
@@ -869,11 +872,14 @@ mod desktop {
                 }
             })
             .map_err(|error| format!("No se pudo iniciar la conexión local: {error}"))?;
+        let legacy_web_state = state.clone();
         thread::Builder::new()
             .name("caja-fantasma-web-bridge".into())
             .spawn(move || loop {
                 match web_listener.accept() {
-                    Ok((stream, peer_address)) => process_web_client(stream, peer_address, port),
+                    Ok((stream, peer_address)) => {
+                        process_web_client(stream, peer_address, &legacy_web_state)
+                    }
                     Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
                         thread::sleep(Duration::from_millis(90))
                     }
@@ -894,7 +900,7 @@ mod desktop {
             enabled: state.enabled.load(Ordering::Relaxed),
             address: format!("{}:{}", state.address, state.port),
             port: state.port,
-            web_address: format!("127.0.0.1:{}", state.web_port),
+            web_address: format!("{}:{}", state.address, state.web_port),
             web_port: state.web_port,
             pairing_code: state
                 .pairing_code

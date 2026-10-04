@@ -568,7 +568,7 @@ input { width: 100%; min-height: 34px; margin-top: 5px; padding: 0 10px; border:
 .local-sync-state { flex: 0 0 auto; padding: 6px 9px; border: 1px solid rgba(127, 156, 164, .2); border-radius: 999px; color: #718a92; font-size: 7px; font-weight: 900; letter-spacing: .12em; }
 .local-sync-state.online { border-color: rgba(92, 225, 210, .35); color: var(--cyan); background: rgba(92, 225, 210, .08); }
 .local-sync-desktop-grid, .local-sync-mobile-fields { margin-top: 19px; display: grid; gap: 10px; }
-.local-sync-desktop-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.local-sync-desktop-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
 .local-sync-mobile-fields { grid-template-columns: minmax(0, 1.55fr) minmax(145px, .45fr); align-items: stretch; }
 .local-sync-desktop-grid > div { min-height: 72px; padding: 13px 15px; border: 1px solid rgba(133, 175, 182, .12); border-radius: 12px; display: flex; flex-direction: column; justify-content: center; gap: 5px; background: rgba(1, 12, 19, .55); }
 .local-sync-desktop-grid small { color: #718b92; font-size: 7px; font-weight: 800; letter-spacing: .1em; }

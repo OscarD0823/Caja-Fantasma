@@ -2,13 +2,13 @@
 
 Descargas oficiales del programa creado por [OscarD0823](https://github.com/OscarD0823).
 
-## Versión actual: 1.20.2
+## Versión actual: 1.20.3
 
 | Plataforma | Descarga | Compatibilidad | SHA-256 |
 | --- | --- | --- | --- |
-| Windows | [`Windows/Caja-Fantasma-1.20.2-Instalador.exe`](Windows/Caja-Fantasma-1.20.2-Instalador.exe) | Windows 10/11 x64 | `C3CBCC76515CC6037A8A0368B51E3A932D009D7657F309ABC44B9546EF483B33` |
-| Android | [`Android/Caja-Fantasma-Android-1.20.2.apk`](Android/Caja-Fantasma-Android-1.20.2.apk) | Android 8.0+ ARM64 | `1602A4939702A81604D6BCD5181E97DFDF5551DE2DF96CAB4CC5DD24223E72DB` |
+| Windows | [`Windows/Caja-Fantasma-1.20.3-Instalador.exe`](Windows/Caja-Fantasma-1.20.3-Instalador.exe) | Windows 10/11 x64 | `A13526C0CCD5C9538A0600ECBFE9ADFE0ED221F5DF8C227B550825F5DA3948E0` |
+| Android | [`Android/Caja-Fantasma-Android-1.20.3.apk`](Android/Caja-Fantasma-Android-1.20.3.apk) | Android 8.0+ ARM64 | `4CAE9993979D61B6011D670E1F662934A20E3BB452C5E50E7515DE70E49EFEA1` |
 
 Cada plataforma tiene sus instrucciones y sumas de comprobación dentro de su carpeta. La [licencia MIT](LICENSE) se conserva junto a las descargas. Las versiones anteriores están archivadas en [`Versiones-anteriores`](Versiones-anteriores/) y los lanzamientos completos permanecen en GitHub Releases.
 
-La APK está firmada e incluye únicamente Caja Fantasma. No usa Firebase, publicidad ni telemetría. La versión 1.20.2 evita que el caché sin conexión de la web interfiera con el arranque de Windows, conserva los datos personales y mantiene el permiso de red local de la página. En Dispositivos, Windows enlaza a Android y Web; Android enlaza a Windows y Web; la página enlaza a ambos mediante el PC. Los botones abren siempre el Release estable más reciente.
+La APK está firmada e incluye únicamente Caja Fantasma. No usa Firebase, publicidad ni telemetría. La versión 1.20.3 conecta simultáneamente Windows, Android y la página mediante una sola IP, un solo puerto y un solo código, conservando el historial y los datos personales. Los botones abren siempre el Release estable más reciente.

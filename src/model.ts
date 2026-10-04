@@ -200,7 +200,7 @@ export type CountdownTransitionSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.20.2";
+export const APP_VERSION = "1.20.3";
 export const AUTHOR = "OscarD0823";
 export const DEFAULT_CHARACTER_ID = "character-main";
 export const GAME_DAY_TIME_ZONE = "America/Bogota";

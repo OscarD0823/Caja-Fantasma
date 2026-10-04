@@ -13,12 +13,12 @@ La versión web escribe el estado principal en `localStorage` y mantiene una seg
 Windows funciona como concentrador local entre las tres aplicaciones:
 
 1. GitHub Pages sirve únicamente los archivos públicos de la aplicación.
-2. La aplicación de Windows abre un puente HTTP restringido a `127.0.0.1` para la página y conserva el servidor local usado por Android.
+2. La aplicación de Windows abre un único puente local que reconoce tanto las solicitudes HTTP de la página como la conexión directa de Android.
 3. Los tres clientes utilizan el mismo código de seis números y la misma revisión compartida.
 4. El historial se combina en el PC; una copia vacía o atrasada no reemplaza una más completa.
 5. Al cerrar el PC deja de existir el puente. La web y el celular siguen conservando sus copias locales y se ponen al día al reconectar.
 
-La página abierta en el propio PC usa `127.0.0.1`. La APK usa la IP privada mostrada por Windows. Este diseño evita cuentas externas, cuotas y costos, y no expone el historial personal a Internet.
+La página y la APK usan la misma IP privada, el mismo puerto y el mismo código mostrados por Windows, por lo que pueden permanecer conectadas al mismo tiempo. El acceso HTTP solo acepta el origen oficial de Caja Fantasma y clientes de la red local. Este diseño evita cuentas externas, cuotas y costos, y no expone el historial personal a Internet.
 
 ## Estado actual
 
