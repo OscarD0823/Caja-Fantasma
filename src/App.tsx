@@ -127,6 +127,7 @@ type LocalSyncSnapshot = { enabled: boolean; revision: number; updatedAt: string
 type LocalSyncAction = "status" | "pull" | "push" | "live";
 type LocalSyncExchange = Omit<LocalSyncSnapshot, "enabled" | "lastMobileUpdateAt"> & { ok: boolean; message: string; catalogJson?: string };
 type LocalNetworkRequestInit = RequestInit & { targetAddressSpace?: "loopback" | "local" };
+type LocalNetworkPermissionName = "loopback-network" | "local-network";
 type BackgroundSyncStatus = {
   active: boolean;
   connected: boolean;
@@ -145,6 +146,16 @@ let catalogApiFallbackAvailableAt = 0;
 
 function createPairingCode() {
   return String(crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000).padStart(6, "0");
+}
+
+async function localNetworkPermissionState(address: string): Promise<PermissionState | undefined> {
+  if (!("permissions" in navigator)) return undefined;
+  const name: LocalNetworkPermissionName = localSyncTargetAddressSpace(address) === "loopback" ? "loopback-network" : "local-network";
+  try {
+    return (await navigator.permissions.query({ name } as unknown as PermissionDescriptor)).state;
+  } catch {
+    return undefined;
+  }
 }
 
 async function fetchPublicCatalog(): Promise<unknown> {
@@ -179,6 +190,18 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.20.2",
+    date: "4 de octubre de 2026",
+    title: "Arranque de Windows reparado",
+    items: [
+      "Windows ya no registra el caché sin conexión de la página web dentro de la aplicación instalada.",
+      "La actualización elimina únicamente los cachés web antiguos, sin tocar puntos, cajas, personajes ni módulos.",
+      "La animación inicial tiene una salida de seguridad para que nunca pueda dejar la interfaz oculta.",
+      "El enlace a la página y el puente local PC ↔ Página se mantienen disponibles después de actualizar.",
+      "La página distingue un puente apagado de un permiso realmente bloqueado y permite volver a intentar la conexión.",
+    ],
+  },
   {
     version: "1.20.1",
     date: "4 de octubre de 2026",
@@ -952,7 +975,11 @@ export default function App() {
                 throw new Error(tx("El navegador no pudo entrar al puente del PC. Mantén Caja Fantasma abierta y permite el acceso a la red local cuando lo solicite.", "The browser could not reach the PC bridge. Keep Caja Fantasma open and allow local network access when prompted."));
               }
               if (error instanceof TypeError) {
-                throw new Error(tx("El navegador bloqueó la red local. Permite el acceso de esta página a dispositivos de tu red y vuelve a conectar.", "The browser blocked local network access. Allow this page to access devices on your network and reconnect."));
+                const permissionState = await localNetworkPermissionState(address);
+                if (permissionState === "denied") {
+                  throw new Error(tx("Edge bloqueó el permiso de red local para esta página. Habilítalo desde el icono junto a la dirección y pulsa Volver a conectar.", "Edge blocked local network permission for this page. Enable it from the icon next to the address and select Reconnect."));
+                }
+                throw new Error(tx("No se encontró el puente del PC. Abre Caja Fantasma en Windows, ve a Dispositivos, pulsa Compartir con el celular y luego Volver a conectar aquí.", "The PC bridge was not found. Open Caja Fantasma on Windows, go to Devices, select Share with phone, then select Reconnect here."));
               }
               throw error;
             } finally {
@@ -2198,7 +2225,7 @@ export default function App() {
               </> : <>
                 {IS_WEB && !state.settings.localSyncAddress && <button type="button" className="secondary compact" onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncAddress: "127.0.0.1:48183" } }))}>{tx("Usar este PC", "Use this PC")}</button>}
                 <div className="local-sync-mobile-fields"><LocalSyncAddressFields language={language} value={state.settings.localSyncAddress} onChange={(address) => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncAddress: address.slice(0, 80) } }))} /><label className="local-pairing-field">{tx("Código de 6 números", "Six-digit code")}<input inputMode="numeric" maxLength={6} value={state.settings.localSyncCode} placeholder="000000" onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, localSyncCode: event.target.value.replace(/\D/g, "").slice(0, 6) } }))} /></label></div>
-                <div className="local-sync-actions"><button type="button" disabled={localSyncBusy} className={state.settings.localSyncEnabled ? "secondary" : "primary"} onClick={() => { const enabling = !state.settings.localSyncEnabled; if (enabling && (!localSyncAddressReady || !/^\d{6}$/.test(state.settings.localSyncCode))) { setLocalSyncStatus(tx("Completa los cuatro bloques de la IP, el puerto y el código del PC", "Enter all four IP blocks, the port, and the PC code")); return; } commitState((current) => ({ ...current, settings: { ...current.settings, localSyncEnabled: enabling } })); if (enabling) window.setTimeout(() => void exchangeWithComputer("status"), 0); }}>{state.settings.localSyncEnabled ? <WifiOff size={17} /> : <Wifi size={17} />}{state.settings.localSyncEnabled ? tx("Desconectar", "Disconnect") : tx("Conectar con el PC", "Connect to PC")}</button></div>
+                <div className="local-sync-actions"><button type="button" disabled={localSyncBusy} className={state.settings.localSyncEnabled ? "secondary" : "primary"} onClick={() => { const enabling = !state.settings.localSyncEnabled; if (enabling && (!localSyncAddressReady || !/^\d{6}$/.test(state.settings.localSyncCode))) { setLocalSyncStatus(tx("Completa los cuatro bloques de la IP, el puerto y el código del PC", "Enter all four IP blocks, the port, and the PC code")); return; } commitState((current) => ({ ...current, settings: { ...current.settings, localSyncEnabled: enabling } })); if (enabling) window.setTimeout(() => void exchangeWithComputer("status"), 0); }}>{state.settings.localSyncEnabled ? <WifiOff size={17} /> : <Wifi size={17} />}{state.settings.localSyncEnabled ? tx("Desconectar", "Disconnect") : tx("Conectar con el PC", "Connect to PC")}</button>{IS_WEB && state.settings.localSyncEnabled && <button type="button" disabled={localSyncBusy} className="secondary" onClick={() => void exchangeWithComputer("status")}><RefreshCw size={16} /> {tx("Volver a conectar", "Reconnect")}</button>}</div>
                 {state.settings.localSyncEnabled && <div className="local-sync-direction-grid">
                   <button type="button" className="secondary" disabled={localSyncBusy} onClick={() => { if (window.confirm(tx("Los datos personales de este dispositivo se reemplazarán por los datos actuales del PC. ¿Continuar?", "This device's personal data will be replaced with the current PC data. Continue?"))) void exchangeWithComputer("pull"); }}><Download size={18} /><span><strong>{tx(IS_WEB ? "PC → Página" : "PC → Celular", IS_WEB ? "PC → Web" : "PC → Phone")}</strong><small>{tx("Traer los datos del PC", "Get data from the PC")}</small></span></button>
                   <button type="button" className="secondary" disabled={localSyncBusy} onClick={() => { if (window.confirm(tx("Los datos personales del PC recibirán los datos actuales de este dispositivo. ¿Continuar?", "The PC will receive this device's current personal data. Continue?"))) void exchangeWithComputer("push"); }}><Upload size={18} /><span><strong>{tx(IS_WEB ? "Página → PC" : "Celular → PC", IS_WEB ? "Web → PC" : "Phone → PC")}</strong><small>{tx("Enviar los datos al PC", "Send data to the PC")}</small></span></button>
@@ -2286,6 +2313,12 @@ function ShinyTrackerCard({ record, language, onDecrease, onIncrease, onToggle, 
 
 function StartupIntro({ language, onSkip }: { language: UiLanguage; onSkip: () => void }) {
   const english = language !== "es";
+  const onSkipRef = useRef(onSkip);
+  onSkipRef.current = onSkip;
+  useEffect(() => {
+    const timeout = window.setTimeout(() => onSkipRef.current(), 7_000);
+    return () => window.clearTimeout(timeout);
+  }, []);
   return <button type="button" className="startup-intro" onClick={onSkip} aria-label={english ? "Skip opening animation" : "Omitir animación de apertura"}>
     <span className="intro-letterbox" aria-hidden="true" />
     <span className="intro-world" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /><i /></span>
