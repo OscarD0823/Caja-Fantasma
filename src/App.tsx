@@ -191,6 +191,16 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 
 const CHANGELOG = [
   {
+    version: "1.20.5",
+    date: "5 de octubre de 2026",
+    title: "La resta llega a todos los dispositivos",
+    items: [
+      "Windows, Android y la página usan el mismo protocolo de eliminación para reflejar inmediatamente un punto restado.",
+      "Un dispositivo desactualizado deja de fallar en silencio y solicita instalar la versión compatible.",
+      "La caché de la página cambia de versión para retirar el código anterior al volver a cargar.",
+    ],
+  },
+  {
     version: "1.20.4",
     date: "4 de octubre de 2026",
     title: "Restar puntos también funciona en vivo",
@@ -958,7 +968,7 @@ export default function App() {
         await invoke<BackgroundSyncStatus>("plugin:android-updater|stop_background_sync").catch(() => undefined);
       }
       const request = {
-        protocol: 1,
+        protocol: 2,
         pairingCode,
         action,
         knownRevision: action === "live" ? liveRevisionRef.current : 0,

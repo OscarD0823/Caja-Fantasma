@@ -7,7 +7,7 @@ use std::time::Duration;
 #[cfg(desktop)]
 use std::time::{SystemTime, UNIX_EPOCH};
 
-const LOCAL_SYNC_PROTOCOL: u8 = 1;
+const LOCAL_SYNC_PROTOCOL: u8 = 2;
 const DEFAULT_LOCAL_SYNC_PORT: u16 = 47_183;
 const DEFAULT_WEB_SYNC_PORT: u16 = 48_183;
 const MAX_SYNC_BYTES: usize = 8 * 1024 * 1024;
@@ -743,9 +743,7 @@ mod desktop {
             return Err("La sincronización está desactivada en el PC.".into());
         }
         if request.protocol != LOCAL_SYNC_PROTOCOL {
-            return Err(
-                "La versión de sincronización no coincide. Actualiza ambas aplicaciones.".into(),
-            );
+            return Err("La sincronización en vivo cambió para admitir la resta de puntos. Actualiza Caja Fantasma en todos los dispositivos.".into());
         }
         validate_pairing_code(&request.pairing_code)?;
         let expected_code = state
@@ -1269,6 +1267,31 @@ mod tests {
         )
         .expect("the delayed response should be valid JSON");
         assert!(delayed_response.ok, "{}", delayed_response.message);
+        let mut outdated_stream = TcpStream::connect_timeout(&socket, Duration::from_secs(4))
+            .expect("an outdated client should reach the local server");
+        outdated_stream
+            .set_read_timeout(Some(Duration::from_secs(4)))
+            .expect("outdated client timeout");
+        write_json_line(
+            &mut outdated_stream,
+            &LocalSyncRequest {
+                protocol: 1,
+                pairing_code: code.clone(),
+                action: LocalSyncAction::Live,
+                known_revision: 0,
+                updated_at: "1970-01-01T00:00:00.000Z".into(),
+                data_json: "{}".into(),
+            },
+        )
+        .expect("the outdated request should be written");
+        let outdated_response: LocalSyncExchange = serde_json::from_str(
+            &read_json_line(&mut outdated_stream).expect("the rejection should be readable"),
+        )
+        .expect("the outdated response should be valid JSON");
+        assert!(!outdated_response.ok);
+        assert!(outdated_response
+            .message
+            .contains("Actualiza Caja Fantasma"));
         let older_exchange = mobile_sync_exchange_blocking(
             address.clone(),
             code.clone(),

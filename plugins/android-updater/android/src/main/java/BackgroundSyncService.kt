@@ -303,7 +303,7 @@ class BackgroundSyncService : Service() {
             "La sincronización solo acepta direcciones de la red local."
         }
         val payload = JSONObject().apply {
-            put("protocol", 1)
+            put("protocol", 2)
             put("pairingCode", request.pairingCode)
             put("action", "live")
             put("knownRevision", request.knownRevision)
