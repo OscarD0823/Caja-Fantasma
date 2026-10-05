@@ -12,6 +12,7 @@ const DEFAULT_LOCAL_SYNC_PORT: u16 = 47_183;
 const DEFAULT_WEB_SYNC_PORT: u16 = 48_183;
 const MAX_SYNC_BYTES: usize = 8 * 1024 * 1024;
 const MAX_CATALOG_BYTES: usize = 512 * 1024;
+const MAX_DELETED_ACTION_IDS: usize = 20_000;
 
 #[cfg(desktop)]
 #[derive(Clone, Serialize)]
@@ -251,6 +252,7 @@ pub(crate) fn merge_live_personal_payloads(
     };
     let known_personal_fields = [
         "actions",
+        "deletedActionIds",
         "activityHistory",
         "boxes",
         "pointRounds",
@@ -275,8 +277,27 @@ pub(crate) fn merge_live_personal_payloads(
     let incoming_dominates = incoming_contains_current && !current_contains_incoming;
     let current_dominates = current_contains_incoming && !incoming_contains_current;
 
+    let mut deleted_action_ids = merge_string_array(
+        current.get("deletedActionIds"),
+        incoming.get("deletedActionIds"),
+    )
+    .as_array()
+    .cloned()
+    .unwrap_or_default();
+    if deleted_action_ids.len() > MAX_DELETED_ACTION_IDS {
+        deleted_action_ids.drain(0..deleted_action_ids.len() - MAX_DELETED_ACTION_IDS);
+    }
+    let deleted_action_id_set = deleted_action_ids
+        .iter()
+        .filter_map(Value::as_str)
+        .map(str::to_owned)
+        .collect::<BTreeSet<_>>();
+    if current.contains_key("deletedActionIds") || incoming.contains_key("deletedActionIds") {
+        current.insert("deletedActionIds".into(), Value::Array(deleted_action_ids));
+    }
+
     if current.contains_key("actions") || incoming.contains_key("actions") {
-        let actions = if current_dominates {
+        let mut actions = if current_dominates {
             current
                 .get("actions")
                 .and_then(Value::as_array)
@@ -294,6 +315,13 @@ pub(crate) fn merge_live_personal_payloads(
                 .cloned()
                 .unwrap_or_default()
         };
+        actions.retain(|action| {
+            action
+                .get("id")
+                .and_then(Value::as_str)
+                .map(|id| !deleted_action_id_set.contains(id))
+                .unwrap_or(true)
+        });
         current.insert("actions".into(), Value::Array(actions));
     }
 
@@ -303,6 +331,18 @@ pub(crate) fn merge_live_personal_payloads(
         }
         let value = merge_id_array(current.get(field), incoming.get(field), field);
         current.insert(field.into(), value);
+    }
+    if let Some(history) = current
+        .get_mut("activityHistory")
+        .and_then(Value::as_array_mut)
+    {
+        history.retain(|record| {
+            record
+                .get("id")
+                .and_then(Value::as_str)
+                .map(|id| !deleted_action_id_set.contains(id))
+                .unwrap_or(true)
+        });
     }
     if current.contains_key("manualBaselinePoints") || incoming.contains_key("manualBaselinePoints")
     {
@@ -1134,6 +1174,33 @@ mod tests {
         assert_eq!(merged["actions"].as_array().map(Vec::len), Some(0));
         assert_eq!(merged["activityHistory"].as_array().map(Vec::len), Some(2));
         assert_eq!(merged["boxes"].as_array().map(Vec::len), Some(1));
+    }
+
+    #[test]
+    fn propagates_an_intentional_point_deletion_without_resurrection() {
+        let stale_device = r#"{"actions":[{"id":"extra","points":1},{"id":"keep","points":4}],"deletedActionIds":[],"activityHistory":[{"id":"extra"},{"id":"keep"}],"boxes":[],"pointRounds":[],"manualBaselinePoints":[],"shinyMods":[],"characters":[]}"#;
+        let device_after_undo = r#"{"actions":[{"id":"keep","points":4}],"deletedActionIds":["extra"],"activityHistory":[{"id":"keep"}],"boxes":[],"pointRounds":[],"manualBaselinePoints":[],"shinyMods":[],"characters":[]}"#;
+
+        let first_merge = merge_live_personal_payloads(stale_device, device_after_undo, true)
+            .expect("the intentional deletion should merge");
+        let first_value: Value = serde_json::from_str(&first_merge).expect("valid JSON");
+        assert_eq!(first_value["actions"].as_array().map(Vec::len), Some(1));
+        assert_eq!(first_value["actions"][0]["id"].as_str(), Some("keep"));
+        assert_eq!(
+            first_value["activityHistory"].as_array().map(Vec::len),
+            Some(1)
+        );
+        assert_eq!(first_value["deletedActionIds"][0].as_str(), Some("extra"));
+
+        let second_merge = merge_live_personal_payloads(&first_merge, stale_device, true)
+            .expect("a stale peer should not resurrect the deleted point");
+        let second_value: Value = serde_json::from_str(&second_merge).expect("valid JSON");
+        assert_eq!(second_value["actions"].as_array().map(Vec::len), Some(1));
+        assert_eq!(
+            second_value["activityHistory"].as_array().map(Vec::len),
+            Some(1)
+        );
+        assert_eq!(second_value["deletedActionIds"][0].as_str(), Some("extra"));
     }
 
     #[test]

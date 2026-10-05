@@ -166,6 +166,8 @@ export type PersistedState = {
   schemaVersion: 1;
   catalog: Catalog;
   actions: PointAction[];
+  /** Identificadores quitados a propósito para que una copia atrasada no los restaure. */
+  deletedActionIds: string[];
   activityHistory: ActivityHistoryRecord[];
   boxes: BoxRecord[];
   pointRounds: PointRoundRecord[];
@@ -200,7 +202,7 @@ export type CountdownTransitionSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.20.3";
+export const APP_VERSION = "1.20.4";
 export const AUTHOR = "OscarD0823";
 export const DEFAULT_CHARACTER_ID = "character-main";
 export const GAME_DAY_TIME_ZONE = "America/Bogota";

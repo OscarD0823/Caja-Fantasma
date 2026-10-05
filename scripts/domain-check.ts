@@ -4,6 +4,7 @@ import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT
 import { overlayDesignSize, whaleCounterLayoutWithinWindow, whaleCounterScaleWithinWindow, whaleScaleWithinWindow } from "../src/overlayGeometry.ts";
 import { completeLocalSyncAddress, isValidLocalSyncAddress, joinLocalSyncAddress, localSyncTargetAddressSpace, splitLocalSyncAddress } from "../src/localSyncAddress.ts";
 import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesModSearch, normalizeModSearch } from "../src/shinyModsCatalog.ts";
+import { initialState, mergePersonalSyncPayload, personalSyncPayload } from "../src/storage.ts";
 
 const freshState = { ...createInitialCharacterTracking(Date.parse("2026-09-11T00:00:00Z")), actions: [] as PointAction[] };
 assert.equal(freshState.trackingMode, "solo", "La aplicación debe iniciar en Solitario.");
@@ -246,6 +247,45 @@ const afterAlphaBox = detachCharacterFromActions(teamActions, "alpha", new Set([
 assert.equal(actionsForCharacter(afterAlphaBox, "alpha").length, 0);
 assert.equal(actionsForCharacter(afterAlphaBox, "beta").length, 1, "Cerrar la caja de un personaje no debe quitar puntos a sus compañeros.");
 assert.equal(actionsForTeamSession(afterAlphaBox, "session-a").length, 1, "El conteo del equipo debe conservarse aunque un integrante cierre su caja.");
+
+const synchronizedAction: PointAction = {
+  id: "live-extra-point",
+  activityId: "gravity-whale",
+  activityName: "Ballena",
+  visionId: "gravity",
+  visionName: "Gravedad",
+  points: 1,
+  occurredAt: "2026-10-04T15:00:00.000Z",
+  characterIds: [DEFAULT_CHARACTER_ID],
+  trackingMode: "solo",
+};
+const liveBeforeUndo: PersistedState = {
+  ...initialState(),
+  actions: [synchronizedAction],
+  activityHistory: [{
+    id: synchronizedAction.id,
+    activityId: synchronizedAction.activityId,
+    activityName: synchronizedAction.activityName,
+    visionId: synchronizedAction.visionId,
+    visionName: synchronizedAction.visionName,
+    points: synchronizedAction.points,
+    count: 1,
+    occurredAt: synchronizedAction.occurredAt,
+  }],
+};
+const liveAfterUndo: PersistedState = {
+  ...liveBeforeUndo,
+  actions: [],
+  activityHistory: [],
+  deletedActionIds: [synchronizedAction.id],
+};
+const mergedUndo = mergePersonalSyncPayload(liveBeforeUndo, personalSyncPayload(liveAfterUndo), true);
+assert.equal(mergedUndo.actions.length, 0, "Restar un punto en vivo debe quitarlo del intento compartido.");
+assert.equal(mergedUndo.activityHistory.length, 0, "Restar un punto en vivo debe quitarlo también del resumen diario.");
+const mergedWithStaleDevice = mergePersonalSyncPayload(mergedUndo, personalSyncPayload(liveBeforeUndo), true);
+assert.equal(mergedWithStaleDevice.actions.length, 0, "Un dispositivo atrasado no debe restaurar un punto eliminado.");
+assert.equal(mergedWithStaleDevice.activityHistory.length, 0, "Un dispositivo atrasado no debe restaurar el registro diario eliminado.");
+assert.deepEqual(mergedWithStaleDevice.deletedActionIds, [synchronizedAction.id]);
 
 const boxes: BoxRecord[] = [8, 12, 20].map((points, index) => ({ id: String(index), occurredAt: new Date().toISOString(), points, claims: points, breakdown: [] }));
 const statistics = boxStatistics(boxes, 5, []);

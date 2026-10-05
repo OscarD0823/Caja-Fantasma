@@ -90,7 +90,7 @@ import {
   splitPlatformCarryover,
   validateCatalog,
 } from "./model";
-import { applyPersonalSyncPayload, exportState, importState, loadPersonalSyncUpdatedAt, loadState, mergePersonalSyncPayload, personalDurableHistoryCount, personalHistoryCount, personalSyncPayload, savePersonalSyncUpdatedAt, saveState } from "./storage";
+import { applyPersonalSyncPayload, exportState, hasIntentionalActionDeletions, importState, loadPersonalSyncUpdatedAt, loadState, mergePersonalSyncPayload, personalDurableHistoryCount, personalHistoryCount, personalSyncPayload, savePersonalSyncUpdatedAt, saveState } from "./storage";
 import { isValidLocalSyncAddress, localSyncTargetAddressSpace, splitLocalSyncAddress } from "./localSyncAddress";
 import { UI_LANGUAGES, localeForLanguage, translate, type UiLanguage } from "./i18n";
 import type { ShinyModCatalogItem } from "./shinyModsCatalog";
@@ -190,6 +190,17 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.20.4",
+    date: "4 de octubre de 2026",
+    title: "Restar puntos también funciona en vivo",
+    items: [
+      "Deshacer o restar una recompensa se transmite a Windows, Android y la página sin que otro dispositivo vuelva a agregarla.",
+      "La eliminación también corrige la actividad del día y el ranking histórico asociados a ese registro.",
+      "Los puntos compartidos con otros personajes se conservan mientras todavía pertenezcan a uno de ellos.",
+      "Android acepta estas eliminaciones intencionales durante la sincronización en segundo plano sin confundirlas con una pérdida accidental de historial.",
+    ],
+  },
   {
     version: "1.20.3",
     date: "4 de octubre de 2026",
@@ -792,7 +803,7 @@ export default function App() {
   const defaultShinyMod = SHINY_MOD_CATALOG.find((item) => item.englishName === "Rush Hour <Downstar>" && !item.isCatalogShiny) ?? SHINY_MOD_CATALOG[0];
 
   const referencePoints = useMemo(() => [...state.manualBaselinePoints], [state.manualBaselinePoints]);
-  const personalSyncJson = useMemo(() => JSON.stringify(personalSyncPayload(state)), [state.actions, state.activityHistory, state.boxes, state.pointRounds, state.pointRoundBoundaries, state.manualBaselinePoints, state.shinyMods, state.characters, state.activeCharacterId, state.trackingMode, state.teamMemberIds, state.activeTeamSessionId]);
+  const personalSyncJson = useMemo(() => JSON.stringify(personalSyncPayload(state)), [state.actions, state.deletedActionIds, state.activityHistory, state.boxes, state.pointRounds, state.pointRoundBoundaries, state.manualBaselinePoints, state.shinyMods, state.characters, state.activeCharacterId, state.trackingMode, state.teamMemberIds, state.activeTeamSessionId]);
   const sharedCatalogJson = useMemo(() => JSON.stringify(state.catalog), [state.catalog]);
   const target = clampNumber(state.catalog.boxTargetPoints, 1, 10_000);
   const activeCharacter = state.characters.find((character) => character.id === state.activeCharacterId) ?? state.characters[0];
@@ -883,7 +894,7 @@ export default function App() {
     }
     const value = JSON.parse(snapshot.dataJson) as unknown;
     setState((current) => {
-      if (mode === "merge" && personalHistoryCount(current) > 0 && personalHistoryCount(value) === 0) return current;
+      if (mode === "merge" && personalHistoryCount(current) > 0 && personalHistoryCount(value) === 0 && !hasIntentionalActionDeletions(value)) return current;
       const synchronized = mode === "replace"
         ? applyPersonalSyncPayload(current, value)
         : mergePersonalSyncPayload(current, value, true);
@@ -1481,8 +1492,12 @@ export default function App() {
       const actions = isTeamMode
         ? current.actions.filter((action) => action.id !== actionId)
         : detachCharacterFromActions(current.actions, activeCharacter.id, new Set([actionId]));
-      const activityHistory = actions.some((action) => action.id === actionId) ? current.activityHistory : current.activityHistory.filter((record) => record.id !== actionId);
-      return { ...current, actions, activityHistory };
+      const removedGlobally = !actions.some((action) => action.id === actionId);
+      const activityHistory = removedGlobally ? current.activityHistory.filter((record) => record.id !== actionId) : current.activityHistory;
+      const deletedActionIds = removedGlobally
+        ? [...current.deletedActionIds.filter((id) => id !== actionId), actionId].slice(-20_000)
+        : current.deletedActionIds;
+      return { ...current, actions, deletedActionIds, activityHistory };
     });
   };
 

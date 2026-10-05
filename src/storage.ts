@@ -1,7 +1,7 @@
-import defaultCatalog from "../catalog/visions.json";
-import type { ActivityHistoryRecord, BoxRecord, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, PointRoundRecord, PointRoundTrigger, ShinyModRecord, WhaleCounterStyle } from "./model";
-import { VISION_CYCLE_WAIT_STARTED_AT, applyRemoteCatalog, clampNumber, createInitialCharacterTracking, resolveTransitionDelayMilliseconds, sharedVisionId, validateCatalog } from "./model";
-import { isUiLanguage } from "./i18n";
+import defaultCatalog from "../catalog/visions.json" with { type: "json" };
+import type { ActivityHistoryRecord, BoxRecord, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, PointRoundRecord, PointRoundTrigger, ShinyModRecord, WhaleCounterStyle } from "./model.ts";
+import { VISION_CYCLE_WAIT_STARTED_AT, applyRemoteCatalog, clampNumber, createInitialCharacterTracking, resolveTransitionDelayMilliseconds, sharedVisionId, validateCatalog } from "./model.ts";
+import { isUiLanguage } from "./i18n.ts";
 
 const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
 const SAFETY_BACKUP_KEY = "caja-fantasma.once-human.safety-backup.v1";
@@ -16,6 +16,7 @@ const OVERLAY_NAME_MODES = new Set<OverlayNameMode>(["spanish", "english", "cust
 const POINT_ROUND_TRIGGERS = new Set<PointRoundTrigger>(["event-start", "manual", "whale-end"]);
 const PERSONAL_HISTORY_ARRAY_FIELDS = ["actions", "activityHistory", "boxes", "pointRounds", "manualBaselinePoints", "shinyMods"] as const;
 const PERSONAL_DURABLE_HISTORY_ARRAY_FIELDS = ["activityHistory", "boxes", "pointRounds", "manualBaselinePoints", "shinyMods"] as const;
+const MAX_DELETED_ACTION_IDS = 20_000;
 
 export function personalHistoryCount(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
@@ -27,6 +28,12 @@ export function personalDurableHistoryCount(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
   const record = value as Record<string, unknown>;
   return PERSONAL_DURABLE_HISTORY_ARRAY_FIELDS.reduce((sum, field) => sum + (Array.isArray(record[field]) ? record[field].length : 0), 0);
+}
+
+export function hasIntentionalActionDeletions(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Array.isArray((value as Record<string, unknown>).deletedActionIds)
+    && ((value as Record<string, unknown>).deletedActionIds as unknown[]).length > 0;
 }
 
 export type OverlayPosition = { x: number; y: number };
@@ -79,6 +86,15 @@ function sanitizeActivityHistory(value: unknown): ActivityHistoryRecord[] {
       occurredAt,
     }];
   }).slice(-100_000);
+}
+
+function sanitizeDeletedActionIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.flatMap((entry) => {
+    if (typeof entry !== "string") return [];
+    const id = entry.trim().slice(0, 160);
+    return id ? [id] : [];
+  }))].slice(-MAX_DELETED_ACTION_IDS);
 }
 
 function activityRecordFromAction(action: PointAction): ActivityHistoryRecord {
@@ -204,6 +220,7 @@ export function initialState(): PersistedState {
     schemaVersion: 1,
     catalog: defaultCatalog as Catalog,
     actions: [],
+    deletedActionIds: [],
     activityHistory: [],
     boxes: [],
     pointRounds: [],
@@ -256,6 +273,7 @@ export function loadState(): PersistedState {
     const shouldRecoverEmptyState = parsedIsValid
       && backupIsValid
       && personalHistoryCount(parsed) === 0
+      && !hasIntentionalActionDeletions(parsed)
       && personalHistoryCount(backup) > 0;
     if ((!parsedIsValid || shouldRecoverEmptyState) && backupIsValid) {
       parsed = backup;
@@ -299,14 +317,19 @@ export function loadState(): PersistedState {
     settings.localSyncCode = typeof settings.localSyncCode === "string" && /^\d{6}$/.test(settings.localSyncCode) ? settings.localSyncCode : "";
     settings.transitionDelayMilliseconds = resolveTransitionDelayMilliseconds(parsed.settings, fresh.settings.transitionDelayMilliseconds);
     const characters = characterState(parsed, fresh);
-    const actions = mustClearPreviousRecords ? [] : Array.isArray(parsed.actions) ? parsed.actions : [];
+    const deletedActionIds = mustClearPreviousRecords ? [] : sanitizeDeletedActionIds(parsed.deletedActionIds);
+    const deletedActionIdSet = new Set(deletedActionIds);
+    const actions = (mustClearPreviousRecords ? [] : Array.isArray(parsed.actions) ? parsed.actions : [])
+      .filter((action) => !deletedActionIdSet.has(action.id));
     const boxes = mustClearBoxHistory ? [] : Array.isArray(parsed.boxes) ? parsed.boxes : [];
     const loadedState: PersistedState = {
       ...fresh,
       ...parsed,
       catalog,
       actions,
-      activityHistory: mustClearPreviousRecords ? [] : Array.isArray(parsed.activityHistory) ? sanitizeActivityHistory(parsed.activityHistory) : legacyActivityHistory(actions, boxes, catalog),
+      deletedActionIds,
+      activityHistory: (mustClearPreviousRecords ? [] : Array.isArray(parsed.activityHistory) ? sanitizeActivityHistory(parsed.activityHistory) : legacyActivityHistory(actions, boxes, catalog))
+        .filter((record) => !deletedActionIdSet.has(record.id)),
       boxes,
       pointRounds: mustClearPreviousRecords ? [] : sanitizePointRounds(parsed.pointRounds),
       pointRoundBoundaries: mustClearPreviousRecords ? {} : sanitizePointRoundBoundaries(parsed.pointRoundBoundaries),
@@ -378,11 +401,15 @@ export function importState(text: string): PersistedState {
   const fresh = initialState();
   const characters = characterState(parsed, fresh);
   const catalog = parsed.catalog as Catalog;
+  const deletedActionIds = sanitizeDeletedActionIds(parsed.deletedActionIds);
+  const deletedActionIdSet = new Set(deletedActionIds);
   return {
     ...fresh,
     ...parsed,
-    actions: parsed.actions,
-    activityHistory: Array.isArray(parsed.activityHistory) ? sanitizeActivityHistory(parsed.activityHistory) : legacyActivityHistory(parsed.actions, parsed.boxes, catalog),
+    actions: parsed.actions.filter((action) => !deletedActionIdSet.has(action.id)),
+    deletedActionIds,
+    activityHistory: (Array.isArray(parsed.activityHistory) ? sanitizeActivityHistory(parsed.activityHistory) : legacyActivityHistory(parsed.actions, parsed.boxes, catalog))
+      .filter((record) => !deletedActionIdSet.has(record.id)),
     boxes: parsed.boxes,
     pointRounds: sanitizePointRounds(parsed.pointRounds),
     pointRoundBoundaries: sanitizePointRoundBoundaries(parsed.pointRoundBoundaries),
@@ -419,6 +446,7 @@ export function importState(text: string): PersistedState {
 
 export type PersonalSyncPayload = Pick<PersistedState,
   | "actions"
+  | "deletedActionIds"
   | "activityHistory"
   | "boxes"
   | "pointRounds"
@@ -435,6 +463,7 @@ export type PersonalSyncPayload = Pick<PersistedState,
 export function personalSyncPayload(state: PersistedState): PersonalSyncPayload {
   return {
     actions: state.actions,
+    deletedActionIds: state.deletedActionIds,
     activityHistory: state.activityHistory,
     boxes: state.boxes,
     pointRounds: state.pointRounds,
@@ -507,11 +536,17 @@ export function mergePersonalSyncPayload(current: PersistedState, value: unknown
   const currentDominates = currentContainsIncoming && !incomingContainsCurrent;
   const incomingDominates = incomingContainsCurrent && !currentContainsIncoming;
   const useIncomingContext = incomingDominates || (!currentDominates && !incomingDominates && preferIncomingOnEqual);
-  const actions = currentDominates
+  const deletedActionIds = sanitizeDeletedActionIds([
+    ...currentPayload.deletedActionIds,
+    ...incomingPayload.deletedActionIds,
+  ]);
+  const deletedActionIdSet = new Set(deletedActionIds);
+  const candidateActions = currentDominates
     ? currentPayload.actions
     : incomingDominates || (currentContainsIncoming && preferIncomingOnEqual)
       ? incomingPayload.actions
       : mergeRecordsById(currentPayload.actions, incomingPayload.actions);
+  const actions = candidateActions.filter((action) => !deletedActionIdSet.has(action.id));
   const boundaries = { ...currentPayload.pointRoundBoundaries };
   for (const [key, candidate] of Object.entries(incomingPayload.pointRoundBoundaries)) {
     if (!boundaries[key] || candidate > boundaries[key]) boundaries[key] = candidate;
@@ -525,7 +560,9 @@ export function mergePersonalSyncPayload(current: PersistedState, value: unknown
   return {
     ...current,
     actions,
-    activityHistory: mergeRecordsById(currentPayload.activityHistory, incomingPayload.activityHistory),
+    deletedActionIds,
+    activityHistory: mergeRecordsById(currentPayload.activityHistory, incomingPayload.activityHistory)
+      .filter((record) => !deletedActionIdSet.has(record.id)),
     boxes: mergeRecordsById(currentPayload.boxes, incomingPayload.boxes),
     pointRounds: mergeRecordsById(currentPayload.pointRounds, incomingPayload.pointRounds),
     pointRoundBoundaries: boundaries,

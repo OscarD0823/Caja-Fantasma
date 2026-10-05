@@ -197,7 +197,23 @@ internal object BackgroundSyncStore {
         val current = durableRecordIds(currentJson)
         if (current.isEmpty()) return false
         val incoming = durableRecordIds(incomingJson)
-        return !incoming.containsAll(current)
+        val deletedActionIds = try {
+            val deleted = JSONObject(incomingJson).optJSONArray("deletedActionIds")
+            buildSet {
+                if (deleted != null) {
+                    for (index in 0 until deleted.length()) {
+                        deleted.optString(index).takeIf { it.isNotBlank() }?.let(::add)
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            emptySet()
+        }
+        return current.any { recordId ->
+            if (incoming.contains(recordId)) return@any false
+            val deletedHistoryId = recordId.removePrefix("activityHistory:")
+            !recordId.startsWith("activityHistory:") || deletedHistoryId !in deletedActionIds
+        }
     }
 
     private fun isIsoTimestamp(value: String): Boolean =
