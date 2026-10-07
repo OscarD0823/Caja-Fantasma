@@ -12,6 +12,7 @@ La carpeta [`Programa`](Programa/) reúne el instalador `.exe` de Windows, la AP
 
 ## Funciones
 
+- Windows guarda al cerrar la ventana, con «Guardar y salir», antes de actualizar y al recibir el aviso de apagado, reinicio o cierre de sesión. Los cambios recibidos del teléfono se incluyen en el respaldo. La X conserva el funcionamiento en segundo plano; el botón termina la aplicación. Un corte de energía o cierre forzado puede interrumpir un cambio todavía no guardado.
 - Recompensas Pro con valores configurables: jefes de monolito, silos y Desafío de Manibus de Endless Dream valen 1; Guerra Pro y Manibus de Manibus valen 2.
 - Endless Dream incluye Invasión de Zona Onírica y Soñador de Luz, Soñador Profundo y Soñador Eterno; cada uno vale 1.
 - División Visión con Lunar / Lunar Revelry, Abismo de Gravedad / Gravity Abyss y Progenie Aberrante / Aberrant Progeny, además de un editor para ruedas futuras. Cada rueda posee una ficha visual con imagen, descripción y estado. OscarD0823 selecciona la rueda pública desde el modo desarrollador; los demás usuarios reciben esa selección sin controles para alterar el ciclo.

@@ -6,6 +6,7 @@ import App from "./App";
 import Overlay from "./Overlay";
 import WhaleVisualHarness from "./WhaleVisualHarness";
 import "./styles.css";
+import "./crateOpening.css";
 
 const nativeHost = isTauri();
 

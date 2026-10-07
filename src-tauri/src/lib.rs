@@ -1,6 +1,9 @@
 #![cfg_attr(target_env = "msvc", allow(linker_messages))]
 
 mod local_sync;
+mod native_backup;
+#[cfg(all(desktop, target_os = "windows"))]
+mod windows_shutdown;
 
 use local_sync::mobile_sync_exchange;
 #[cfg(desktop)]
@@ -10,8 +13,6 @@ use local_sync::{
 
 #[cfg(desktop)]
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-#[cfg(mobile)]
-use serde_json::Value;
 #[cfg(desktop)]
 use serde_json::{json, Value};
 use std::fs;
@@ -19,45 +20,15 @@ use std::fs;
 use std::os::windows::process::CommandExt;
 #[cfg(desktop)]
 use std::process::Command;
+#[cfg(desktop)]
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Manager;
 #[cfg(desktop)]
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    WindowEvent,
+    Emitter, RunEvent, WindowEvent,
 };
-
-const NATIVE_BACKUP_FILE: &str = "personal-state-backup.json";
-const NATIVE_BACKUP_PREVIOUS_FILE: &str = "personal-state-backup.previous.json";
-const NATIVE_BACKUP_MAX_BYTES: usize = 8 * 1024 * 1024;
-
-fn native_backup_history_count(value: &Value) -> usize {
-    const ARRAY_FIELDS: [&str; 5] = [
-        "activityHistory",
-        "boxes",
-        "pointRounds",
-        "manualBaselinePoints",
-        "shinyMods",
-    ];
-    let Some(data) = value.as_object() else {
-        return 0;
-    };
-    ARRAY_FIELDS
-        .iter()
-        .filter_map(|field| data.get(*field).and_then(Value::as_array))
-        .map(Vec::len)
-        .sum::<usize>()
-}
-
-fn valid_native_backup(text: String) -> Option<(String, usize)> {
-    if text.len() > NATIVE_BACKUP_MAX_BYTES {
-        return None;
-    }
-    let value = serde_json::from_str::<Value>(&text).ok()?;
-    value.as_object()?;
-    let count = native_backup_history_count(&value);
-    Some((text, count))
-}
 
 #[tauri::command]
 fn load_native_personal_backup(app: tauri::AppHandle) -> Result<Option<String>, String> {
@@ -65,63 +36,78 @@ fn load_native_personal_backup(app: tauri::AppHandle) -> Result<Option<String>, 
         .path()
         .app_data_dir()
         .map_err(|error| format!("No se encontró la carpeta de respaldo: {error}"))?;
-    let candidates = [
-        directory.join(NATIVE_BACKUP_FILE),
-        directory.join(NATIVE_BACKUP_PREVIOUS_FILE),
-    ];
-    let mut richest: Option<(String, usize)> = None;
-    for path in candidates {
-        let Ok(text) = fs::read_to_string(path) else {
-            continue;
-        };
-        let Some(candidate) = valid_native_backup(text) else {
-            continue;
-        };
-        if richest
-            .as_ref()
-            .is_none_or(|(_, count)| candidate.1 > *count)
-        {
-            richest = Some(candidate);
-        }
-    }
-    Ok(richest.map(|(text, _)| text))
+    native_backup::load(&directory)
 }
 
 #[tauri::command]
 fn save_native_personal_backup(app: tauri::AppHandle, data_json: String) -> Result<(), String> {
-    let Some((data_json, incoming_count)) = valid_native_backup(data_json) else {
-        return Err("El respaldo personal no contiene JSON válido.".into());
-    };
     let directory = app
         .path()
         .app_data_dir()
         .map_err(|error| format!("No se encontró la carpeta de respaldo: {error}"))?;
-    fs::create_dir_all(&directory)
-        .map_err(|error| format!("No se pudo crear la carpeta de respaldo: {error}"))?;
-    let backup_path = directory.join(NATIVE_BACKUP_FILE);
-    let previous_path = directory.join(NATIVE_BACKUP_PREVIOUS_FILE);
-    let existing = fs::read_to_string(&backup_path)
-        .ok()
-        .and_then(valid_native_backup);
-    if existing
-        .as_ref()
-        .is_some_and(|(_, existing_count)| *existing_count > incoming_count)
+    native_backup::save(&directory, &data_json).map(|_| ())
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn cache_desktop_progress(app: tauri::AppHandle, data_json: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
     {
-        return Ok(());
+        let directory = app
+            .path()
+            .app_data_dir()
+            .map_err(|error| error.to_string())?;
+        windows_shutdown::cache(directory, data_json)
     }
-    if backup_path.exists() {
-        fs::copy(&backup_path, &previous_path)
-            .map_err(|error| format!("No se pudo rotar el respaldo anterior: {error}"))?;
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (app, data_json);
+        Ok(())
     }
-    let temporary_path = directory.join(format!("{NATIVE_BACKUP_FILE}.tmp"));
-    fs::write(&temporary_path, data_json)
-        .map_err(|error| format!("No se pudo escribir el respaldo temporal: {error}"))?;
-    if backup_path.exists() {
-        fs::remove_file(&backup_path)
-            .map_err(|error| format!("No se pudo reemplazar el respaldo anterior: {error}"))?;
+}
+
+#[cfg(desktop)]
+static SAFE_EXIT_READY: AtomicBool = AtomicBool::new(false);
+
+#[cfg(desktop)]
+fn request_safe_close(app: &tauri::AppHandle, exit_app: bool) {
+    if let Some(window) = app.get_webview_window("main") {
+        if window
+            .emit("caja-fantasma-save-request", json!({ "exitApp": exit_app }))
+            .is_err()
+        {
+            let _ = window.show();
+        }
     }
-    fs::rename(&temporary_path, &backup_path)
-        .map_err(|error| format!("No se pudo activar el respaldo nuevo: {error}"))?;
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn flush_desktop_progress(
+    app: tauri::AppHandle,
+    data_json: String,
+    exit_app: bool,
+) -> Result<String, String> {
+    let directory = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    // Hold the bridge snapshot until the disk write is confirmed. An inbound phone
+    // update cannot slip between the final snapshot and a successful exit.
+    local_sync::persist_close_snapshot(&data_json, exit_app, |data| {
+        native_backup::save(&directory, data)
+    })
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn finish_desktop_close(app: tauri::AppHandle, exit_app: bool) -> Result<(), String> {
+    if exit_app {
+        SAFE_EXIT_READY.store(true, Ordering::SeqCst);
+        app.exit(0);
+    } else if let Some(window) = app.get_webview_window("main") {
+        window.hide().map_err(|error| error.to_string())?;
+    }
     Ok(())
 }
 
@@ -305,9 +291,14 @@ pub fn run() {
             update_local_sync_state,
             read_local_sync_state,
             load_native_personal_backup,
-            save_native_personal_backup
+            save_native_personal_backup,
+            flush_desktop_progress,
+            finish_desktop_close,
+            cache_desktop_progress
         ])
         .setup(|app| {
+            #[cfg(target_os = "windows")]
+            windows_shutdown::install(app.handle()).map_err(std::io::Error::other)?;
             let open = MenuItem::with_id(app, "open", "Abrir Caja Fantasma", true, None::<&str>)?;
             let overlay = MenuItem::with_id(
                 app,
@@ -316,7 +307,7 @@ pub fn run() {
                 true,
                 None::<&str>,
             )?;
-            let quit = MenuItem::with_id(app, "quit", "Salir", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Guardar y salir", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &overlay, &quit])?;
             TrayIconBuilder::new()
                 .icon(
@@ -345,7 +336,7 @@ pub fn run() {
                             }
                         }
                     }
-                    "quit" => app.exit(0),
+                    "quit" => request_safe_close(app, true),
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
@@ -375,11 +366,24 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                let _ = window.hide();
+                if window.label() == "main" {
+                    request_safe_close(window.app_handle(), false);
+                } else {
+                    let _ = window.hide();
+                }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("no se pudo iniciar Caja Fantasma");
+        .build(tauri::generate_context!())
+        .expect("no se pudo iniciar Caja Fantasma")
+        .run(|app, event| {
+            if let RunEvent::ExitRequested { api, code, .. } = event {
+                if code != Some(tauri::RESTART_EXIT_CODE) && !SAFE_EXIT_READY.load(Ordering::SeqCst)
+                {
+                    api.prevent_exit();
+                    request_safe_close(app, true);
+                }
+            }
+        });
 }
 
 #[cfg(mobile)]

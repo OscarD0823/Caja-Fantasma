@@ -23,6 +23,7 @@ import {
   Languages,
   LockKeyhole,
   LogIn,
+  LogOut,
   Mail,
   Minus,
   MonitorUp,
@@ -100,6 +101,7 @@ import type { ShinyModCatalogItem } from "./shinyModsCatalog";
 import { loadWebPersonalBackup, readWebStorageStatus, requestPersistentWebStorage, saveWebPersonalBackup, type WebStorageStatus } from "./webStorage";
 import { usePwaInstall } from "./usePwaInstall";
 import CrateOpeningArt from "./CrateOpeningArt";
+import { persistDesktopProgress } from "./desktopProgress";
 
 type ShinyCatalogModule = typeof import("./shinyModsCatalog");
 const EMPTY_SHINY_CATALOG: ShinyModCatalogItem[] = [];
@@ -196,6 +198,17 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.21.1",
+    date: "7 de octubre de 2026",
+    title: "Cierre seguro y apertura tridimensional",
+    items: [
+      "Windows: Guardar y salir desde el menú o la bandeja; la X guarda antes de pasar a segundo plano.",
+      "Guardado nativo al apagar, reiniciar o cerrar sesión, y antes de instalar una actualización.",
+      "El cierre incluye los últimos datos recibidos del celular y permanece abierto si falla el respaldo.",
+      "Caja tridimensional con laterales, llave, cierres, bisagras e interior de la tapa; sin motor de animación adicional.",
+    ],
+  },
   {
     version: "1.21.0",
     date: "6 de octubre de 2026",
@@ -777,6 +790,11 @@ async function showOverlay(show: boolean) {
 
 export default function App() {
   const [state, setState] = useState<PersistedState>(() => loadState());
+  const currentStateRef = useRef(state);
+  currentStateRef.current = state;
+  const [closeBusy, setCloseBusy] = useState(false);
+  const closeInFlightRef = useRef(false);
+  const closeRequestedRef = useRef<boolean | null>(null);
   const language = state.settings.uiLanguage;
   const english = language !== "es";
   const tx = useCallback((spanish: string, englishText: string) => translate(language, spanish, englishText), [language]);
@@ -795,6 +813,8 @@ export default function App() {
   const [nativeBackupReady, setNativeBackupReady] = useState(!isTauri());
   const [webBackupReady, setWebBackupReady] = useState(!IS_WEB);
   const personalRestoreReady = nativeBackupReady && webBackupReady;
+  const restoreReadyRef = useRef(personalRestoreReady);
+  restoreReadyRef.current = personalRestoreReady;
   const [webStorageStatus, setWebStorageStatus] = useState<WebStorageStatus>();
   const [creatorAccess, setCreatorAccess] = useState<CreatorAccess>("checking");
   const [creatorMessage, setCreatorMessage] = useState("Comprobando la cuenta de GitHub…");
@@ -914,6 +934,51 @@ export default function App() {
   const commitState = useCallback((update: PersistedState | ((current: PersistedState) => PersistedState)) => {
     setState((current) => typeof update === "function" ? update(current) : update);
   }, []);
+
+  const saveAndClose = useCallback(async (exitApp: boolean) => {
+    if (IS_ANDROID || !isTauri()) return;
+    closeRequestedRef.current = closeRequestedRef.current === true || exitApp;
+    setCloseBusy(true);
+    if (!restoreReadyRef.current || closeInFlightRef.current) return;
+    closeInFlightRef.current = true;
+    try {
+      const exitRequested = closeRequestedRef.current;
+      let saved = await persistDesktopProgress(currentStateRef.current, invoke, exitRequested);
+      if (!exitRequested && closeRequestedRef.current === true) saved = await persistDesktopProgress(saved, invoke, true);
+      currentStateRef.current = saved;
+      setState(saved);
+      await invoke("finish_desktop_close", { exitApp: closeRequestedRef.current });
+      closeRequestedRef.current = null;
+    } catch (reason) {
+      closeRequestedRef.current = null;
+      setToast(tx("No se cerró: no se pudo guardar el progreso. ", "Not closed: progress could not be saved. ") + String(reason));
+      void getCurrentWindow().show();
+    } finally {
+      closeInFlightRef.current = false;
+      setCloseBusy(false);
+    }
+  }, [tx]);
+
+  useEffect(() => {
+    if (personalRestoreReady && closeRequestedRef.current !== null) void saveAndClose(closeRequestedRef.current);
+  }, [personalRestoreReady, saveAndClose]);
+
+  useEffect(() => {
+    if (IS_ANDROID || !isTauri()) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void listen<{ exitApp: boolean }>("caja-fantasma-save-request", (event) => void saveAndClose(event.payload.exitApp))
+      .then((stop) => { if (disposed) stop(); else unlisten = stop; });
+    const persistOnUnload = () => { try { saveState(currentStateRef.current); } catch { /* Native backup remains available. */ } };
+    window.addEventListener("pagehide", persistOnUnload);
+    window.addEventListener("beforeunload", persistOnUnload);
+    return () => {
+      disposed = true;
+      unlisten?.();
+      window.removeEventListener("pagehide", persistOnUnload);
+      window.removeEventListener("beforeunload", persistOnUnload);
+    };
+  }, [saveAndClose]);
 
   useEffect(() => {
     document.documentElement.lang = language;
@@ -1284,12 +1349,6 @@ export default function App() {
   };
 
   useEffect(() => {
-    const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 1_200 : 6_900;
-    const timer = window.setTimeout(() => setIntroVisible(false), duration);
-    return () => window.clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
     void checkCreatorAccess();
   }, [checkCreatorAccess]);
 
@@ -1339,7 +1398,9 @@ export default function App() {
 
   useEffect(() => {
     if (!isTauri() || !nativeBackupReady || personalHistoryCount(JSON.parse(personalSyncJson)) === 0) return;
+    if (!IS_ANDROID) void invoke("cache_desktop_progress", { dataJson: personalSyncJson }).catch(() => undefined);
     const timer = window.setTimeout(() => {
+      if (closeInFlightRef.current) return;
       void invoke("save_native_personal_backup", { dataJson: personalSyncJson }).catch(() => undefined);
     }, 350);
     return () => window.clearTimeout(timer);
@@ -1930,7 +1991,15 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <AppUpdater />
+      <AppUpdater beforeInstall={async () => {
+        if (!IS_ANDROID && isTauri()) {
+          if (!restoreReadyRef.current) throw new Error("El respaldo inicial todavía se está recuperando. Intenta actualizar de nuevo.");
+          const saved = await persistDesktopProgress(currentStateRef.current, invoke, false);
+          currentStateRef.current = saved;
+          setState(saved);
+        }
+      }} />
+      {closeBusy && <div className="progress-saving" role="status" aria-live="polite"><Save size={25} /><strong>{tx("Guardando tu progreso…", "Saving your progress…")}</strong><span>{tx("Preparando un cierre seguro", "Preparing a safe close")}</span></div>}
       {introVisible && <StartupIntro language={language} onSkip={() => setIntroVisible(false)} />}
       {toast && <div className="toast" role="status"><Check size={17} />{toast}</div>}
 
@@ -1956,6 +2025,7 @@ export default function App() {
           <button type="button" onClick={() => void syncCatalog()}><RefreshCw size={14} /> {tx("Sincronizar", "Sync")}</button>
         </div>
 
+        {!IS_WEB && !IS_ANDROID && isTauri() && <button type="button" className="save-exit-button" disabled={closeBusy} onClick={() => void saveAndClose(true)} title={tx("Guarda todo y cierra el programa", "Save everything and quit the app")}><LogOut size={18} /><span>{tx("Guardar y salir", "Save and exit")}</span></button>}
         <button type="button" className="author-card" onClick={openRepository}>
           <Github size={21} />
           <span><small>{tx("Creado por", "Created by")}</small><strong>{AUTHOR}</strong></span>
@@ -2400,10 +2470,7 @@ function StartupIntro({ language, onSkip }: { language: UiLanguage; onSkip: () =
     <span className="intro-crate-arrival" aria-hidden="true">
       <span className="intro-crate-shadow" />
       <span className="intro-crate">
-        <CrateOpeningArt />
-        <span className="intro-corner-slot" />
-        <span className="intro-lock-ring" />
-        <span className="intro-key-logo"><GameLogoMark /></span>
+        <CrateOpeningArt keyMark={<GameLogoMark />} />
         <span className="intro-light" />
         <span className="intro-impact-wave"><i /><i /></span>
         <span className="intro-sparks"><i /><i /><i /><i /><i /><i /></span>

@@ -20,7 +20,9 @@ function isNewerVersion(candidate: string, current: string) {
   return false;
 }
 
-export default function AppUpdater() {
+export default function AppUpdater({ beforeInstall }: { beforeInstall?: () => Promise<void> }) {
+  const beforeInstallRef = useRef(beforeInstall);
+  beforeInstallRef.current = beforeInstall;
   const desktopUpdateRef = useRef<Update | null>(null);
   const androidReleaseRef = useRef<AndroidRelease | null>(null);
   const snoozedVersionRef = useRef("");
@@ -86,6 +88,7 @@ export default function AppUpdater() {
       }, { timeout: 180_000 });
       setStatus("installing");
       setProgress(100);
+      await beforeInstallRef.current?.();
       await update.install();
       setStatus("restarting");
       await relaunch();

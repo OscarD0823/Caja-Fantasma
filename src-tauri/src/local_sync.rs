@@ -774,6 +774,9 @@ mod desktop {
             .snapshot
             .lock()
             .map_err(|_| "No se pudieron abrir los datos compartidos.".to_string())?;
+        if !state.enabled.load(Ordering::Relaxed) {
+            return Err("El PC guardó el progreso y cerró la conexión.".into());
+        }
         let exchange_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|duration| duration.as_millis() as u64)
@@ -1102,6 +1105,42 @@ mod desktop {
         };
         Ok(snapshot)
     }
+
+    pub fn persist_close_snapshot(
+        data: &str,
+        exit_app: bool,
+        persist: impl FnOnce(&str) -> Result<String, String>,
+    ) -> Result<String, String> {
+        let Some(state) = LOCAL_SYNC_SERVER.get() else {
+            return persist(data);
+        };
+        let mut snapshot = state
+            .snapshot
+            .lock()
+            .map_err(|_| "No se pudo guardar la conexión local.".to_string())?;
+        let merged = if state.enabled.load(Ordering::Relaxed) {
+            merge_live_personal_payloads(&snapshot.data_json, data, true)?
+        } else {
+            data.to_string()
+        };
+        let saved = persist(&merged)?;
+        snapshot.data_json = saved.clone();
+        snapshot.revision = snapshot.revision.saturating_add(1);
+        if exit_app {
+            state.enabled.store(false, Ordering::Relaxed);
+            snapshot.enabled = false;
+        }
+        Ok(saved)
+    }
+}
+
+#[cfg(desktop)]
+pub(crate) fn persist_close_snapshot(
+    data: &str,
+    exit_app: bool,
+    persist: impl FnOnce(&str) -> Result<String, String>,
+) -> Result<String, String> {
+    desktop::persist_close_snapshot(data, exit_app, persist)
 }
 
 #[cfg(desktop)]
@@ -1546,7 +1585,21 @@ mod tests {
         .expect_err("both devices must opt in to live synchronization");
         assert!(live_disabled.contains("en vivo"));
 
-        desktop::stop().expect("the test server should stop");
+        let failed_close =
+            desktop::persist_close_snapshot("{\"points\":4}", true, |_| Err("disk full".into()));
+        assert!(failed_close.is_err());
+        assert!(
+            desktop::read().unwrap().enabled,
+            "a failed close must leave sharing available"
+        );
+        let final_data =
+            desktop::persist_close_snapshot("{\"points\":4}", true, |data| Ok(data.to_string()))
+                .unwrap();
+        assert_json_eq(&final_data, "{\"points\":4}");
+        assert!(
+            !desktop::read().unwrap().enabled,
+            "a successful final save must freeze the bridge"
+        );
         let disabled = mobile_sync_exchange_blocking(
             address,
             "482731".into(),
