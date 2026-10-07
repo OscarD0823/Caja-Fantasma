@@ -26,6 +26,8 @@ import {
   Mail,
   Minus,
   MonitorUp,
+  Monitor,
+  Globe,
   Plus,
   RadioTower,
   RefreshCw,
@@ -76,6 +78,7 @@ import {
   clampNumber,
   computeCountdownTransition,
   computeCycle,
+  computeGravityWhale,
   createId,
   detachCharacterFromActions,
   formatCompactDuration,
@@ -90,11 +93,13 @@ import {
   splitPlatformCarryover,
   validateCatalog,
 } from "./model";
-import { applyPersonalSyncPayload, exportState, hasIntentionalActionDeletions, importState, loadPersonalSyncUpdatedAt, loadState, mergePersonalSyncPayload, personalDurableHistoryCount, personalHistoryCount, personalSyncPayload, savePersonalSyncUpdatedAt, saveState } from "./storage";
+import { applyPersonalSyncPayload, exportState, hasIntentionalActionDeletions, importState, loadPersonalSyncUpdatedAt, loadState, mergePersonalSyncPayload, personalDurableHistoryCount, personalHistoryCount, personalSyncPayload, recoverPersonalBackup, savePersonalSyncUpdatedAt, saveState } from "./storage";
 import { isValidLocalSyncAddress, localSyncTargetAddressSpace, splitLocalSyncAddress } from "./localSyncAddress";
 import { UI_LANGUAGES, localeForLanguage, translate, type UiLanguage } from "./i18n";
 import type { ShinyModCatalogItem } from "./shinyModsCatalog";
 import { loadWebPersonalBackup, readWebStorageStatus, requestPersistentWebStorage, saveWebPersonalBackup, type WebStorageStatus } from "./webStorage";
+import { usePwaInstall } from "./usePwaInstall";
+import CrateOpeningArt from "./CrateOpeningArt";
 
 type ShinyCatalogModule = typeof import("./shinyModsCatalog");
 const EMPTY_SHINY_CATALOG: ShinyModCatalogItem[] = [];
@@ -123,7 +128,7 @@ type TabId = "progress" | "characters" | "vision" | "devices" | "history" | "shi
 type CreatorAccess = "checking" | "locked" | "granted";
 
 type LocalSyncInfo = { enabled: boolean; address: string; port: number; webAddress: string; webPort: number; pairingCode: string; revision: number };
-type LocalSyncSnapshot = { enabled: boolean; revision: number; updatedAt: string; dataJson: string; lastExchangeAt: number; lastMobileUpdateAt: number };
+type LocalSyncSnapshot = { enabled: boolean; revision: number; updatedAt: string; dataJson: string; lastExchangeAt: number; lastMobileUpdateAt: number; connectedDevices?: string[] };
 type LocalSyncAction = "status" | "pull" | "push" | "live";
 type LocalSyncExchange = Omit<LocalSyncSnapshot, "enabled" | "lastMobileUpdateAt"> & { ok: boolean; message: string; catalogJson?: string };
 type LocalNetworkRequestInit = RequestInit & { targetAddressSpace?: "loopback" | "local" };
@@ -137,6 +142,7 @@ type BackgroundSyncStatus = {
   catalogJson: string;
   lastExchangeAt: number;
   message: string;
+  connectedDevices?: string[];
 };
 
 const REMOTE_CATALOG_API_URL = "https://api.github.com/repos/OscarD0823/Caja-Fantasma/contents/catalog/visions.json?ref=main";
@@ -190,6 +196,19 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.21.0",
+    date: "6 de octubre de 2026",
+    title: "Contadores en todos tus dispositivos",
+    items: [
+      "Contador del Riftwalker en PC, web y móvil, con tiempo restante o rayo de progreso.",
+      "Indicadores de conexión para PC, web y móvil; controles de ventana más compactos.",
+      "Rondas y desglose debajo de las recompensas, y Guardar ronda junto a la llegada de la caja.",
+      "La página se puede instalar y conserva la interfaz para abrir sin conexión.",
+      "Nuevo icono y apertura con llave, cierres y tapa animados.",
+      "El arranque recupera también respaldos con igual cantidad de registros y espera antes de sincronizar o archivar rondas.",
+    ],
+  },
   {
     version: "1.20.5",
     date: "5 de octubre de 2026",
@@ -770,8 +789,12 @@ export default function App() {
   const [localSyncInfo, setLocalSyncInfo] = useState<LocalSyncInfo>();
   const [localSyncStatus, setLocalSyncStatus] = useState("Sin conexión local");
   const [localSyncBusy, setLocalSyncBusy] = useState(false);
+  const [connectedDevices, setConnectedDevices] = useState<string[]>([]);
+  const [presenceReceivedAt, setPresenceReceivedAt] = useState(0);
+  const pwa = usePwaInstall(IS_WEB);
   const [nativeBackupReady, setNativeBackupReady] = useState(!isTauri());
   const [webBackupReady, setWebBackupReady] = useState(!IS_WEB);
+  const personalRestoreReady = nativeBackupReady && webBackupReady;
   const [webStorageStatus, setWebStorageStatus] = useState<WebStorageStatus>();
   const [creatorAccess, setCreatorAccess] = useState<CreatorAccess>("checking");
   const [creatorMessage, setCreatorMessage] = useState("Comprobando la cuenta de GitHub…");
@@ -857,6 +880,11 @@ export default function App() {
   const overlayDisplayName = overlayVisionName(selectedVision, state.settings.overlayNameMode, state.settings.overlayCustomName);
   const overlayDisplayMs = transition.active ? transition.remainingMs : cycle.remainingMs;
   const overlayDisplayTimer = state.settings.overlayCounterStyle === "compact" ? formatCompactDuration(overlayDisplayMs) : formatDuration(overlayDisplayMs);
+  const whale = computeGravityWhale(state.settings, now);
+  const whaleAvailable = selectedVision?.id === "gravity" && state.settings.activeMinutes > 15;
+  const whaleNextMs = cycle.phase === "active" ? Math.max(0, 15 * 60_000 - (state.settings.activeMinutes * 60_000 - cycle.remainingMs)) : cycle.remainingMs + 15 * 60_000;
+  const currentDevice = IS_WEB ? "web" : IS_ANDROID ? "mobile" : "pc";
+  const onlineDevices = state.settings.localSyncEnabled && now - presenceReceivedAt < 30_000 ? connectedDevices : [];
   const visibleTabs = TABS.filter((item) => item.id !== "changes" || creatorAccess === "granted");
   const targetProgress = Math.min(100, Math.round((currentPoints / target) * 100));
   const selectedShinyMod = SHINY_MOD_CATALOG.find((item) => item.id === selectedShinyModId) ?? defaultShinyMod;
@@ -924,6 +952,8 @@ export default function App() {
   }, [tx]);
 
   const acceptBackgroundSyncStatus = useCallback((background: BackgroundSyncStatus) => {
+    if (background.connected) { setConnectedDevices(background.connectedDevices ?? ["pc", "mobile"]); setPresenceReceivedAt(Date.now()); }
+    else setConnectedDevices([]);
     liveRevisionRef.current = Math.max(liveRevisionRef.current, background.revision);
     if (background.catalogJson && background.catalogJson !== "{}") {
       try {
@@ -969,6 +999,7 @@ export default function App() {
       }
       const request = {
         protocol: 2,
+        clientKind: IS_WEB ? "web" : "mobile",
         pairingCode,
         action,
         knownRevision: action === "live" ? liveRevisionRef.current : 0,
@@ -1021,6 +1052,8 @@ export default function App() {
             updatedAt: request.updatedAt,
           });
       if (action !== "status") liveRevisionRef.current = exchange.revision;
+      setConnectedDevices(exchange.connectedDevices ?? ["pc", IS_WEB ? "web" : "mobile"]);
+      setPresenceReceivedAt(Date.now());
       if (resumeBackgroundSync) {
         backgroundDataJson = exchange.dataJson;
         backgroundUpdatedAt = exchange.updatedAt;
@@ -1039,6 +1072,7 @@ export default function App() {
         setLocalSyncStatus(tx("PC conectado · catálogo público al día", "PC connected · public catalog up to date"));
       }
     } catch (error) {
+      setConnectedDevices([]);
       setLocalSyncStatus(error instanceof Error ? error.message : String(error));
     } finally {
       if (resumeBackgroundSync) {
@@ -1062,7 +1096,7 @@ export default function App() {
       personalSyncUpdatedAtRef.current = updatedAt;
       savePersonalSyncUpdatedAt(updatedAt);
     }
-    if (!IS_ANDROID && isTauri() && state.settings.localSyncEnabled) {
+    if (personalRestoreReady && !IS_ANDROID && isTauri() && state.settings.localSyncEnabled) {
       void invoke<number>("update_local_sync_state", {
         dataJson: personalSyncJsonRef.current,
         updatedAt: personalSyncUpdatedAtRef.current,
@@ -1073,10 +1107,10 @@ export default function App() {
         desktopRevisionRef.current = Math.max(desktopRevisionRef.current, revision);
       }).catch(() => undefined);
     }
-  }, [personalSyncJson, sharedCatalogJson, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
+  }, [personalRestoreReady, personalSyncJson, sharedCatalogJson, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
 
   useEffect(() => {
-    if (IS_ANDROID || !isTauri() || !state.settings.localSyncEnabled) {
+    if (!personalRestoreReady || IS_ANDROID || !isTauri() || !state.settings.localSyncEnabled) {
       setLocalSyncInfo(undefined);
       return;
     }
@@ -1101,7 +1135,7 @@ export default function App() {
         }
         desktopRevisionRef.current = info.revision;
         setLocalSyncInfo(info);
-        setLocalSyncStatus(tx(`Esperando al celular en ${info.address}`, `Waiting for the phone at ${info.address}`));
+        setLocalSyncStatus(tx(`Esperando web y móvil en ${info.address}`, `Waiting for web and mobile at ${info.address}`));
       } catch (error) {
         if (active) setLocalSyncStatus(error instanceof Error ? error.message : String(error));
       }
@@ -1112,12 +1146,14 @@ export default function App() {
       void invoke<LocalSyncSnapshot>("read_local_sync_state")
         .then((snapshot) => {
           if (!active) return;
+          setConnectedDevices(snapshot.connectedDevices ?? []);
+          setPresenceReceivedAt(Date.now());
           desktopRevisionRef.current = Math.max(desktopRevisionRef.current, snapshot.revision);
           const hasMobileUpdate = snapshot.lastMobileUpdateAt > lastMobileUpdateRef.current;
           if (hasMobileUpdate) lastMobileUpdateRef.current = snapshot.lastMobileUpdateAt;
           const receivedChanges = hasMobileUpdate ? acceptLocalSyncSnapshot(snapshot, true) : false;
           if (receivedChanges) setLocalSyncStatus(tx("Datos nuevos recibidos del celular", "New data received from the phone"));
-          else if (snapshot.lastExchangeAt > lastLocalExchangeRef.current) setLocalSyncStatus(tx("Celular conectado · datos al día", "Phone connected · data up to date"));
+          else if (snapshot.lastExchangeAt > lastLocalExchangeRef.current) setLocalSyncStatus(tx("Dispositivos conectados · datos al día", "Devices connected · data up to date"));
           lastLocalExchangeRef.current = Math.max(lastLocalExchangeRef.current, snapshot.lastExchangeAt);
         })
         .catch(() => undefined);
@@ -1126,7 +1162,7 @@ export default function App() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [acceptLocalSyncSnapshot, sharedCatalogJson, state.settings.localSyncCode, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled, tx]);
+  }, [acceptLocalSyncSnapshot, personalRestoreReady, sharedCatalogJson, state.settings.localSyncCode, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled, tx]);
 
   useEffect(() => {
     if (IS_ANDROID || !isTauri() || state.settings.localSyncEnabled) return;
@@ -1136,25 +1172,25 @@ export default function App() {
   }, [state.settings.localSyncEnabled]);
 
   useEffect(() => {
-    if ((!IS_ANDROID && !IS_WEB) || !state.settings.localSyncEnabled || state.settings.localSyncLiveEnabled) return;
+    if (!personalRestoreReady || (!IS_ANDROID && !IS_WEB) || !state.settings.localSyncEnabled || state.settings.localSyncLiveEnabled) return;
     liveRevisionRef.current = 0;
     void exchangeWithComputer("status", false);
     const timer = window.setInterval(() => void exchangeWithComputer("status", false), 5_000);
     return () => window.clearInterval(timer);
-  }, [exchangeWithComputer, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
+  }, [exchangeWithComputer, personalRestoreReady, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
 
   useEffect(() => {
-    if (!IS_WEB || !state.settings.localSyncEnabled || !state.settings.localSyncLiveEnabled) return;
+    if (!personalRestoreReady || !IS_WEB || !state.settings.localSyncEnabled || !state.settings.localSyncLiveEnabled) return;
     liveRevisionRef.current = 0;
     const synchronize = () => void exchangeWithComputer("live", false);
     synchronize();
     const timer = window.setInterval(synchronize, 2_000);
     window.addEventListener("focus", synchronize);
     return () => { window.clearInterval(timer); window.removeEventListener("focus", synchronize); };
-  }, [exchangeWithComputer, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
+  }, [exchangeWithComputer, personalRestoreReady, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
 
   useEffect(() => {
-    if (!IS_ANDROID || !isTauri()) return;
+    if (!personalRestoreReady || !IS_ANDROID || !isTauri()) return;
     if (!state.settings.localSyncEnabled || !state.settings.localSyncLiveEnabled) {
       void invoke<BackgroundSyncStatus>("plugin:android-updater|stop_background_sync").catch(() => undefined);
       return;
@@ -1192,10 +1228,10 @@ export default function App() {
       window.removeEventListener("focus", readStatus);
       document.removeEventListener("visibilitychange", readStatus);
     };
-  }, [acceptBackgroundSyncStatus, state.settings.localSyncAddress, state.settings.localSyncCode, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
+  }, [acceptBackgroundSyncStatus, personalRestoreReady, state.settings.localSyncAddress, state.settings.localSyncCode, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
 
   useEffect(() => {
-    if (!IS_ANDROID || !isTauri() || !state.settings.localSyncEnabled || !state.settings.localSyncLiveEnabled) return;
+    if (!personalRestoreReady || !IS_ANDROID || !isTauri() || !state.settings.localSyncEnabled || !state.settings.localSyncLiveEnabled) return;
     const address = state.settings.localSyncAddress.trim();
     const pairingCode = state.settings.localSyncCode.trim();
     if (!isValidLocalSyncAddress(address) || !/^\d{6}$/.test(pairingCode)) return;
@@ -1206,7 +1242,7 @@ export default function App() {
       updatedAt: personalSyncUpdatedAtRef.current,
       knownRevision: liveRevisionRef.current,
     }).then(acceptBackgroundSyncStatus).catch(() => undefined);
-  }, [acceptBackgroundSyncStatus, personalSyncJson, state.settings.localSyncAddress, state.settings.localSyncCode, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
+  }, [acceptBackgroundSyncStatus, personalRestoreReady, personalSyncJson, state.settings.localSyncAddress, state.settings.localSyncCode, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
 
   const checkCreatorAccess = useCallback(async () => {
     if (IS_ANDROID) {
@@ -1248,7 +1284,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 1_200 : 6_200;
+    const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 1_200 : 6_900;
     const timer = window.setTimeout(() => setIntroVisible(false), duration);
     return () => window.clearTimeout(timer);
   }, []);
@@ -1284,9 +1320,9 @@ export default function App() {
         if (!active || !backupText) return;
         const backup = JSON.parse(backupText) as unknown;
         setState((current) => {
-          if (personalDurableHistoryCount(backup) <= personalDurableHistoryCount(current)) return current;
-          const recovered = mergePersonalSyncPayload(current, backup);
+          const recovered = recoverPersonalBackup(current, backup);
           const recoveredJson = JSON.stringify(personalSyncPayload(recovered));
+          if (recoveredJson === JSON.stringify(personalSyncPayload(current))) return current;
           const updatedAt = new Date().toISOString();
           personalSyncJsonRef.current = recoveredJson;
           personalSyncUpdatedAtRef.current = updatedAt;
@@ -1319,8 +1355,8 @@ export default function App() {
         if (!backupText) return;
         const backup = JSON.parse(backupText) as unknown;
         setState((current) => {
-          if (personalDurableHistoryCount(backup) <= personalDurableHistoryCount(current)) return current;
-          const recovered = mergePersonalSyncPayload(current, backup);
+          const recovered = recoverPersonalBackup(current, backup);
+          if (JSON.stringify(personalSyncPayload(recovered)) === JSON.stringify(personalSyncPayload(current))) return current;
           personalSyncJsonRef.current = JSON.stringify(personalSyncPayload(recovered));
           const updatedAt = new Date().toISOString();
           personalSyncUpdatedAtRef.current = updatedAt;
@@ -1384,16 +1420,16 @@ export default function App() {
   }, [state.settings.overlayEnabled]);
 
   useEffect(() => {
-    if (cycle.phase !== "active" || state.settings.lastPointRoundEventStartedAt === cyclePhaseStartedAt) return;
+    if (!personalRestoreReady || cycle.phase !== "active" || state.settings.lastPointRoundEventStartedAt === cyclePhaseStartedAt) return;
     commitState((current) => {
       if (current.settings.lastPointRoundEventStartedAt === cyclePhaseStartedAt) return current;
       const archived = archivePointRounds(current, "event-start", cyclePhaseStartedAt, selectedVision);
       return { ...archived, settings: { ...archived.settings, lastPointRoundEventStartedAt: cyclePhaseStartedAt } };
     });
-  }, [commitState, cycle.phase, cyclePhaseStartedAt, selectedVision, state.settings.lastPointRoundEventStartedAt]);
+  }, [commitState, cycle.phase, cyclePhaseStartedAt, personalRestoreReady, selectedVision, state.settings.lastPointRoundEventStartedAt]);
 
   useEffect(() => {
-    if (cycle.phase !== "waiting" || selectedVision?.id !== "gravity" || state.settings.lastWhalePointRoundWaitStartedAt === cyclePhaseStartedAt) return;
+    if (!personalRestoreReady || cycle.phase !== "waiting" || selectedVision?.id !== "gravity" || state.settings.lastWhalePointRoundWaitStartedAt === cyclePhaseStartedAt) return;
     const saveAtMs = Date.parse(cyclePhaseStartedAt) + 6 * 60_000;
     if (now < saveAtMs) return;
     const saveAt = new Date(saveAtMs).toISOString();
@@ -1402,7 +1438,7 @@ export default function App() {
       const archived = archivePointRounds(current, "whale-end", saveAt, selectedVision);
       return { ...archived, settings: { ...archived.settings, lastWhalePointRoundWaitStartedAt: cyclePhaseStartedAt } };
     });
-  }, [commitState, cycle.phase, cyclePhaseStartedAt, now, selectedVision, state.settings.lastWhalePointRoundWaitStartedAt]);
+  }, [commitState, cycle.phase, cyclePhaseStartedAt, now, personalRestoreReady, selectedVision, state.settings.lastWhalePointRoundWaitStartedAt]);
 
   useEffect(() => {
     const leadMinutes = clampNumber(state.settings.voiceLeadMinutes, 1, 60);
@@ -1931,13 +1967,20 @@ export default function App() {
         <header className={`topbar vision-${selectedVision?.id ?? "none"} ${cycle.phase}`}>
           <VisionAtmosphere visionId={selectedVision?.id} active={cycle.phase === "active"} />
           <div className="topbar-copy">
-            <span className="eyebrow">{tab === "progress" ? tx("SEGUIMIENTO ACTUAL", "CURRENT TRACKING") : tab === "characters" ? tx("PERFILES DE JUEGO", "GAME PROFILES") : tab === "vision" ? tx("RUEDA VISIONAL", "VISIONAL WHEEL") : tab === "devices" ? tx("PC Y ANDROID", "PC AND ANDROID") : tab === "history" ? tx("REGISTRO PERSONAL", "PERSONAL RECORD") : tab === "shiny" ? tx("COLECCIÓN DE MÓDULOS", "MOD COLLECTION") : tab === "changes" ? tx("NOVEDADES", "WHAT'S NEW") : tx("PREFERENCIAS", "PREFERENCES")}</span>
+            <span className="eyebrow">{tab === "progress" ? tx("SEGUIMIENTO ACTUAL", "CURRENT TRACKING") : tab === "characters" ? tx("PERFILES DE JUEGO", "GAME PROFILES") : tab === "vision" ? tx("RUEDA VISIONAL", "VISIONAL WHEEL") : tab === "devices" ? tx("PC, WEB Y MÓVIL", "PC, WEB AND MOBILE") : tab === "history" ? tx("REGISTRO PERSONAL", "PERSONAL RECORD") : tab === "shiny" ? tx("COLECCIÓN DE MÓDULOS", "MOD COLLECTION") : tab === "changes" ? tx("NOVEDADES", "WHAT'S NEW") : tx("PREFERENCIAS", "PREFERENCES")}</span>
             <h1>{(() => { const item = TABS.find((entry) => entry.id === tab); return item ? tx(item.es, item.en) : ""; })()}</h1>
+            <div className="device-presence" aria-label={tx("Dispositivos emparejados", "Paired devices")}>
+              {([{ id: "pc", name: "PC", icon: Monitor }, { id: "web", name: "Web", icon: Globe }, { id: "mobile", name: tx("Móvil", "Mobile"), icon: Smartphone }]).map(({ id, name, icon: Icon }) => <span key={id} className={`${onlineDevices.includes(id) ? "connected" : "offline"} ${id === currentDevice ? "current" : ""}`} title={`${name}: ${onlineDevices.includes(id) ? tx("conectado", "connected") : id === currentDevice ? tx("este dispositivo", "this device") : tx("sin conexión reciente", "no recent connection")}`}><Icon size={12} />{name}<i /></span>)}
+            </div>
           </div>
           <div className="topbar-actions">
-            <div className={`phase-chip ${cycle.phase} ${transition.active ? "transitioning" : ""}`}>
+            <div className={`phase-chip counter-${state.settings.overlayCounterStyle} ${cycle.phase} ${transition.active ? "transitioning" : ""}`} style={{ "--card-progress": `${Math.round(cycle.progress * 360)}deg` } as import("react").CSSProperties}>
               <span className="pulse" />
-              <div><small>{transition.active ? tx("Preparando próximo contador", "Preparing next countdown") : cycle.phase === "active" ? `${english ? selectedVision?.englishName || selectedVision?.name || "Vision" : selectedVision?.name ?? "Visión"} ${tx("activa", "active")}` : tx("Próxima activación", "Next activation")}</small><strong>{formatDuration(overlayDisplayMs)}</strong></div>
+              <div><small>{transition.active ? tx("Preparando próximo contador", "Preparing next countdown") : cycle.phase === "active" ? `${overlayDisplayName} ${tx("activa", "active")}` : `${tx("Próxima", "Next")} ${overlayDisplayName}`}</small><strong>{overlayDisplayTimer}</strong></div>
+            </div>
+            <div className={`phase-chip whale-phase-chip counter-${state.settings.overlayWhaleCounterStyle} ${whale.visible && !whale.departing ? "active" : "waiting"}`} style={{ "--card-progress": `${Math.round((1 - whale.progress) * 360)}deg` } as import("react").CSSProperties}>
+              <Zap size={15} />
+              <div><small>{!whaleAvailable ? tx("Ballena · sin evento", "Whale · no event") : whale.departing ? tx("Ballena retirándose", "Whale departing") : whale.visible ? tx("Ballena · termina en", "Whale · ends in") : tx("Próxima ballena", "Next whale")}</small>{whaleAvailable && whale.visible && (state.settings.overlayWhaleCounterStyle === "beam" || !state.settings.overlayWhaleShowTime) ? <span className="whale-chip-beam" role="progressbar" aria-label={tx("Tiempo restante de Ballena", "Whale remaining time")} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((1 - whale.progress) * 100)}><i style={{ width: `${(1 - whale.progress) * 100}%` }} /></span> : <strong>{whaleAvailable ? state.settings.overlayWhaleCounterStyle === "compact" ? formatCompactDuration(whale.visible ? whale.remainingMs : whaleNextMs) : formatDuration(whale.visible ? whale.remainingMs : whaleNextMs) : "—"}</strong>}</div>
             </div>
             <label className="topbar-language" aria-label={tx("Idioma de la aplicación", "Application language")}>
               <Languages size={15} aria-hidden="true" />
@@ -1969,13 +2012,13 @@ export default function App() {
               {isTeamMode && <div className={`team-guidance ${teamReady ? "ready" : "warning"}`}><Users size={17} /><span><strong>{state.teamMemberIds.length} {tx("personajes en este equipo.", "characters on this team.")}</strong>{teamReady ? tx(" Cada recompensa se suma una vez a todos los seleccionados.", " Each reward is added once to every selected character.") : tx(" Selecciona al menos dos para comenzar.", " Select at least two to begin.")}</span><button type="button" className="secondary compact" onClick={startNewTeamCount}><RotateCcw size={15} /> {tx("Nuevo conteo en 0", "New count at 0")}</button></div>}
             </article>}
 
-            {!IS_ANDROID && <article className={`home-overlay-controls panel ${homeOverlayConfigOpen ? "expanded" : ""}`}>
-              <div><span className="eyebrow"><MonitorUp size={15} /> {tx("VENTANA FLOTANTE", "FLOATING OVERLAY")}</span><h2>{tx("Configurar ventana", "Configure overlay")}</h2><p>{tx("Ajusta el contador junto al seguimiento de la caja y comprueba aquí mismo su apariencia.", "Adjust the counter next to crate tracking and preview its appearance here.")}</p></div>
+            <article className={`home-overlay-controls panel ${homeOverlayConfigOpen ? "expanded" : ""}`}>
+              <div><span className="eyebrow"><MonitorUp size={13} /> {tx(IS_WEB || IS_ANDROID ? "CONTADORES" : "VENTANA FLOTANTE", IS_WEB || IS_ANDROID ? "COUNTDOWNS" : "FLOATING OVERLAY")}</span><h2>{tx(IS_WEB || IS_ANDROID ? "Configurar contadores" : "Configurar ventana", IS_WEB || IS_ANDROID ? "Configure countdowns" : "Configure overlay")}</h2></div>
               <div className="home-overlay-actions">
                 <button type="button" className="secondary" aria-expanded={homeOverlayConfigOpen} aria-controls="home-overlay-size-panel" onClick={() => setHomeOverlayEditing(!homeOverlayConfigOpen)}><Settings2 size={17} /> {homeOverlayConfigOpen ? tx("Terminar ajuste", "Finish editing") : tx("Abrir configuración", "Open settings")}</button>
-                <button type="button" className={`secondary overlay-home-button ${state.settings.overlayEnabled ? "enabled" : ""}`} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><Eye size={18} /> {state.settings.overlayEnabled ? tx("Quitar ventana", "Remove overlay") : tx("Agregar ventana", "Add overlay")}</button>
+                {!IS_WEB && !IS_ANDROID && <button type="button" className={`secondary overlay-home-button ${state.settings.overlayEnabled ? "enabled" : ""}`} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><Eye size={16} /> {state.settings.overlayEnabled ? tx("Quitar ventana", "Remove overlay") : tx("Agregar ventana", "Add overlay")}</button>}
               </div>
-              {homeOverlayConfigOpen && <div id="home-overlay-size-panel" className="home-overlay-size-panel">
+              {homeOverlayConfigOpen && <div id="home-overlay-size-panel" className={`home-overlay-size-panel ${IS_WEB || IS_ANDROID ? "in-app" : ""}`}>
                 <div className={`mock-overlay ${cycle.phase} vision-${selectedVision?.id ?? "none"} shape-${state.settings.overlayShape} counter-${state.settings.overlayCounterStyle}`}><span>{transition.active ? tx("Preparando próximo contador", "Preparing next countdown") : cycle.phase === "active" ? `${overlayDisplayName} ${tx("activa", "active")}` : `${tx("Próxima", "Next")} ${overlayDisplayName}`}</span><strong>{overlayDisplayTimer}</strong></div>
                 <div className="overlay-style-config">
                   <label>{tx("Forma", "Shape")}<select value={state.settings.overlayShape} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayShape: event.target.value as OverlayShape } }))}><option value="event">{tx("Automática por evento", "Automatic by event")}</option><option value="rectangle">{tx("Rectangular", "Rectangle")}</option><option value="square">{tx("Cuadrada", "Square")}</option><option value="vertical">{tx("Vertical", "Vertical")}</option><option value="round">{tx("Redonda", "Round")}</option></select></label>
@@ -1987,10 +2030,10 @@ export default function App() {
                 <label className="overlay-size-control"><span>{tx("Área de Ballena", "Whale area")} <strong>{Math.round(state.settings.overlayAddonScale * 100)}%</strong></span><input type="range" min={20} max={100} step={5} value={Math.round(state.settings.overlayAddonScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(Number(event.target.value) / 100, .2, 1) } }))} /></label>
                 {state.settings.overlayWhaleShowTime && <>{state.settings.overlayWhaleCounterStyle !== "beam" && <label className="overlay-size-control"><span>{tx("Tiempo sobre el rayo", "Time over the beam")} <strong>{Math.round(state.settings.overlayWhaleCounterScale * 100)}%</strong></span><input type="range" min={20} max={150} step={5} value={Math.round(state.settings.overlayWhaleCounterScale * 100)} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterScale: clampNumber(Number(event.target.value) / 100, .2, 1.5) } }))} /></label>}
                 <label className="overlay-size-control"><span>{tx("Estilo del tiempo", "Time style")}</span><select value={state.settings.overlayWhaleCounterStyle} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterStyle: event.target.value as WhaleCounterStyle } }))}><option value="digital">Digital</option><option value="compact">{tx("Compacto", "Compact")}</option><option value="ring">{tx("Anillo", "Ring")}</option><option value="beam">{tx("Solo rayo", "Beam only")}</option></select></label></>}
-                <div className="overlay-addon-option"><span><strong>{tx("Mostrar tiempo de Ballena", "Show Whale time")}</strong><small>{tx("Si lo desactivas, permanece solamente el Riftwalker con su rayo de progreso.", "When disabled, only the Riftwalker and its progress beam remain.")}</small></span><button type="button" className={`switch ${state.settings.overlayWhaleShowTime ? "on" : ""}`} aria-label={tx("Mostrar tiempo sobre el rayo de Ballena", "Show time over the Whale beam")} aria-pressed={state.settings.overlayWhaleShowTime} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleShowTime: !current.settings.overlayWhaleShowTime } }))}><span /></button></div>
+                <div className="overlay-addon-option"><span><strong>{tx("Mostrar tiempo de Ballena", "Show Whale time")}</strong><small>{tx(IS_WEB || IS_ANDROID ? "Durante la ballena activa puedes ver solo el rayo de progreso." : "Si lo desactivas, permanece solamente el Riftwalker con su rayo de progreso.", IS_WEB || IS_ANDROID ? "While the whale is active, you can show only its progress beam." : "When disabled, only the Riftwalker and its progress beam remain.")}</small></span><button type="button" className={`switch ${state.settings.overlayWhaleShowTime ? "on" : ""}`} aria-label={tx("Mostrar tiempo sobre el rayo de Ballena", "Show time over the Whale beam")} aria-pressed={state.settings.overlayWhaleShowTime} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleShowTime: !current.settings.overlayWhaleShowTime } }))}><span /></button></div>
                 <div className="overlay-addon-option"><span><strong>{tx("Ballena y rayo", "Whale and beam")}</strong><small>{tx("Puede ocultarse por completo sin desactivar el contador principal.", "It can be hidden completely without disabling the main countdown.")}</small></span><button type="button" className={`switch ${state.settings.overlayWhaleEnabled ? "on" : ""}`} aria-label={tx("Mostrar Ballena y rayo", "Show Whale and beam")} aria-pressed={state.settings.overlayWhaleEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleEnabled: !current.settings.overlayWhaleEnabled } }))}><span /></button></div>
               </div>}
-            </article>}
+            </article>
 
             <div className="hero-grid">
               <article className="progress-hero panel">
@@ -2006,22 +2049,8 @@ export default function App() {
                     {!isTeamMode && <button type="button" className="secondary platform-mail-button" disabled={currentActions.length === 0} onClick={() => markBox("platform-mail")}><Mail size={18} /> {tx("Llegó por Plataformas", "Platforms mail arrived")}</button>}
                     {isTeamMode && <button type="button" className="primary" onClick={startNewTeamCount}><Users size={18} /> {tx("Nuevo conteo de Equipo", "New Team count")}</button>}
                     <button type="button" className="secondary" disabled={currentActions.length === 0} onClick={undoLastAction}><Undo2 size={18} /> {tx("Deshacer último", "Undo last")}</button>
-                    <button type="button" className={`secondary overlay-home-button ${state.settings.overlayEnabled ? "enabled" : ""}`} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: !current.settings.overlayEnabled } }))}><Eye size={18} /> {state.settings.overlayEnabled ? tx("Quitar ventana flotante", "Remove floating overlay") : tx("Agregar ventana flotante", "Add floating overlay")}</button>
+                    <button type="button" className="secondary" disabled={currentPointRoundActions.length === 0} onClick={saveCurrentPointRound}><Save size={18} /> {tx("Guardar ronda", "Save round")}</button>
                   </div>
-                  <section className="point-round-history" aria-label="Historial de rondas de puntos">
-                    <header>
-                      <div><span>{tx("RONDA ACTUAL", "CURRENT ROUND")}</span><strong>{pointsLabel(currentPointRoundPoints, language)}</strong><small>{currentPointRoundActions.length} {english ? (currentPointRoundActions.length === 1 ? "reward" : "rewards") : (currentPointRoundActions.length === 1 ? "recompensa" : "recompensas")} {tx("desde el último guardado", "since the last save")}</small></div>
-                      <button type="button" className="secondary compact" disabled={currentPointRoundActions.length === 0} onClick={saveCurrentPointRound}><Save size={15} /> {tx("Guardar ronda", "Save round")}</button>
-                    </header>
-                    <div className="point-round-totals"><span><strong>{visiblePointRounds.length}</strong> {visiblePointRounds.length === 1 ? "ronda guardada" : "rondas guardadas"}</span><span><strong>{savedPointRoundTotal}</strong> {savedPointRoundTotal === 1 ? "punto registrado" : "puntos registrados"}</span></div>
-                    {visiblePointRounds.length > 0 && <div className="point-round-list">
-                      {visiblePointRounds.slice(0, 5).map((record, index) => <article key={record.id}>
-                        <span>#{visiblePointRounds.length - index}</span>
-                        <strong>{record.points} pts</strong>
-                        <small>{record.claims} {english ? (record.claims === 1 ? "reward" : "rewards") : (record.claims === 1 ? "recompensa" : "recompensas")} · {pointRoundTriggerLabel(record.trigger, language)} · {new Date(record.endedAt).toLocaleString(english ? "en-US" : "es-CO", { dateStyle: "short", timeStyle: "short" })}</small>
-                      </article>)}
-                    </div>}
-                  </section>
                 </div>
                 <div className="ghost-orbit" aria-hidden="true"><div className="orbital-ring" /><img className="ghost-crate-image" src={PHANTOM_CRATE_IMAGE} alt="" /><div className="once-human-wordmark"><span>ONCE</span><strong>HUMAN</strong></div><Sparkles className="spark-one" /><Sparkles className="spark-two" /></div>
               </article>
@@ -2064,6 +2093,18 @@ export default function App() {
               />) : <div className="empty-card"><Sparkles size={28} /><strong>Aún no hay recompensas para {selectedVision?.name}</strong><span>Puedes añadirlas en Configuración y publicarlas para todos.</span></div>}
             </div>
 
+            <section className="point-round-history panel" aria-label={tx("Historial de rondas de puntos", "Point round history")}>
+              <header><div><span>{tx("RONDA ACTUAL", "CURRENT ROUND")}</span><strong>{pointsLabel(currentPointRoundPoints, language)}</strong><small>{currentPointRoundActions.length} {tx("recompensas desde el último guardado", "rewards since the last save")}</small></div><div className="point-round-totals"><span><strong>{visiblePointRounds.length}</strong> {tx("rondas guardadas", "saved rounds")}</span><span><strong>{savedPointRoundTotal}</strong> {tx("puntos registrados", "recorded points")}</span></div></header>
+              {visiblePointRounds.length > 0 && <div className="point-round-list">
+                {visiblePointRounds.slice(0, 5).map((record, index) => <article key={record.id}><span>#{visiblePointRounds.length - index}</span><strong>{record.points} pts</strong><small>{record.claims} {tx("recompensas", "rewards")} · {pointRoundTriggerLabel(record.trigger, language)} · {new Date(record.endedAt).toLocaleString(localeForLanguage(language), { dateStyle: "short", timeStyle: "short" })}</small></article>)}
+              </div>}
+            </section>
+
+            {breakdown.length > 0 && <article className="attempt-log panel">
+              <div className="panel-title"><div><span className="eyebrow">{tx("DESGLOSE", "BREAKDOWN")}</span><h3>{isTeamMode ? tx("Conteo actual del equipo", "Current team count") : `${tx("Intento de", "Attempt for")} ${activeCharacter.name}`}</h3></div><button type="button" className="danger-quiet" onClick={resetAttempt}><RotateCcw size={16} /> {tx(isTeamMode ? "Nuevo conteo" : "Reiniciar", isTeamMode ? "New count" : "Reset")}</button></div>
+              {breakdown.map((item) => <div className="log-row" key={item.name}><span>{item.name}<small>{item.count}× {tx("reclamado", "claimed")}</small></span><strong>{pointsLabel(item.points, language)}</strong></div>)}
+            </article>}
+
             <section className="activity-insights-grid" aria-label={tx("Estadísticas de recompensas", "Reward statistics")}>
               <article className="daily-points-panel panel">
                 <div className="panel-title"><div><span className="eyebrow"><Clock3 size={14} /> {tx("PUNTUACIÓN POR DÍA", "POINTS BY DAY")}</span><h2>{tx("Actividad de hoy", "Today's activity")}</h2><small>{tx("El día del juego cambia a las 8:00 a. m. (hora de Colombia).", "The game day changes at 8:00 a.m. Colombia time.")}</small></div><span className="daily-date-badge">{new Date(`${todayKey}T12:00:00`).toLocaleDateString(english ? "en-US" : "es-CO", { day: "2-digit", month: "short" })}</span></div>
@@ -2076,10 +2117,6 @@ export default function App() {
               </article>
             </section>
 
-            {breakdown.length > 0 && <article className="attempt-log panel">
-              <div className="panel-title"><div><span className="eyebrow">DESGLOSE</span><h3>{isTeamMode ? "Conteo actual del equipo" : `Intento de ${activeCharacter.name}`}</h3></div><button type="button" className="danger-quiet" onClick={resetAttempt}><RotateCcw size={16} /> {isTeamMode ? "Nuevo conteo" : "Reiniciar"}</button></div>
-              {breakdown.map((item) => <div className="log-row" key={item.name}><span>{item.name}<small>{item.count}× {tx("reclamado", "claimed")}</small></span><strong>{pointsLabel(item.points, language)}</strong></div>)}
-            </article>}
           </section>
         )}
 
@@ -2242,6 +2279,7 @@ export default function App() {
               <div className="public-catalog-actions"><button type="button" className="secondary" onClick={() => void syncCatalog()}><RefreshCw size={16} /> {tx("Comprobar ahora", "Check now")}</button><small>{syncStatus}. {tx("Se revisa al abrir, cada 30 segundos, al volver Internet y al regresar a la aplicación.", "Checked at startup, every 30 seconds, when Internet returns, and when the app regains focus.")}</small></div>
             </article>
 
+            {IS_WEB && <article className="web-install-panel panel"><Globe size={24} /><div><h2>{tx(pwa.installed ? "Página instalada" : "Instalar Caja Fantasma", pwa.installed ? "Web app installed" : "Install Caja Fantasma")}</h2><p>{tx(pwa.installed ? "Puedes abrirla desde su icono y usar tus datos guardados sin conexión." : "Abre la página como una aplicación. En iPhone: Compartir → Añadir a pantalla de inicio. En otros navegadores, usa Instalar aplicación en el menú.", pwa.installed ? "Open it from its icon and use saved data offline." : "Open this page as an app. On iPhone: Share → Add to Home Screen. In other browsers, use Install app in the menu.")}</p></div>{pwa.available && <button type="button" className="primary" onClick={() => void pwa.install()}><Download size={16} />{tx("Instalar aplicación", "Install app")}</button>}</article>}
             <article className={`local-device-sync panel ${state.settings.localSyncEnabled ? "enabled" : ""}`}>
               <div className="local-sync-heading"><div><span className="eyebrow"><Wifi size={15} /> {tx("SIN NUBE NI FIREBASE", "NO CLOUD OR FIREBASE")}</span><h2>{tx("Sincronizar PC ↔ Web ↔ Android", "Sync PC ↔ Web ↔ Android")}</h2><p>{tx("El PC actúa como puente local: combina los historiales sin enviar datos personales a Internet.", "The PC acts as a local bridge, merging history without uploading personal data to the Internet.")}</p></div><span className={`local-sync-state ${state.settings.localSyncEnabled ? "online" : "offline"}`}>{state.settings.localSyncEnabled ? tx("ACTIVA", "ON") : tx("APAGADA", "OFF")}</span></div>
               {!IS_ANDROID && !IS_WEB ? <>
@@ -2344,13 +2382,15 @@ function ShinyTrackerCard({ record, language, onDecrease, onIncrease, onToggle, 
 
 function StartupIntro({ language, onSkip }: { language: UiLanguage; onSkip: () => void }) {
   const english = language !== "es";
+  const previewMs = import.meta.env.DEV ? Number(new URLSearchParams(window.location.search).get("intro-preview")) : 0;
   const onSkipRef = useRef(onSkip);
   onSkipRef.current = onSkip;
   useEffect(() => {
-    const timeout = window.setTimeout(() => onSkipRef.current(), 7_000);
+    if (previewMs > 0) return;
+    const timeout = window.setTimeout(() => onSkipRef.current(), window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 1_200 : 6_900);
     return () => window.clearTimeout(timeout);
   }, []);
-  return <button type="button" className="startup-intro" onClick={onSkip} aria-label={english ? "Skip opening animation" : "Omitir animación de apertura"}>
+  return <button type="button" className={`startup-intro ${previewMs > 0 ? "intro-preview" : ""}`} style={previewMs > 0 ? { "--intro-preview-time": Math.min(6500, previewMs) } as import("react").CSSProperties : undefined} onClick={onSkip} aria-label={english ? "Skip opening animation" : "Omitir animación de apertura"}>
     <span className="intro-letterbox" aria-hidden="true" />
     <span className="intro-world" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /><i /></span>
     <span className="intro-scan" aria-hidden="true" />
@@ -2360,8 +2400,7 @@ function StartupIntro({ language, onSkip }: { language: UiLanguage; onSkip: () =
     <span className="intro-crate-arrival" aria-hidden="true">
       <span className="intro-crate-shadow" />
       <span className="intro-crate">
-        <img className="intro-crate-image" src={PHANTOM_CRATE_IMAGE} alt="" />
-        <span className="intro-lid-hologram" />
+        <CrateOpeningArt />
         <span className="intro-corner-slot" />
         <span className="intro-lock-ring" />
         <span className="intro-key-logo"><GameLogoMark /></span>

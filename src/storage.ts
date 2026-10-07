@@ -584,6 +584,23 @@ export function loadPersonalSyncUpdatedAt() {
   return PERSONAL_SYNC_INITIAL_DATE;
 }
 
+/** Reconcile IDs and deletion markers even when both copies have the same size. */
+export function recoverPersonalBackup(current: PersistedState, value: unknown): PersistedState {
+  const imported = applyPersonalSyncPayload(current, value);
+  const recovered = mergePersonalSyncPayload(current, personalSyncPayload(imported));
+  const deletedIds = new Set(recovered.deletedActionIds);
+  const savedRoundIds = new Set(imported.pointRounds.map((record) => record.id));
+  return {
+    ...recovered,
+    // A stale startup may have automatically archived an already-deleted action.
+    // Keep manual snapshots, but do not retain automatic rounds made only of deletions.
+    pointRounds: recovered.pointRounds.filter((record) => savedRoundIds.has(record.id)
+      || record.trigger === "manual"
+      || record.actionIds.length === 0
+      || !record.actionIds.every((id) => deletedIds.has(id))),
+  };
+}
+
 export function savePersonalSyncUpdatedAt(updatedAt: string) {
   if (!Number.isFinite(Date.parse(updatedAt))) return;
   localStorage.setItem(PERSONAL_SYNC_UPDATED_AT_KEY, updatedAt);

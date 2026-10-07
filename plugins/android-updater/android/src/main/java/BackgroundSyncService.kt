@@ -15,6 +15,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import app.tauri.plugin.JSObject
 import org.json.JSONObject
+import org.json.JSONArray
 import java.io.ByteArrayOutputStream
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -129,6 +130,7 @@ internal object BackgroundSyncStore {
         catalogJson: String,
         lastExchangeAt: Long,
         message: String,
+        connectedDevices: String,
     ) {
         synchronized(lock) {
             val preferences = context.getSharedPreferences(SYNC_PREFERENCES, Context.MODE_PRIVATE)
@@ -141,6 +143,7 @@ internal object BackgroundSyncStore {
                 .putString("catalogJson", catalogJson)
                 .putLong("lastExchangeAt", lastExchangeAt)
                 .putString("message", message)
+                .putString("connectedDevices", connectedDevices)
             if (dataUnchangedDuringExchange && !wouldLoseDurableHistory(request.dataJson, dataJson)) {
                 editor.putString("dataJson", dataJson).putString("updatedAt", updatedAt)
             }
@@ -169,6 +172,7 @@ internal object BackgroundSyncStore {
             put("catalogJson", preferences.getString("catalogJson", "{}"))
             put("lastExchangeAt", preferences.getLong("lastExchangeAt", 0L))
             put("message", preferences.getString("message", "Sincronización en segundo plano detenida"))
+            put("connectedDevices", JSONArray(preferences.getString("connectedDevices", "[]")))
         }
     }
 
@@ -304,6 +308,7 @@ class BackgroundSyncService : Service() {
         }
         val payload = JSONObject().apply {
             put("protocol", 2)
+            put("clientKind", "mobile")
             put("pairingCode", request.pairingCode)
             put("action", "live")
             put("knownRevision", request.knownRevision)
@@ -340,6 +345,7 @@ class BackgroundSyncService : Service() {
                 catalogJson,
                 response.optLong("lastExchangeAt", System.currentTimeMillis()),
                 "PC conectado · datos en vivo al día",
+                response.optJSONArray("connectedDevices")?.toString() ?: "[\"pc\",\"mobile\"]",
             )
         }
     }

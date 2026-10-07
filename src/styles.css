@@ -335,6 +335,33 @@ button:disabled { cursor: not-allowed; opacity: .38; }
 .home-overlay-controls .overlay-size-control { margin: 0; }
 .home-overlay-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
 .home-overlay-actions button { white-space: nowrap; }
+.progress-page > .home-overlay-controls { padding: 11px 15px; gap: 10px; }
+.home-overlay-controls h2 { font-size: 13px; margin: 3px 0 0; }
+.home-overlay-controls .eyebrow { font-size: 7px; letter-spacing: .12em; }
+.home-overlay-actions button { min-height: 34px; padding: 7px 11px; font-size: 10px; }
+.home-overlay-size-panel.in-app > .overlay-size-control:has(input[type="range"]), .home-overlay-size-panel.in-app .overlay-style-config > label:first-child, .home-overlay-size-panel.in-app > .overlay-addon-option:last-child { display: none; }
+.point-round-history.panel { padding: 18px 20px; margin-top: 22px; border: 1px solid var(--line); }
+.device-presence { display: flex; gap: 6px; margin-top: 7px; }
+.device-presence > span { display: flex; align-items: center; gap: 4px; font-size: 8px; color: #68858e; padding: 3px 6px; border: 1px solid rgba(132, 187, 192, .13); border-radius: 6px; }
+.device-presence > span.current { color: #b6ccd0; }
+.device-presence > span i { width: 4px; height: 4px; border-radius: 50%; background: #43565f; }
+.device-presence > span.connected { color: #a1ecdf; border-color: rgba(85, 228, 190, .2); background: rgba(62, 180, 162, .06); }
+.device-presence > span.connected i { background: #75e3bd; box-shadow: 0 0 5px #75e3bd; }
+.whale-phase-chip { border-color: rgba(96, 166, 226, .22); background: rgba(30, 99, 145, .08); }
+.whale-phase-chip > svg { color: #7bccff; flex: none; }
+.whale-phase-chip.active { border-color: rgba(83, 198, 255, .48); background: rgba(23, 119, 174, .14); }
+.whale-phase-chip > div { min-width: 0; flex: 1; }
+.phase-chip.counter-ring .pulse { position: relative; width: 26px; height: 26px; background: conic-gradient(var(--cyan) var(--card-progress), #16323c 0); box-shadow: none; }
+.phase-chip.counter-ring .pulse::after { content: ""; position: absolute; inset: 4px; border-radius: 50%; background: #0b212c; }
+.whale-phase-chip.counter-ring > svg { width: 26px; height: 26px; padding: 5px; border-radius: 50%; background: conic-gradient(#68cfff var(--card-progress), #16323c 0); color: #08151e; }
+.whale-chip-beam { position: relative; display: block; margin-top: 5px; height: 14px; width: 100%; overflow: hidden; background: #102537; border-radius: 3px; }
+.whale-chip-beam > i { display: block; height: 100%; background: linear-gradient(90deg, #eaffff, #76d9ff, #378bee); box-shadow: 0 0 8px #6ccdfd; transition: width 1s linear; }
+.whale-chip-beam > b { position: absolute; inset: 0; text-align: center; font-size: 9px; line-height: 14px; color: #fff; text-shadow: 0 1px 3px #00101e; }
+.web-install-panel { display: flex; gap: 15px; align-items: center; margin-top: 16px; padding: 18px 22px; }
+.web-install-panel > svg { color: var(--cyan); flex: none; }
+.web-install-panel > div { flex: 1; }
+.web-install-panel h2 { font-size: 15px; margin: 0 0 5px; }
+.web-install-panel p { color: var(--muted); font-size: 11px; line-height: 1.5; margin: 0; }
 .home-overlay-size-panel { grid-column: 1/-1; padding: 17px 2px 0; border-top: 1px solid rgba(133, 175, 182, .1); display: grid; grid-template-columns: repeat(2, minmax(170px, 1fr)); gap: 22px; animation: home-overlay-panel-in .22s ease both; }
 .home-overlay-size-panel > .mock-overlay { grid-column: 1/-1; width: min(430px, 100%); margin: 0 auto; }
 .home-overlay-size-panel > .overlay-style-config { grid-column: 1/-1; width: 100%; margin: 0; }
@@ -1019,7 +1046,47 @@ html.overlay-document, body.overlay-document, body.overlay-document #root { over
   .intro-hud { inset: 38px 22px; }
 }
 
+.startup-intro { animation: vault-scene-exit 6.8s ease forwards; }
+.startup-intro.intro-preview, .startup-intro.intro-preview * { animation-play-state: paused !important; animation-delay: calc(-1ms * var(--intro-preview-time)) !important; }
+.intro-crate-arrival { width: min(360px, 76vw); height: min(360px, 76vw); margin-top: -70px; }
+.intro-crate { animation: vault-camera 6.8s ease both; filter: drop-shadow(0 20px 25px #0008); }
+.intro-crate::before, .intro-crate::after { display: none; }
+.opening-vault { position: absolute; inset: 0; perspective: 850px; transform-style: preserve-3d; }
+.vault-body { position: absolute; top: 13%; left: 0; width: 100%; overflow: visible; }
+.vault-lid { position: absolute; z-index: 4; top: 21.5%; left: 0; width: 100%; transform-origin: 50% 30%; transform-style: preserve-3d; animation: vault-open-lid 6.8s cubic-bezier(.25, .7, .22, 1) both; }
+.vault-lid svg { display: block; width: 100%; overflow: visible; }
+.vault-latches { transform-box: fill-box; transform-origin: center top; animation: vault-unlatch 6.8s ease both; }
+.vault-sigil { animation: vault-sigil-pulse 6.8s ease both; }
+.vault-interior-light { position: absolute; z-index: 2; left: 24%; top: 37%; width: 65%; height: 12%; border-radius: 50%; background: #acfff3; filter: blur(9px); opacity: 0; animation: vault-light-release 6.8s ease both; }
+.vault-energy-column { position: absolute; z-index: 3; left: 20%; top: -40%; width: 72%; height: 90%; clip-path: polygon(8% 0, 96% 0, 75% 100%, 18% 100%); background: linear-gradient(0deg, #b5fffaaa, #69e9ec22 55%, transparent); opacity: 0; transform-origin: center bottom; animation: vault-energy-release 6.8s ease both; pointer-events: none; }
+.vault-motes { position: absolute; z-index: 8; left: 48%; top: 44%; }
+.vault-motes i { position: absolute; width: 3px; height: 5px; background: #d0fff3; box-shadow: 0 0 12px #73ede8; animation: vault-mote-rise 2s 3.7s ease-out both; --mote-x: -70px; }
+.vault-motes i:nth-child(2) { --mote-x: 50px; animation-delay: 3.8s; }.vault-motes i:nth-child(3) { --mote-x: -120px; animation-delay: 3.9s; }.vault-motes i:nth-child(4) { --mote-x: 110px; animation-delay: 4s; }.vault-motes i:nth-child(5) { --mote-x: 0px; animation-delay: 4.1s; }.vault-motes i:nth-child(6) { --mote-x: 80px; animation-delay: 4.2s; }.vault-motes i:nth-child(7) { --mote-x: -30px; animation-delay: 4.3s; }.vault-motes i:nth-child(8) { --mote-x: 140px; animation-delay: 4.4s; }
+.intro-corner-slot, .intro-key-logo { top: 39%; right: 11%; width: 42px; height: 42px; border-radius: 9px; }
+.intro-corner-slot { animation: vault-slot 6.8s ease both; border: 1px solid #cfa771; }
+.intro-key-logo { animation: vault-key-dock 6.8s cubic-bezier(.4, 0, .2, 1) both; }
+.intro-key-logo svg { width: 30px; height: 30px; }
+.intro-lock-ring { top: calc(39% - 10px); right: calc(11% - 10px); width: 62px; height: 62px; }
+.intro-light { animation: vault-light-release 6.8s ease both; background: radial-gradient(ellipse at 50% 45%, #c7fff966, transparent 63%); }
+.intro-title { top: calc(50% + 145px); animation: vault-title 6.8s ease both; }
+.intro-title strong { font-size: clamp(20px, 4vw, 27px); }
+.intro-progress { top: calc(50% + 220px); }
+.intro-progress i { animation-duration: 5.8s; }
+@keyframes vault-key-dock { 0%, 12% { opacity: 0; transform: translate(-210px, -115px) rotate(-80deg) scale(1.4); } 20% { opacity: 1; transform: translate(-170px, -65px) rotate(-20deg) scale(1.3); } 33% { transform: translate(-95px, 28px) rotate(16deg) scale(1.15); } 46% { transform: translate(0, 0) rotate(0) scale(1); } 50% { transform: scale(.82); filter: brightness(2); } 54%, 70% { opacity: 1; transform: scale(.9); filter: brightness(1); } 78%, 100% { opacity: 0; transform: scale(.6); } }
+@keyframes vault-open-lid { 0%, 51% { transform: rotateX(0deg) translateY(0); } 55% { transform: rotateX(-12deg) translateY(-2px); } 73%, 100% { transform: rotateX(-145deg) translateY(-6px); } }
+@keyframes vault-unlatch { 0%, 49% { transform: rotateX(0); } 55%, 100% { transform: rotateX(-75deg) translateY(-4px); } }
+@keyframes vault-light-release { 0%, 49% { opacity: 0; } 55% { opacity: .35; } 71%, 82% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes vault-energy-release { 0%, 53% { opacity: 0; transform: scaleY(.1); } 69% { opacity: .85; transform: scaleY(1); } 82% { opacity: .6; transform: scaleY(1.08); } 100% { opacity: 0; transform: scaleY(1.3); } }
+@keyframes vault-camera { 0% { transform: rotateY(-14deg) rotateX(6deg) scale(.9); } 28%, 48% { transform: rotateY(0deg) rotateX(0deg) scale(1); } 54% { transform: translateY(1px) scale(1.025); } 76% { transform: translateY(-8px) scale(1.08); } 100% { transform: translateY(-18px) scale(1.22); } }
+@keyframes vault-slot { 0%, 43% { opacity: .7; box-shadow: inset 0 0 10px #050a11; } 49%, 67% { opacity: 1; box-shadow: 0 0 30px #78ffe8; } 80%, 100% { opacity: 0; } }
+@keyframes vault-sigil-pulse { 0%, 50% { opacity: .25; } 58%, 100% { opacity: 1; filter: drop-shadow(0 0 6px #76fff4); } }
+@keyframes vault-mote-rise { 0% { opacity: 0; transform: translate(0, 0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--mote-x), -250px) rotate(200deg); } }
+@keyframes vault-title { 0%, 59% { opacity: 0; transform: translateY(15px); } 72%, 91% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; } }
+@keyframes vault-scene-exit { 0%, 91% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
+@media (max-width: 760px) { .topbar { flex-wrap: wrap; gap: 12px; }.topbar-actions { flex: 1; justify-content: flex-end; }.phase-chip { min-width: 132px; }.point-round-history > header { align-items: flex-start; flex-wrap: wrap; }.web-install-panel { flex-wrap: wrap; } }
+@media (max-width: 620px) { .topbar { align-items: center; gap: 10px; }.topbar-copy { width: 100%; }.topbar-actions { width: 100%; justify-content: stretch; }.phase-chip { min-width: 0; flex: 1; gap: 7px; }.phase-chip strong { font-size: 12px; }.device-presence { position: absolute; right: 0; top: 2px; }.intro-crate-arrival { width: min(300px, 80vw); height: min(300px, 80vw); }.home-overlay-actions button { flex: 1; justify-content: center; font-size: 9px; padding-inline: 8px; }.home-overlay-controls { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }.home-overlay-size-panel { grid-column: 1 / -1; }.web-install-panel > div { min-width: 180px; } }
 @media (prefers-reduced-motion: reduce) {
+  .vault-lid, .vault-latches, .vault-sigil, .vault-interior-light, .vault-energy-column, .vault-motes i { animation: none; }
   .startup-intro { animation-duration: 1.2s; }
   .intro-world, .intro-scan, .intro-crate-arrival, .intro-crate, .intro-crate-image, .intro-key-logo, .intro-corner-slot, .intro-lock-ring, .intro-light, .intro-aura, .intro-sparks i, .intro-title, .intro-progress i { animation: none; }
   .intro-title { opacity: 1; }

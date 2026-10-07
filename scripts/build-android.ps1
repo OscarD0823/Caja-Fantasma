@@ -53,6 +53,11 @@ if (-not (Test-Path -LiteralPath $ZipAlign) -or -not (Test-Path -LiteralPath $Ap
 }
 
 $BuildStarted = Get-Date
+& $Node $TauriCli icon (Join-Path $ProjectRoot "src-tauri\icons\source.svg")
+if ($LASTEXITCODE -ne 0) { throw "No se pudieron generar los iconos de la aplicación." }
+# Tauri writes directly to the initialized Android project's resources.
+$AndroidIcon = Join-Path $ProjectRoot "src-tauri\gen\android\app\src\main\res\mipmap-xxxhdpi\ic_launcher.png"
+if (-not (Test-Path -LiteralPath $AndroidIcon)) { throw "No se generó el icono de Android." }
 $PreviousErrorActionPreference = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 try {

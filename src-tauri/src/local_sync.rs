@@ -25,6 +25,7 @@ pub struct LocalSyncSnapshot {
     pub catalog_json: String,
     pub last_exchange_at: u64,
     pub last_mobile_update_at: u64,
+    pub connected_devices: Vec<String>,
 }
 
 #[cfg(desktop)]
@@ -44,6 +45,8 @@ pub struct LocalSyncInfo {
 #[serde(rename_all = "camelCase")]
 struct LocalSyncRequest {
     protocol: u8,
+    #[serde(default = "default_client_kind")]
+    client_kind: String,
     pairing_code: String,
     #[serde(default)]
     action: LocalSyncAction,
@@ -74,6 +77,12 @@ pub struct LocalSyncExchange {
     pub data_json: String,
     pub catalog_json: String,
     pub last_exchange_at: u64,
+    #[serde(default)]
+    pub connected_devices: Vec<String>,
+}
+
+fn default_client_kind() -> String {
+    "mobile".into()
 }
 
 fn parse_sync_action(action: &str) -> Result<LocalSyncAction, String> {
@@ -512,6 +521,7 @@ fn mobile_sync_exchange_blocking(
         &mut stream,
         &LocalSyncRequest {
             protocol: LOCAL_SYNC_PROTOCOL,
+            client_kind: default_client_kind(),
             pairing_code,
             action,
             known_revision,
@@ -569,6 +579,7 @@ mod desktop {
         live_enabled: Arc<AtomicBool>,
         pairing_code: Arc<Mutex<String>>,
         snapshot: Arc<Mutex<LocalSyncSnapshot>>,
+        peers: Arc<Mutex<std::collections::BTreeMap<String, u64>>>,
         address: String,
         port: u16,
         web_port: u16,
@@ -728,6 +739,7 @@ mod desktop {
             data_json: "{}".into(),
             catalog_json: "{}".into(),
             last_exchange_at: 0,
+            connected_devices: vec![],
         }
     }
 
@@ -767,6 +779,7 @@ mod desktop {
             .map(|duration| duration.as_millis() as u64)
             .unwrap_or(0);
         snapshot.last_exchange_at = exchange_at;
+        let connected_devices = record_connected_devices(state, &request.client_kind, exchange_at)?;
         match request.action {
             LocalSyncAction::Push => {
                 // Una transferencia manual también combina los historiales conocidos. Así,
@@ -829,7 +842,26 @@ mod desktop {
             data_json: response_data_json,
             catalog_json: snapshot.catalog_json.clone(),
             last_exchange_at: snapshot.last_exchange_at,
+            connected_devices,
         })
+    }
+
+    fn record_connected_devices(
+        state: &ServerState,
+        kind: &str,
+        now: u64,
+    ) -> Result<Vec<String>, String> {
+        let mut peers = state
+            .peers
+            .lock()
+            .map_err(|_| "No se pudieron leer los dispositivos.".to_string())?;
+        peers.retain(|_, seen| now.saturating_sub(*seen) < 30_000);
+        if matches!(kind, "web" | "mobile") {
+            peers.insert(kind.to_string(), now);
+        }
+        let mut devices = vec!["pc".to_string()];
+        devices.extend(peers.keys().cloned());
+        Ok(devices)
     }
 
     fn process_client(mut stream: TcpStream, peer_address: SocketAddr, state: &ServerState) {
@@ -890,7 +922,9 @@ mod desktop {
                 catalog_json,
                 last_exchange_at: 0,
                 last_mobile_update_at: 0,
+                connected_devices: vec![],
             })),
+            peers: Arc::new(Mutex::new(std::collections::BTreeMap::new())),
             address: local_ip_address(),
             port,
             web_port: port,
@@ -1054,6 +1088,18 @@ mod desktop {
             .map_err(|_| "No se pudieron leer los datos compartidos.".to_string())?
             .clone();
         snapshot.enabled = state.enabled.load(Ordering::Relaxed);
+        snapshot.connected_devices = if snapshot.enabled {
+            record_connected_devices(
+                state,
+                "",
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|duration| duration.as_millis() as u64)
+                    .unwrap_or(0),
+            )?
+        } else {
+            vec![]
+        };
         Ok(snapshot)
     }
 }
@@ -1219,6 +1265,7 @@ mod tests {
         let web_address = format!("127.0.0.1:{}", info.web_port);
         let web_body = serde_json::to_string(&LocalSyncRequest {
             protocol: LOCAL_SYNC_PROTOCOL,
+            client_kind: "web".into(),
             pairing_code: code.clone(),
             action: LocalSyncAction::Status,
             known_revision: 0,
@@ -1253,6 +1300,7 @@ mod tests {
             &mut delayed_stream,
             &LocalSyncRequest {
                 protocol: LOCAL_SYNC_PROTOCOL,
+                client_kind: "mobile".into(),
                 pairing_code: code.clone(),
                 action: LocalSyncAction::Status,
                 known_revision: 0,
@@ -1276,6 +1324,7 @@ mod tests {
             &mut outdated_stream,
             &LocalSyncRequest {
                 protocol: 1,
+                client_kind: "mobile".into(),
                 pairing_code: code.clone(),
                 action: LocalSyncAction::Live,
                 known_revision: 0,
@@ -1302,6 +1351,10 @@ mod tests {
         )
         .expect("the PC should return its newer payload to the phone");
         assert_eq!(older_exchange.data_json, "{\"points\":1}");
+        assert_eq!(
+            older_exchange.connected_devices,
+            vec!["pc", "mobile", "web"]
+        );
         let wrong_code = mobile_sync_exchange_blocking(
             address.clone(),
             "000000".into(),

@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-64 -64 640 640">
+  <rect x="-64" y="-64" width="640" height="640" fill="#07131e"/><defs>
     <linearGradient id="background" x1="54" y1="38" x2="458" y2="474" gradientUnits="userSpaceOnUse">
       <stop stop-color="#12394a"/><stop offset=".52" stop-color="#071d29"/><stop offset="1" stop-color="#030b12"/>
     </linearGradient>

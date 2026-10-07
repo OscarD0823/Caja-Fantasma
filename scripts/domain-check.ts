@@ -4,7 +4,7 @@ import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT
 import { overlayDesignSize, whaleCounterLayoutWithinWindow, whaleCounterScaleWithinWindow, whaleScaleWithinWindow } from "../src/overlayGeometry.ts";
 import { completeLocalSyncAddress, isValidLocalSyncAddress, joinLocalSyncAddress, localSyncTargetAddressSpace, splitLocalSyncAddress } from "../src/localSyncAddress.ts";
 import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesModSearch, normalizeModSearch } from "../src/shinyModsCatalog.ts";
-import { initialState, mergePersonalSyncPayload, personalSyncPayload } from "../src/storage.ts";
+import { initialState, mergePersonalSyncPayload, personalDurableHistoryCount, personalSyncPayload, recoverPersonalBackup } from "../src/storage.ts";
 
 const freshState = { ...createInitialCharacterTracking(Date.parse("2026-09-11T00:00:00Z")), actions: [] as PointAction[] };
 assert.equal(freshState.trackingMode, "solo", "La aplicación debe iniciar en Solitario.");
@@ -286,6 +286,24 @@ const mergedWithStaleDevice = mergePersonalSyncPayload(mergedUndo, personalSyncP
 assert.equal(mergedWithStaleDevice.actions.length, 0, "Un dispositivo atrasado no debe restaurar un punto eliminado.");
 assert.equal(mergedWithStaleDevice.activityHistory.length, 0, "Un dispositivo atrasado no debe restaurar el registro diario eliminado.");
 assert.deepEqual(mergedWithStaleDevice.deletedActionIds, [synchronizedAction.id]);
+
+const replacementAction = { ...synchronizedAction, id: "replacement-point", occurredAt: "2026-10-04T15:05:00.000Z" };
+const startupRound = { id: "stale-auto-round", startedAt: synchronizedAction.occurredAt, endedAt: "2026-10-04T16:00:00.000Z", trigger: "event-start" as const, trackingMode: "solo" as const, characterId: DEFAULT_CHARACTER_ID, points: 1, claims: 1, actionIds: [synchronizedAction.id], breakdown: [] };
+const staleStartup = { ...liveBeforeUndo, pointRounds: [startupRound] };
+const sameSizeBackup = {
+  ...liveAfterUndo,
+  actions: [replacementAction],
+  activityHistory: [{ ...liveBeforeUndo.activityHistory[0], id: replacementAction.id, occurredAt: replacementAction.occurredAt }],
+  pointRounds: [{ ...startupRound, id: "saved-manual-round", trigger: "manual" as const, actionIds: [replacementAction.id] }],
+};
+assert.equal(personalDurableHistoryCount(staleStartup), personalDurableHistoryCount(sameSizeBackup));
+const recoveredStartup = recoverPersonalBackup(staleStartup, personalSyncPayload(sameSizeBackup));
+assert.deepEqual(recoveredStartup.actions.map((action) => action.id), [replacementAction.id], "Igual cantidad de registros no implica iguales datos: recuperar los IDs y las restas del respaldo.");
+assert.deepEqual(recoveredStartup.pointRounds.map((round) => round.id), ["saved-manual-round"], "Conservar el guardado manual y quitar una ronda automática compuesta únicamente por acciones eliminadas.");
+assert.deepEqual(recoverPersonalBackup(recoveredStartup, personalSyncPayload(sameSizeBackup)), recoveredStartup, "La recuperación al arrancar debe ser idempotente.");
+const historicalDeletedRound = { ...startupRound, id: "saved-before-deletion" };
+const backupWithHistoricalRound = { ...sameSizeBackup, pointRounds: [...sameSizeBackup.pointRounds, historicalDeletedRound] };
+assert(recoverPersonalBackup(staleStartup, personalSyncPayload(backupWithHistoricalRound)).pointRounds.some((round) => round.id === historicalDeletedRound.id), "Las rondas ya existentes en el respaldo deben conservarse aunque posteriormente se haya restado su acción.");
 
 const boxes: BoxRecord[] = [8, 12, 20].map((points, index) => ({ id: String(index), occurredAt: new Date().toISOString(), points, claims: points, breakdown: [] }));
 const statistics = boxStatistics(boxes, 5, []);

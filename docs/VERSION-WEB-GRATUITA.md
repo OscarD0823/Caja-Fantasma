@@ -8,6 +8,12 @@ GitHub Pages está disponible sin costo para este repositorio público. No se co
 
 La versión web escribe el estado principal en `localStorage` y mantiene una segunda copia recuperable en IndexedDB. Un Service Worker conserva en caché la interfaz para que pueda abrir sin conexión. El botón **Proteger almacenamiento** solicita al navegador que no elimine esos datos bajo presión de espacio. El respaldo JSON continúa siendo importante ante un borrado manual de los datos del sitio.
 
+## Instalar la página
+
+En Dispositivos aparece **Instalar aplicación** cuando el navegador ofrece esa función. También puedes usar la opción de instalación del menú de Chrome o Edge. En iPhone, abre la página en Safari y usa **Compartir → Añadir a pantalla de inicio**. La instalación abre la misma página en una ventana independiente: no crea una cuenta ni cambia el lugar de guardado de los datos.
+
+La caché incluye la pantalla inicial, su código y los iconos. Los módulos cargados por separado y las imágenes quedan disponibles sin conexión después de haberlos abierto con Internet. La sincronización sigue necesitando el PC encendido y acceso a la red local; la instalación no elimina los permisos de acceso a dispositivos que pueda exigir el navegador.
+
 ## Sincronización sin nube
 
 Windows funciona como concentrador local entre las tres aplicaciones:
