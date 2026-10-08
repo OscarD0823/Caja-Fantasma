@@ -12,7 +12,7 @@ Tu seguimiento de recompensas, cajas y módulos Brillantes de Once Human, en **P
 
 Las descargas llevan a la **última versión publicada**, no a versiones en preparación. Los archivos también están organizados en [Programa](Programa/).
 
-**1.21.4 · Consola de anomalías:** nueva identidad visual, iconos propios, apertura mecánica y colores de Lunar, Gravedad y Simbiosis. [Qué cambió](NOTAS-VERSION-1.21.4.md).
+**1.21.5 · Guardado e indicativos:** evita recuperar puntos de cajas cerradas y corrige la señal animada de Web en Android. [Qué cambió](NOTAS-VERSION-1.21.5.md).
 
 ## Empieza en un minuto
 

@@ -9,7 +9,7 @@ export async function persistDesktopProgress(state: PersistedState, invoke: Invo
   const dataJson = await invoke<string>("flush_desktop_progress", {
     dataJson: JSON.stringify(personalSyncPayload(state)), exitApp,
   });
-  const merged = mergePersonalSyncPayload(state, JSON.parse(dataJson) as unknown);
+  const merged = mergePersonalSyncPayload(state, JSON.parse(dataJson) as unknown, true);
   persist(merged);
   return merged;
 }

@@ -2,6 +2,10 @@
 
 mod local_sync;
 mod native_backup;
+// Exercise the Android wire format on Windows CI as well as in Android builds.
+#[cfg(test)]
+#[path = "../../plugins/android-updater/src/background_status.rs"]
+mod android_background_status_tests;
 #[cfg(desktop)]
 mod single_instance;
 #[cfg(all(desktop, target_os = "windows"))]

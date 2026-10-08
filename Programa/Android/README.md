@@ -1,12 +1,13 @@
-# Android · Caja Fantasma 1.21.4
+# Android · Caja Fantasma 1.21.5
 
-[Descargar APK](Caja-Fantasma-Android-1.21.4.apk) · [Última versión publicada](https://github.com/OscarD0823/Caja-Fantasma/releases/latest) · [SHA-256](SHA256SUMS.txt)
+[Descargar APK](Caja-Fantasma-Android-1.21.5.apk) · [Última versión publicada](https://github.com/OscarD0823/Caja-Fantasma/releases/latest) · [SHA-256](SHA256SUMS.txt)
 
-Android 8+ / API 26, ARM64. Versión 1.21.4, `versionCode` 1021004. Firma RSA 4096 del proyecto, con esquemas v2/v3 y el certificado habitual de actualización.
+Android 8+ / API 26, ARM64. Versión 1.21.5, `versionCode` 1021005. Firma RSA 4096 del proyecto, con esquemas v2/v3 y el certificado habitual de actualización.
 
 Instala sobre la versión anterior **sin desinstalarla** para conservar los datos. La app comprueba, descarga y verifica las siguientes versiones; Android requiere aceptar su confirmación de instalación.
 
-- Nuevo icono, logo, interfaz industrial y apertura de la caja adaptada a pantallas pequeñas.
+- Indicativos PC, Web y Móvil conservados al atravesar el servicio nativo; Web conectado activa su animación también en el teléfono.
+- Recuperación protegida del intento tras una caja; conserva la interfaz industrial y su apertura adaptada a pantallas pequeñas.
 - Crédito visible de OscarD0823 y enlaces a PC, página y GitHub que abren el navegador del teléfono.
 - La misma IP, puerto y código enlazan PC, celular y web. El PC debe permanecer ejecutándose.
 - Datos en vivo pueden continuar en segundo plano mediante el servicio de dispositivos conectados. Android puede limitarlo según sus políticas de batería.
@@ -14,4 +15,4 @@ Instala sobre la versión anterior **sin desinstalarla** para conservar los dato
 
 Exporta un respaldo desde **Configuración → Respaldo local** antes de desinstalar o cambiar de teléfono.
 
-[Sincronización y sus límites](../../docs/ANDROID-Y-SINCRONIZACION.md) · [Qué cambió](../../NOTAS-VERSION-1.21.4.md) · [Proyecto comunitario, no oficial](../../AVISO-COMUNITARIO.md)
+[Sincronización y sus límites](../../docs/ANDROID-Y-SINCRONIZACION.md) · [Qué cambió](../../NOTAS-VERSION-1.21.5.md) · [Proyecto comunitario, no oficial](../../AVISO-COMUNITARIO.md)

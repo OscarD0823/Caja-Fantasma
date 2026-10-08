@@ -21,6 +21,10 @@ assert.equal((renderPresence(["pc", "web", "mobile"]).match(/device-node connect
 assert.equal((renderPresence([]).match(/device-node connected/g) ?? []).length, 0);
 assert(renderPresence([]).includes("PC: este dispositivo · sin emparejar"));
 assert(renderPresence(["pc"]).includes("Móvil: sin conexión reciente"));
+const mobilePresence = renderToStaticMarkup(createElement(Presence, { online: ["pc", "web", "mobile"], current: "mobile" }));
+assert(mobilePresence.includes('device-node connected current'), "The mobile instance must mark its own real connection.");
+assert(mobilePresence.includes("Web: conectado"), "A web heartbeat received by Android must show Web connected, not offline.");
+assert.equal((mobilePresence.match(/device-node connected/g) ?? []).length, 3);
 const Emblem = await loadComponent("src/GameLogoMark.tsx");
 const emblems = renderToStaticMarkup(createElement("div", null, createElement(Emblem), createElement(Emblem)));
 const ids = [...emblems.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);

@@ -184,6 +184,15 @@ fn merge_id_array(current: Option<&Value>, incoming: Option<&Value>, field: &str
             merged.push(candidate.clone());
             continue;
         };
+        if field == "boxes"
+            && (merged[index].get("actionIds").is_some() || candidate.get("actionIds").is_some())
+        {
+            let action_ids =
+                merge_string_array(merged[index].get("actionIds"), candidate.get("actionIds"));
+            if let Some(existing) = merged[index].as_object_mut() {
+                existing.insert("actionIds".into(), action_ids);
+            }
+        }
         if field == "shinyMods" {
             let existing_attempts = merged[index]
                 .get("attempts")
@@ -234,6 +243,83 @@ fn merge_string_array(current: Option<&Value>, incoming: Option<&Value>) -> Valu
         }
     }
     Value::Array(merged)
+}
+
+fn remove_box_completed_actions(current: &mut serde_json::Map<String, Value>) {
+    let mut completed = std::collections::BTreeMap::<String, BTreeSet<String>>::new();
+    if let Some(boxes) = current.get("boxes").and_then(Value::as_array) {
+        for record in boxes {
+            let character = record
+                .get("characterId")
+                .and_then(Value::as_str)
+                .filter(|id| !id.is_empty())
+                .unwrap_or("character-main");
+            if let Some(ids) = record.get("actionIds").and_then(Value::as_array) {
+                for id in ids.iter().filter_map(Value::as_str) {
+                    completed
+                        .entry(id.to_owned())
+                        .or_default()
+                        .insert(character.to_owned());
+                }
+            }
+        }
+    }
+    if completed.is_empty() {
+        return;
+    }
+    if let Some(actions) = current.get_mut("actions").and_then(Value::as_array_mut) {
+        actions.retain_mut(|action| {
+            let Some(consumed_by) = action
+                .get("id")
+                .and_then(Value::as_str)
+                .and_then(|id| completed.get(id))
+            else {
+                return true;
+            };
+            let characters = action
+                .get("characterIds")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_else(|| vec![Value::String("character-main".into())]);
+            let remaining: Vec<Value> = characters
+                .into_iter()
+                .filter(|id| id.as_str().is_some_and(|id| !consumed_by.contains(id)))
+                .collect();
+            if remaining.is_empty()
+                && action.get("trackingMode").and_then(Value::as_str) != Some("team")
+            {
+                return false;
+            }
+            if let Some(action) = action.as_object_mut() {
+                action.insert("characterIds".into(), Value::Array(remaining));
+            }
+            true
+        });
+    }
+}
+
+/// Carry forward only immutable closures during a local save, not old editable settings.
+pub(crate) fn protect_box_closed_attempt(existing: &Value, incoming: &mut Value) {
+    let closed_boxes: Vec<Value> = existing
+        .get("boxes")
+        .and_then(Value::as_array)
+        .map(|boxes| {
+            boxes
+                .iter()
+                .filter(|record| record.get("actionIds").and_then(Value::as_array).is_some())
+                .cloned()
+                .collect()
+        })
+        .unwrap_or_default();
+    if closed_boxes.is_empty() {
+        return;
+    }
+    if let Some(incoming) = incoming.as_object_mut() {
+        let markers = Value::Array(closed_boxes);
+        let boxes = merge_id_array(incoming.get("boxes"), Some(&markers), "boxes");
+        incoming.insert("boxes".into(), boxes);
+        remove_box_completed_actions(incoming);
+    }
 }
 
 pub(crate) fn merge_live_personal_payloads(
@@ -341,6 +427,9 @@ pub(crate) fn merge_live_personal_payloads(
         let value = merge_id_array(current.get(field), incoming.get(field), field);
         current.insert(field.into(), value);
     }
+    // Closure markers are character-specific and survive stale or concurrent peers.
+    // This is not a deletion: retain the historical reward and team totals.
+    remove_box_completed_actions(&mut current);
     if let Some(history) = current
         .get_mut("activityHistory")
         .and_then(Value::as_array_mut)
@@ -1257,6 +1346,43 @@ mod tests {
         assert_eq!(merged["actions"].as_array().map(Vec::len), Some(0));
         assert_eq!(merged["activityHistory"].as_array().map(Vec::len), Some(2));
         assert_eq!(merged["boxes"].as_array().map(Vec::len), Some(1));
+    }
+
+    #[test]
+    fn closure_ids_survive_divergent_and_legacy_peers_without_losing_new_rewards() {
+        let closed = serde_json::json!({"actions":[{"id":"fresh","points":177}],"activityHistory":[{"id":"closed"},{"id":"fresh"}],"boxes":[{"id":"box","actionIds":["closed"]}]}).to_string();
+        let peer = serde_json::json!({"actions":[{"id":"closed","points":987},{"id":"fresh","points":177},{"id":"new","points":4}],"activityHistory":[{"id":"closed"},{"id":"fresh"},{"id":"new"}],"boxes":[{"id":"box"}]}).to_string();
+        for (left, right) in [(&closed, &peer), (&peer, &closed)] {
+            let merged = merge_live_personal_payloads(left, right, true).unwrap();
+            let value: Value = serde_json::from_str(&merged).unwrap();
+            assert_eq!(value["actions"].as_array().unwrap().len(), 2);
+            assert_eq!(value["actions"][0]["id"], "fresh");
+            assert_eq!(value["actions"][1]["id"], "new");
+            assert_eq!(value["activityHistory"].as_array().unwrap().len(), 3);
+            assert_eq!(value["boxes"][0]["actionIds"][0], "closed");
+            assert_json_eq(
+                &merge_live_personal_payloads(&merged, &peer, true).unwrap(),
+                &merged,
+            );
+        }
+    }
+
+    #[test]
+    fn box_closure_is_per_character_and_preserves_team_totals() {
+        let before = serde_json::json!({"actions":[{"id":"shared","characterIds":["alpha","beta"],"trackingMode":"team"}],"activityHistory":[{"id":"shared"}],"boxes":[]}).to_string();
+        let alpha_box = serde_json::json!({"actions":[{"id":"shared","characterIds":["beta"],"trackingMode":"team"}],"activityHistory":[{"id":"shared"}],"boxes":[{"id":"alpha-box","characterId":"alpha","actionIds":["shared"]}]}).to_string();
+        let merged = merge_live_personal_payloads(&alpha_box, &before, true).unwrap();
+        let value: Value = serde_json::from_str(&merged).unwrap();
+        assert_eq!(
+            value["actions"][0]["characterIds"],
+            serde_json::json!(["beta"])
+        );
+        let both_boxes = serde_json::json!({"actions":[],"activityHistory":[{"id":"shared"}],"boxes":[{"id":"beta-box","characterId":"beta","actionIds":["shared"]}],"pointRounds":[{"id":"independent-round"}]}).to_string();
+        let merged = merge_live_personal_payloads(&merged, &both_boxes, true).unwrap();
+        let value: Value = serde_json::from_str(&merged).unwrap();
+        assert_eq!(value["actions"].as_array().unwrap().len(), 1);
+        assert_eq!(value["actions"][0]["characterIds"], serde_json::json!([]));
+        assert_eq!(value["activityHistory"].as_array().unwrap().len(), 1);
     }
 
     #[test]

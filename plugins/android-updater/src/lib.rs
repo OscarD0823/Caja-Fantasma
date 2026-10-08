@@ -6,6 +6,9 @@ use tauri::{
 
 const PLUGIN_IDENTIFIER: &str = "com.oscard0823.cajafantasma.updater";
 
+mod background_status;
+pub use background_status::BackgroundSyncStatus;
+
 pub struct AndroidUpdater<R: Runtime>(PluginHandle<R>);
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -33,19 +36,6 @@ struct BackgroundSyncArgs {
     data_json: String,
     updated_at: String,
     known_revision: u64,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BackgroundSyncStatus {
-    pub active: bool,
-    pub connected: bool,
-    pub revision: u64,
-    pub updated_at: String,
-    pub data_json: String,
-    pub catalog_json: String,
-    pub last_exchange_at: u64,
-    pub message: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

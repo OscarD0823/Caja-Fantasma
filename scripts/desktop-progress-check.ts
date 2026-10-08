@@ -5,7 +5,7 @@ import type { PersistedState } from "../src/model.ts";
 
 const state = initialState();
 state.settings.overlayScale = .55;
-state.actions = [{ id: "last-click", activityId: "platform", activityName: "Plataformas", points: 4, source: "vision", createdAt: "2026-10-07T18:00:00Z" }] as PersistedState["actions"];
+state.actions = [{ id: "last-click", activityId: "platform", activityName: "Plataformas", points: 4, occurredAt: "2026-10-07T18:00:00Z" }];
 const saves: PersistedState[] = [];
 const calls: string[] = [];
 const saved = await persistDesktopProgress(state, async <T>(command: string, args: Record<string, unknown>) => {
@@ -20,6 +20,13 @@ assert.equal(saved.actions.reduce((sum, item) => sum + item.points, 0), 5);
 assert.equal(saved.settings.overlayScale, .55);
 assert.equal(saves.length, 2);
 assert.deepEqual(calls, ["flush_desktop_progress"]);
+const consumed = { ...state.actions[0], id: "closed-attempt", points: 987 };
+const fresh = { ...state.actions[0], id: "current-attempt", points: 177 };
+const legacy = { ...state, actions: [consumed, fresh], activityHistory: [consumed, fresh].map(action => ({ ...action, count: 1 })), boxes: [{ id: "box", points: 987, claims: 1, occurredAt: "2026-10-07T19:00:00Z", breakdown: [] }] };
+const canonical = { ...legacy, actions: [fresh] };
+const reconciled = await persistDesktopProgress(legacy, async <T>() => JSON.stringify(personalSyncPayload(canonical)) as T, true, () => undefined);
+assert.equal(reconciled.actions.reduce((sum, action) => sum + action.points, 0), 177, "The final native save must not revive a legacy closed attempt with equal history.");
+assert.equal(reconciled.activityHistory.length, 2, "Closing the attempt must retain historical rewards.");
 await assert.rejects(persistDesktopProgress(state, async () => { throw new Error("disk full"); }, true, () => undefined), /disk full/);
 await assert.rejects(persistDesktopProgress(state, async <T>() => JSON.stringify(personalSyncPayload(state)) as T, false, () => { throw new Error("storage unavailable"); }), /storage unavailable/);
-console.log("Desktop safe-save checks passed: last click, inbound data, preferences, failure protection.");
+console.log("Desktop safe-save checks passed: last click, inbound data, canonical closed attempt, preferences, failure protection.");

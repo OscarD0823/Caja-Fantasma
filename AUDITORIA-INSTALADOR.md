@@ -1,6 +1,6 @@
 # Auditoría del instalador de Caja Fantasma
 
-Revisión actualizada para la versión 1.21.4 sobre el script NSIS generado por Tauri.
+Revisión actualizada para la versión 1.21.5 sobre el script NSIS generado por Tauri.
 
 ## Qué instala
 

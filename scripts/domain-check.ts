@@ -314,6 +314,33 @@ const backupWithHistoricalRound = { ...sameSizeBackup, pointRounds: [...sameSize
 assert(recoverPersonalBackup(staleStartup, personalSyncPayload(backupWithHistoricalRound)).pointRounds.some((round) => round.id === historicalDeletedRound.id), "Las rondas ya existentes en el respaldo deben conservarse aunque posteriormente se haya restado su acción.");
 
 const boxes: BoxRecord[] = [8, 12, 20].map((points, index) => ({ id: String(index), occurredAt: new Date().toISOString(), points, claims: points, breakdown: [] }));
+const closedReward = { ...synchronizedAction, id: "closed-reward", points: 987 };
+const currentReward = { ...replacementAction, id: "current-reward", points: 177 };
+const attemptHistory = [closedReward, currentReward].map(action => ({ ...action, count: 1 }));
+const legacyClosedBox: BoxRecord = { id: "closed-box", occurredAt: "2026-10-04T16:00:00Z", points: 987, claims: 1, breakdown: [] };
+const nativeSavedAttempt = { ...initialState(), actions: [currentReward], activityHistory: attemptHistory, boxes: [legacyClosedBox] };
+const staleAttemptCache = { ...nativeSavedAttempt, actions: [closedReward, currentReward] };
+assert.equal(recoverPersonalBackup(staleAttemptCache, personalSyncPayload(nativeSavedAttempt)).actions.reduce((sum, action) => sum + action.points, 0), 177, "Equal history recovery must prefer the native post-box attempt, not add 987 closed points.");
+const newerLocalReward = { ...currentReward, id: "new-local-reward", points: 4 };
+const newerLocalAttempt = { ...nativeSavedAttempt, actions: [currentReward, newerLocalReward], activityHistory: [...attemptHistory, { ...newerLocalReward, count: 1 }] };
+assert.equal(recoverPersonalBackup(newerLocalAttempt, personalSyncPayload(nativeSavedAttempt)).actions.reduce((sum, action) => sum + action.points, 0), 181, "A genuinely newer local reward must survive startup recovery.");
+const closedBox = { ...legacyClosedBox, actionIds: [closedReward.id] };
+const currentAttempt = { ...nativeSavedAttempt, boxes: [closedBox] };
+const divergentPeer = { ...staleAttemptCache, actions: [closedReward, currentReward, newerLocalReward], activityHistory: [...attemptHistory, { ...newerLocalReward, count: 1 }], boxes: [legacyClosedBox] };
+for (const [left, right] of [[currentAttempt, divergentPeer], [divergentPeer, currentAttempt]]) {
+  const merged = mergePersonalSyncPayload(left, personalSyncPayload(right), true);
+  assert.deepEqual(merged.actions.map(action => action.id).sort(), [currentReward.id, newerLocalReward.id].sort(), "Closed rewards must not revive even when a peer has newer independent history.");
+  assert.equal(merged.activityHistory.length, 3);
+  assert.deepEqual(merged.boxes[0].actionIds, [closedReward.id], "A legacy peer must not erase closure IDs.");
+  assert.deepEqual(mergePersonalSyncPayload(merged, personalSyncPayload(divergentPeer), true), merged, "Repeated live exchanges must be idempotent.");
+}
+const sharedReward = { ...closedReward, characterIds: [DEFAULT_CHARACTER_ID, "alt"], trackingMode: "team" as const, teamSessionId: "shared" };
+const sharedPeer = { ...currentAttempt, actions: [sharedReward], activityHistory: [{ ...sharedReward, count: 1 }], characters: [...currentAttempt.characters, { id: "alt", name: "Alt", createdAt: sharedReward.occurredAt }] };
+const sharedMerged = mergePersonalSyncPayload(sharedPeer, personalSyncPayload(sharedPeer));
+assert.deepEqual(sharedMerged.actions[0].characterIds, ["alt"], "Closing one character's box must retain another's points.");
+const bothBoxes = { ...sharedPeer, boxes: [closedBox, { ...closedBox, id: "alt-box", characterId: "alt" }] };
+const teamCompleted = mergePersonalSyncPayload(bothBoxes, personalSyncPayload(sharedPeer), true);
+assert.deepEqual(teamCompleted.actions[0].characterIds, [], "Team rewards must remain in the team total after both personal boxes close.");
 const statistics = boxStatistics(boxes, 5, []);
 assert.equal(statistics.minimum, 8);
 assert.equal(statistics.maximum, 20);

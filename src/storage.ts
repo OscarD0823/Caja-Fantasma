@@ -1,9 +1,9 @@
 import defaultCatalog from "../catalog/visions.json" with { type: "json" };
 import type { ActivityHistoryRecord, BoxRecord, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, PointRoundRecord, PointRoundTrigger, Settings, ShinyModRecord, WhaleCounterStyle } from "./model.ts";
-import { VISION_CYCLE_WAIT_STARTED_AT, applyRemoteCatalog, clampNumber, createInitialCharacterTracking, resolveTransitionDelayMilliseconds, sharedVisionId, validateCatalog } from "./model.ts";
+import { VISION_CYCLE_WAIT_STARTED_AT, applyRemoteCatalog, clampNumber, createInitialCharacterTracking, removeBoxCompletedActions, resolveTransitionDelayMilliseconds, sharedVisionId, validateCatalog } from "./model.ts";
 import { isUiLanguage } from "./i18n.ts";
 
-const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
+export const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
 const SAFETY_BACKUP_KEY = "caja-fantasma.once-human.safety-backup.v1";
 const OVERLAY_POSITION_KEY = "caja-fantasma.once-human.overlay-position.v1";
 const PERSONAL_SYNC_UPDATED_AT_KEY = "caja-fantasma.once-human.personal-sync-updated-at.v1";
@@ -335,7 +335,7 @@ export function loadState(): PersistedState {
       ...fresh,
       ...parsed,
       catalog,
-      actions,
+      actions: removeBoxCompletedActions(actions, boxes),
       deletedActionIds,
       activityHistory: (mustClearPreviousRecords ? [] : Array.isArray(parsed.activityHistory) ? sanitizeActivityHistory(parsed.activityHistory) : legacyActivityHistory(actions, boxes, catalog))
         .filter((record) => !deletedActionIdSet.has(record.id)),
@@ -415,7 +415,7 @@ export function importState(text: string): PersistedState {
   return {
     ...fresh,
     ...parsed,
-    actions: parsed.actions.filter((action) => !deletedActionIdSet.has(action.id)),
+    actions: removeBoxCompletedActions(parsed.actions.filter((action) => !deletedActionIdSet.has(action.id)), parsed.boxes),
     deletedActionIds,
     activityHistory: (Array.isArray(parsed.activityHistory) ? sanitizeActivityHistory(parsed.activityHistory) : legacyActivityHistory(parsed.actions, parsed.boxes, catalog))
       .filter((record) => !deletedActionIdSet.has(record.id)),
@@ -554,7 +554,13 @@ export function mergePersonalSyncPayload(current: PersistedState, value: unknown
     : incomingDominates || (currentContainsIncoming && preferIncomingOnEqual)
       ? incomingPayload.actions
       : mergeRecordsById(currentPayload.actions, incomingPayload.actions);
-  const actions = candidateActions.filter((action) => !deletedActionIdSet.has(action.id));
+  const boxes = mergeRecordsById(currentPayload.boxes, incomingPayload.boxes, (existing, candidate) => {
+    if (!Array.isArray(existing.actionIds) && !Array.isArray(candidate.actionIds)) return existing;
+    const existingIds = Array.isArray(existing.actionIds) ? existing.actionIds : [];
+    const candidateIds = Array.isArray(candidate.actionIds) ? candidate.actionIds : [];
+    return { ...existing, actionIds: [...new Set([...existingIds, ...candidateIds].filter((id) => typeof id === "string"))] };
+  });
+  const actions = removeBoxCompletedActions(candidateActions.filter((action) => !deletedActionIdSet.has(action.id)), boxes);
   const boundaries = { ...currentPayload.pointRoundBoundaries };
   for (const [key, candidate] of Object.entries(incomingPayload.pointRoundBoundaries)) {
     if (!boundaries[key] || candidate > boundaries[key]) boundaries[key] = candidate;
@@ -571,7 +577,7 @@ export function mergePersonalSyncPayload(current: PersistedState, value: unknown
     deletedActionIds,
     activityHistory: mergeRecordsById(currentPayload.activityHistory, incomingPayload.activityHistory)
       .filter((record) => !deletedActionIdSet.has(record.id)),
-    boxes: mergeRecordsById(currentPayload.boxes, incomingPayload.boxes),
+    boxes,
     pointRounds: mergeRecordsById(currentPayload.pointRounds, incomingPayload.pointRounds),
     pointRoundBoundaries: boundaries,
     manualBaselinePoints: incomingPayload.manualBaselinePoints.length > currentPayload.manualBaselinePoints.length
@@ -595,7 +601,8 @@ export function loadPersonalSyncUpdatedAt() {
 /** Reconcile IDs and deletion markers even when both copies have the same size. */
 export function recoverPersonalBackup(current: PersistedState, value: unknown): PersistedState {
   const imported = applyPersonalSyncPayload(current, value);
-  const recovered = mergePersonalSyncPayload(current, personalSyncPayload(imported));
+  // The durable save wins an equal-history tie, including legacy boxes without action IDs.
+  const recovered = mergePersonalSyncPayload(current, personalSyncPayload(imported), true);
   const deletedIds = new Set(recovered.deletedActionIds);
   const savedRoundIds = new Set(imported.pointRounds.map((record) => record.id));
   return {

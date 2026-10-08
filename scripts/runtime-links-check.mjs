@@ -16,4 +16,15 @@ for (const platform of ["default", "android"]) {
   const capabilities = JSON.parse(await readFile(resolve(root, `src-tauri/capabilities/${platform}.json`), "utf8"));
   assert(capabilities.permissions.includes("opener:default"), `${platform} must allow opening external URLs.`);
 }
-console.log("Runtime OK: external links on Windows/Android, desktop single-instance first and background-safe relaunch.");
+const androidUpdater = await readFile(resolve(root, "plugins/android-updater/src/lib.rs"), "utf8");
+const androidStatus = await readFile(resolve(root, "plugins/android-updater/src/background_status.rs"), "utf8");
+const androidService = await readFile(resolve(root, "plugins/android-updater/android/src/main/java/BackgroundSyncService.kt"), "utf8");
+assert(androidUpdater.includes("pub use background_status::BackgroundSyncStatus;"), "The mobile bridge must use the tested status wire format.");
+assert(androidStatus.includes("pub connected_devices: Vec<String>"), "Rust must retain device presence from Kotlin.");
+assert(androidService.includes('"connectedDevices"'), "Android must include the full device list in background status.");
+const app = await readFile(resolve(root, "src/App.tsx"), "utf8");
+assert(app.includes("background.connectedDevices?.length"), "Frontend must consume mobile presence, with a legacy fallback.");
+const overlay = await readFile(resolve(root, "src/Overlay.tsx"), "utf8");
+assert(!overlay.includes("saveState("), "The overlay must never overwrite personal progress with cached data.");
+assert(app.includes("if (personalRestoreReady) saveState(state)"), "Startup must hydrate before persisting a stale cache.");
+console.log("Runtime OK: external links, single-instance, mobile presence wire format, hydration and read-only overlay.");

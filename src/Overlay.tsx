@@ -5,7 +5,7 @@ import { getCurrentWindow, Window } from "@tauri-apps/api/window";
 import type { PersistedState } from "./model";
 import { clampNumber, computeCountdownTransition, computeCycle, computeGravityWhale } from "./model";
 import OverlayVisual, { overlayDesignSize } from "./OverlayVisual";
-import { loadOverlayPosition, loadState, saveOverlayPosition, saveState } from "./storage";
+import { loadOverlayPosition, loadState, saveOverlayPosition } from "./storage";
 
 export default function Overlay() {
   const [state, setState] = useState<PersistedState>(() => loadState());
@@ -22,7 +22,7 @@ export default function Overlay() {
 
   const hideOverlay = () => {
     const next = { ...state, settings: { ...state.settings, overlayEnabled: false } };
-    saveState(next);
+    // Only the main window owns progress. A cached overlay must never rewrite it.
     setState(next);
     void emit("caja-fantasma-overlay-disabled");
     void getCurrentWindow().hide();

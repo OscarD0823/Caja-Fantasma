@@ -97,7 +97,7 @@ import {
   splitPlatformCarryover,
   validateCatalog,
 } from "./model";
-import { applyPersonalSyncPayload, exportState, hasIntentionalActionDeletions, importState, loadPersonalSyncUpdatedAt, loadState, mergePersonalSyncPayload, personalDurableHistoryCount, personalHistoryCount, personalSyncPayload, recoverPersonalBackup, savePersonalSyncUpdatedAt, saveState } from "./storage";
+import { STORAGE_KEY, applyPersonalSyncPayload, exportState, hasIntentionalActionDeletions, importState, loadPersonalSyncUpdatedAt, loadState, mergePersonalSyncPayload, personalDurableHistoryCount, personalHistoryCount, personalSyncPayload, recoverPersonalBackup, savePersonalSyncUpdatedAt, saveState } from "./storage";
 import { isValidLocalSyncAddress, localSyncTargetAddressSpace, splitLocalSyncAddress } from "./localSyncAddress";
 import { UI_LANGUAGES, localeForLanguage, translate, type UiLanguage } from "./i18n";
 import type { ShinyModCatalogItem } from "./shinyModsCatalog";
@@ -201,6 +201,18 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.21.5",
+    date: "8 de octubre de 2026",
+    title: "Intentos protegidos e indicativos de los tres dispositivos",
+    items: [
+      "La recuperación y Guardar y salir respetan el intento guardado tras recibir una caja, sin sumar de nuevo recompensas ya consumidas.",
+      "Cada caja nueva conserva los identificadores de sus recompensas por personaje; una copia atrasada no las devuelve al intento actual.",
+      "La ventana flotante deja de escribir copias completas del progreso al cerrarse; el arranque espera a recuperar los respaldos antes de guardar.",
+      "Android recibe los tres indicativos PC, Web y Móvil del servicio en segundo plano, incluida la animación de Web conectado.",
+      "Se conservan el historial, los puntos de otros personajes y el total de equipo. No cambia el cálculo del correo de Plataformas.",
+    ],
+  },
   {
     version: "1.21.4",
     date: "7 de octubre de 2026",
@@ -1046,7 +1058,7 @@ export default function App() {
   }, [tx]);
 
   const acceptBackgroundSyncStatus = useCallback((background: BackgroundSyncStatus) => {
-    if (background.connected) { setConnectedDevices(background.connectedDevices ?? ["pc", "mobile"]); setPresenceReceivedAt(Date.now()); }
+    if (background.connected) { setConnectedDevices(background.connectedDevices?.length ? background.connectedDevices : ["pc", "mobile"]); setPresenceReceivedAt(Date.now()); }
     else setConnectedDevices([]);
     liveRevisionRef.current = Math.max(liveRevisionRef.current, background.revision);
     if (background.catalogJson && background.catalogJson !== "{}") {
@@ -1398,7 +1410,9 @@ export default function App() {
     return () => { cancelled = true; };
   }, [shinyCatalogAttempt, shinyCatalogModule, tab]);
 
-  useEffect(() => saveState(state), [state]);
+  useEffect(() => {
+    if (personalRestoreReady) saveState(state);
+  }, [personalRestoreReady, state]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -1466,12 +1480,20 @@ export default function App() {
   }, [personalSyncJson, webBackupReady]);
 
   useEffect(() => {
-    const receiveOverlayChange = () => setState(loadState());
-    window.addEventListener("storage", receiveOverlayChange);
+    const receiveOverlayChange = () => setState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: false } }));
+    const receiveStorageChange = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEY) return;
+      const incoming = loadState();
+      setState((current) => {
+        const merged = { ...incoming, ...personalSyncPayload(mergePersonalSyncPayload(current, personalSyncPayload(incoming), true)) };
+        return JSON.stringify(merged) === JSON.stringify(current) ? current : merged;
+      });
+    };
+    window.addEventListener("storage", receiveStorageChange);
     let stopListening: (() => void) | undefined;
     if (isTauri() && !IS_ANDROID) void listen("caja-fantasma-overlay-disabled", receiveOverlayChange).then((stop) => { stopListening = stop; });
     return () => {
-      window.removeEventListener("storage", receiveOverlayChange);
+      window.removeEventListener("storage", receiveStorageChange);
       stopListening?.();
     };
   }, []);
@@ -1679,6 +1701,7 @@ export default function App() {
       carriedPoints,
       characterId: activeCharacter.id,
       characterName: activeCharacter.name,
+      actionIds: split.completedAttempt.map((action) => action.id),
       breakdown: buildBreakdown(split.completedAttempt),
     };
     const completedIds = new Set(split.completedAttempt.map((action) => action.id));

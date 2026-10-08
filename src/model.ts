@@ -82,6 +82,8 @@ export type BoxRecord = {
   carriedPoints?: number;
   characterId?: string;
   characterName?: string;
+  /** Rewards consumed by this character's box; keep history, never revive the attempt. */
+  actionIds?: string[];
   breakdown: Array<{ name: string; count: number; points: number }>;
 };
 
@@ -200,7 +202,7 @@ export type CountdownTransitionSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.21.4";
+export const APP_VERSION = "1.21.5";
 export const AUTHOR = "OscarD0823";
 export const AUTHOR_PROFILE_URL = `https://github.com/${AUTHOR}`;
 export const DEFAULT_CHARACTER_ID = "character-main";
@@ -246,6 +248,27 @@ export function detachCharacterFromActions(actions: PointAction[], characterId: 
   return actions.flatMap((action) => {
     if ((actionIds && !actionIds.has(action.id)) || !actionBelongsToCharacter(action, characterId)) return [action];
     const characterIds = actionCharacterIds(action).filter((id) => id !== characterId);
+    if (characterIds.length === 0 && action.trackingMode !== "team") return [];
+    return [{ ...action, characterIds }];
+  });
+}
+
+export function removeBoxCompletedActions(actions: PointAction[], boxes: BoxRecord[]) {
+  const completed = new Map<string, Set<string>>();
+  for (const box of boxes) {
+    const characterId = box.characterId || DEFAULT_CHARACTER_ID;
+    if (!Array.isArray(box.actionIds)) continue; // Legacy boxes have no reliable reward IDs.
+    for (const id of box.actionIds) {
+      if (typeof id !== "string") continue;
+      const characters = completed.get(id) ?? new Set<string>();
+      characters.add(characterId);
+      completed.set(id, characters);
+    }
+  }
+  return actions.flatMap((action) => {
+    const consumedBy = completed.get(action.id);
+    if (!consumedBy) return [action];
+    const characterIds = actionCharacterIds(action).filter((id) => !consumedBy.has(id));
     if (characterIds.length === 0 && action.trackingMode !== "team") return [];
     return [{ ...action, characterIds }];
   });

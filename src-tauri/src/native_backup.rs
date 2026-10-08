@@ -34,12 +34,17 @@ fn validate(text: &str) -> Result<Value, String> {
 
 fn protect_existing(existing: &str, incoming: &str) -> Result<String, String> {
     let old = validate(existing)?;
-    let new = validate(incoming)?;
+    let mut new = validate(incoming)?;
     if history_count(&old) > history_count(&new) {
         // Preserve missing histories without ignoring intentional action deletions.
         crate::local_sync::merge_live_personal_payloads(existing, incoming, true)
     } else {
-        Ok(incoming.to_string())
+        let original = new.clone();
+        crate::local_sync::protect_box_closed_attempt(&old, &mut new);
+        if new == original {
+            return Ok(incoming.to_string());
+        }
+        serde_json::to_string(&new).map_err(|_| "No se pudo proteger el intento guardado.".into())
     }
 }
 
@@ -151,6 +156,34 @@ mod tests {
         save(&directory, &edited).unwrap();
         assert_eq!(load(&directory).unwrap(), Some(edited));
         assert_eq!(fs::read_to_string(directory.join(PREVIOUS)).unwrap(), old);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn stale_write_cannot_revive_consumed_rewards_on_disk() {
+        let directory = directory();
+        let closed = json!({"actions":[{"id":"fresh","points":177}],"activityHistory":[{"id":"old"},{"id":"fresh"}],"boxes":[{"id":"box","actionIds":["old"]}]}).to_string();
+        let stale = json!({"actions":[{"id":"old","points":987},{"id":"fresh","points":177}],"activityHistory":[{"id":"old"},{"id":"fresh"}],"boxes":[{"id":"box"}]}).to_string();
+        save(&directory, &closed).unwrap();
+        save(&directory, &stale).unwrap();
+        let value: Value = serde_json::from_str(&load(&directory).unwrap().unwrap()).unwrap();
+        assert_eq!(value["actions"].as_array().unwrap().len(), 1);
+        assert_eq!(value["actions"][0]["points"], 177);
+        assert_eq!(value["boxes"][0]["actionIds"][0], "old");
+        assert_eq!(value["activityHistory"].as_array().unwrap().len(), 2);
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn closure_protection_does_not_revert_other_local_edits() {
+        let directory = directory();
+        let old = json!({"actions":[],"activityHistory":[{"id":"old"}],"boxes":[{"id":"box","actionIds":["old"]}],"characters":[{"id":"character-main","name":"Old name"}],"shinyMods":[{"id":"mod","attempts":5}]}).to_string();
+        let edited = json!({"actions":[],"activityHistory":[{"id":"old"}],"boxes":[{"id":"box","actionIds":["old"]}],"characters":[{"id":"character-main","name":"New name"}],"shinyMods":[{"id":"mod","attempts":4}]}).to_string();
+        save(&directory, &old).unwrap();
+        save(&directory, &edited).unwrap();
+        let value: Value = serde_json::from_str(&load(&directory).unwrap().unwrap()).unwrap();
+        assert_eq!(value["characters"][0]["name"], "New name");
+        assert_eq!(value["shinyMods"][0]["attempts"], 4);
         fs::remove_dir_all(directory).unwrap();
     }
 
