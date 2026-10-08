@@ -45,14 +45,61 @@
 .vault-motes { position: absolute; left: 48%; top: 35%; }.vault-motes i { position: absolute; width: 3px; height: 5px; background: #d0fff3; box-shadow: 0 0 9px #73ede8; animation: vault-mote-rise 1.8s 3.7s ease-out both; --mote-x: -70px; }.vault-motes i:nth-child(2n) { --mote-x: 100px; animation-delay: 3.9s; }.vault-motes i:nth-child(3n) { --mote-x: -120px; animation-delay: 4.1s; }.vault-motes i:nth-child(4n) { --mote-x: 20px; animation-delay: 4.3s; }.vault-motes i:nth-child(5n) { --mote-x: 145px; animation-delay: 4.5s; }
 .vault-sequence { position: absolute; bottom: -8px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; width: max-content; font: 9px "Consolas", monospace; letter-spacing: 1px; color: #77a59f; }.vault-sequence i { font-style: normal; animation: vault-step 6.8s ease both; }.vault-sequence i:nth-child(2) { animation-name: vault-step-unlock; }.vault-sequence i:nth-child(3) { animation-name: vault-step-open; }
 .intro-light { animation: vault-core-awaken 6.8s ease both; background: radial-gradient(ellipse at 50% 30%, #adfff62e, transparent 58%); }.intro-title { top: calc(50% + 170px); animation: vault-title 6.8s ease both; }.intro-title strong { font-size: clamp(20px, 4vw, 27px); }.intro-progress { top: calc(50% + 240px); }.intro-progress i { animation-duration: 5.8s; }
+.vault-conduit { position: absolute; inset: 10px 7px; border: 1px solid #86d5bd22; border-radius: 3px; pointer-events: none; }
+.vault-conduit i { position: absolute; width: 32%; height: 2px; right: 0; top: 79px; background: linear-gradient(90deg, transparent, #adfff0); transform-origin: right; animation: vault-conduit-charge 6.8s ease both; }
+.vault-conduit i + i { top: 100px; width: 100%; }
+.vault-hologram { position: absolute; z-index: 3; left: calc(50% - 66px); top: -25px; width: 132px; height: 152px; pointer-events: none; animation: vault-holo-emerge 6.8s cubic-bezier(.16, .7, .22, 1) both; }
+.vault-holo-emblem { position: absolute; inset: 20px 26px 18px; opacity: .9; }
+.vault-holo-emblem svg { width: 100%; height: 100%; }
+.vault-holo-emblem::after { content: ""; position: absolute; inset: 0; background: repeating-linear-gradient(0deg, transparent 0 3px, #071d2940 3px 4px); }
+.vault-holo-rings { position: absolute; inset: 0; }
+.vault-holo-rings i { position: absolute; inset: 0; border: 1px solid #99fce177; border-top-color: transparent; border-radius: 50%; transform: rotate(-25deg); }
+.vault-holo-rings i + i { inset: 6px -12px; border-color: #73c4dc55; border-right-color: transparent; transform: rotate(25deg); }
+.vault-key { background: linear-gradient(125deg, #134554, #06202c); }
+.vault-key-outline svg { opacity: .22; }
+.intro-aura { opacity: .4; }
+.intro-title > small { letter-spacing: .2em; }
+.startup-intro { background: radial-gradient(ellipse at 50% 35%, #2f5b5e40, transparent 44%), radial-gradient(ellipse at 80% 70%, #80356612, transparent 35%), #030c13; }
+.vault-anomaly-orbits { position: absolute; width: 380px; height: 380px; left: calc(50% - 190px); top: -53px; pointer-events: none; opacity: .6; }
+.vault-anomaly-orbits i { position: absolute; inset: 0; border: 1px solid #68d2c12e; border-radius: 50%; border-top-color: #a6e8cf88; animation: vault-anomaly-spin 6.8s ease-in-out both; }
+.vault-anomaly-orbits i:nth-child(2) { inset: 27px; border-color: #d8b17022; border-left-color: #d8b17070; animation-direction: reverse; }
+.vault-anomaly-orbits i:nth-child(3) { inset: 54px; border-color: #ba72b421; border-bottom-color: #e998d470; animation-duration: 6s; }
+.vault-anomaly-orbits::after { content: ""; position: absolute; inset: 18px; border: 1px dashed #72969c40; border-radius: 50%; }
+.vault-ground-radar { position: absolute; width: 390px; height: 160px; top: calc(50% + 85px); left: calc(50% - 195px); transform: perspective(500px) rotateX(62deg); pointer-events: none; }
+.vault-ground-radar i { position: absolute; inset: 0; border: 1px solid #80d8c84d; border-radius: 50%; background: repeating-conic-gradient(from 0deg, #6aefdb33 0deg 1deg, transparent 1deg 45deg); animation: vault-ground-charge 6.8s ease both; }
+.vault-ground-radar i + i { inset: 17px 50px; border-style: dashed; background: none; }
+.vault-ground-radar b { position: absolute; left: calc(50% - 12px); bottom: -20px; color: #ccac76aa; font: 10px Consolas, monospace; letter-spacing: 5px; }
+.vault-face, .vault-lid-top { background-image: repeating-linear-gradient(0deg, #0000 0 3px, #ecd4a60a 4px), repeating-linear-gradient(125deg, #0000 0 35px, #00000012 36px 38px), linear-gradient(125deg, #c5a372, #806446 22%, #44362e 67%, #a07c58); }
+.vault-recess { background: repeating-linear-gradient(100deg, #d4ba8909 0 1px, transparent 1px 12px), linear-gradient(150deg, #292c29, #63503e 45%, #28231e); }
+.vault-serial { position: absolute; left: 84px; bottom: 20px; height: 12px; display: flex; gap: 3px; opacity: .45; }
+.vault-serial i { width: 2px; background: #e6d1a4; }.vault-serial i:nth-child(2n) { width: 5px; }.vault-serial i:nth-child(3n) { width: 1px; }
+.vault-lock-bolts { position: absolute; left: 0; right: 0; top: 22px; height: 5px; pointer-events: none; }
+.vault-lock-bolts i { position: absolute; left: 67px; width: 38px; height: 5px; border: 1px solid #d5bc88; background: #2b2520; transform-origin: left; animation: vault-bolt-release 6.8s ease both; }
+.vault-lock-bolts i + i { left: auto; right: 67px; transform-origin: right; }
+.vault-release-shock { position: absolute; left: 50%; top: 35%; width: 1px; height: 1px; pointer-events: none; }
+.vault-release-shock i { position: absolute; inset: -80px; border: 1px solid #b4ffe9; border-radius: 50%; animation: vault-shock 1s 3.95s ease-out both; }
+.vault-release-shock i + i { border-color: #ffcce4; animation-delay: 4.1s; }
+.vault-key { box-shadow: inset 0 0 0 2px #90eacf40, 0 2px 0 #04232c, 0 0 12px #8bffe755; }
+.vault-holo-emblem { animation: vault-holo-sway 2s 4.8s ease-in-out both; }
+.intro-energy-route { opacity: .5; }
+.intro-title strong { color: #ebfff6; background: none; animation: none; text-shadow: 0 2px 6px #00131a; letter-spacing: .16em; }
+.intro-title em { color: #b1a180; font-size: 8px; }
+.intro-hint { color: #a0b6bb; }
+@keyframes vault-anomaly-spin { 0% { opacity: 0; transform: rotate(-110deg) scale(.7); } 20% { opacity: .7; } 58% { transform: rotate(50deg) scale(1); } 85% { opacity: .4; } 100% { opacity: 0; transform: rotate(145deg) scale(1.13); } }
+@keyframes vault-ground-charge { 0% { opacity: 0; transform: scale(.4); } 20%, 50% { opacity: .5; transform: scale(1); } 65%, 87% { opacity: .8; transform: scale(1.06); } 100% { opacity: 0; transform: scale(1.2); } }
+@keyframes vault-bolt-release { 0%, 49% { transform: scaleX(1); } 54%, 100% { transform: scaleX(.1); } }
+@keyframes vault-shock { from { opacity: .6; transform: scale(.25) rotateX(35deg); } to { opacity: 0; transform: scale(2.6) rotateX(35deg); } }
+@keyframes vault-holo-sway { 0% { transform: rotateY(-12deg); } 50% { transform: rotateY(12deg) translateY(-4px); } 100% { transform: rotateY(0deg); } }
 @keyframes vault-camera-orbit { 0% { transform: translateY(25px) rotateX(-19deg) rotateY(-48deg) rotateZ(-5deg) scale(.72); } 14% { transform: rotateX(-19deg) rotateY(-35deg) rotateZ(-2deg) scale(.84); } 40%, 48% { transform: rotateX(-15deg) rotateY(-27deg) scale(.95); } 54% { transform: translateY(2px) rotateX(-16deg) rotateY(-28deg) scale(.97); } 77% { transform: translateY(-7px) rotateX(-22deg) rotateY(-34deg) scale(1); } 100% { transform: translateY(-20px) rotateX(-20deg) rotateY(-20deg) scale(1.15); } }
-@keyframes vault-key-flight { 0%, 14% { opacity: 0; transform: translate3d(-230px, -140px, 120px) rotateY(90deg) rotateZ(-45deg) scale(1.5); } 22% { opacity: 1; transform: translate3d(-175px, -90px, 90px) rotateY(-25deg) rotateZ(15deg) scale(1.45); } 35% { transform: translate3d(-85px, 14px, 80px) rotateY(18deg) rotateZ(-8deg) scale(1.25); } 44% { transform: translate3d(0, 0, 14px); } 48%, 100% { opacity: 1; transform: translate3d(0, 0, 1px); } }
+@keyframes vault-key-flight { 0%, 12% { opacity: 0; transform: translate3d(-250px, -120px, 120px) rotateY(100deg) rotateZ(-65deg) scale(2); } 21% { opacity: 1; transform: translate3d(-185px, -100px, 110px) rotateY(-25deg) rotateZ(12deg) scale(1.8); } 31% { transform: translate3d(-95px, -40px, 90px) rotateY(22deg) rotateZ(-15deg) scale(1.6); } 40% { transform: translate3d(0, 0, 28px) rotateY(0deg) rotateZ(0deg) scale(1.1); } 44% { transform: translate3d(0, 0, 8px) rotateZ(0deg); } 47% { transform: translate3d(0, 0, 1px) rotateZ(8deg); } 49%, 100% { opacity: 1; transform: translate3d(0, 0, 1px) rotateZ(0deg); } }
 @keyframes vault-lock-confirm { 0%, 46% { opacity: 0; transform: scale(.8); } 49% { opacity: 1; transform: scale(1); } 57%, 100% { opacity: 0; transform: scale(2); } }
 @keyframes vault-clasp-release { 0%, 49% { transform: translateZ(4px) rotateX(0); } 53% { transform: translateZ(4px) rotateX(-24deg); } 58%, 100% { transform: translateZ(4px) rotateX(-120deg); } }
 @keyframes vault-hinge-open { 0%, 54% { transform: translateZ(-80px) rotateX(0deg); } 59% { transform: translateZ(-80px) rotateX(12deg); } 77% { transform: translateZ(-80px) rotateX(109deg); } 83%, 100% { transform: translateZ(-80px) rotateX(103deg); } }
 @keyframes vault-led-power { 0%, 48% { background: #254a46; box-shadow: none; } 54%, 100% { background: #90ffde; box-shadow: 0 0 8px #90ffde; } }
 @keyframes vault-core-awaken { 0%, 52% { opacity: 0; } 60% { opacity: .4; } 75%, 88% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes vault-energy-release { 0%, 55% { opacity: 0; transform: scaleY(.1); } 75% { opacity: .8; transform: scaleY(1); } 88% { opacity: .5; transform: scaleY(1.1); } 100% { opacity: 0; transform: scaleY(1.3); } }
+@keyframes vault-conduit-charge { 0%, 47% { opacity: 0; transform: scaleX(0); } 54%, 88% { opacity: .8; transform: scaleX(1); } 100% { opacity: 0; } }
+@keyframes vault-holo-emerge { 0%, 62% { opacity: 0; transform: translateY(140px) scale(.2) rotateY(-50deg); } 73% { opacity: .8; transform: translateY(10px) scale(.94) rotateY(8deg); } 81%, 92% { opacity: 1; transform: translateY(0) scale(1) rotateY(0deg); } 100% { opacity: 0; transform: translateY(-25px) scale(1.1); } }
 @keyframes vault-mote-rise { 0% { opacity: 0; transform: translate(0, 0); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--mote-x), -260px) rotate(180deg); } }
 @keyframes vault-title { 0%, 66% { opacity: 0; transform: translateY(12px); } 78%, 93% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; } }
 @keyframes vault-scene-exit { 0%, 93% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
@@ -61,4 +108,4 @@
 .progress-saving { position: fixed; z-index: 200; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 15px; background: #061019eb; cursor: wait; }.progress-saving svg { color: var(--cyan); }.progress-saving span { color: var(--muted); font-size: 12px; }
 @media (min-width: 621px) and (max-width: 1050px) { .save-exit-button span { display: none; } }
 @media (max-width: 620px) { .opening-vault { transform: scale(.78); }.intro-crate-arrival { width: min(390px, 96vw); }.intro-title { top: calc(50% + 147px); }.intro-progress { top: calc(50% + 218px); }.save-exit-button { width: auto; margin: 0; }.save-exit-button span { display: none; } }
-@media (prefers-reduced-motion: reduce) { .vault-camera, .vault-key, .vault-key-ring, .vault-clasp, .vault-lid-hinge, .vault-status-leds i, .vault-core, .vault-motes i, .vault-energy-column, .vault-sequence i { animation: none; }.vault-camera { transform: rotateX(-19deg) rotateY(-25deg) scale(.9); }.vault-lid-hinge { transform: translateZ(-80px); }.vault-clasp { transform: translateZ(4px); }.vault-key { transform: translateZ(1px); }.intro-title { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .startup-intro, .startup-intro *, .startup-intro *::before, .startup-intro *::after { animation: none !important; }.vault-hologram, .vault-release-shock, .vault-anomaly-orbits, .vault-ground-radar, .vault-energy-column, .vault-motes { display: none; }.vault-camera { transform: rotateX(-19deg) rotateY(-25deg) scale(.9); }.vault-lid-hinge { transform: translateZ(-80px); }.vault-clasp { transform: translateZ(4px); }.vault-key { transform: translateZ(1px); }.intro-title { opacity: 1; }.intro-progress i { transform: scaleX(1); } }

@@ -1,5 +1,5 @@
 import defaultCatalog from "../catalog/visions.json" with { type: "json" };
-import type { ActivityHistoryRecord, BoxRecord, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, PointRoundRecord, PointRoundTrigger, ShinyModRecord, WhaleCounterStyle } from "./model.ts";
+import type { ActivityHistoryRecord, BoxRecord, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, PointRoundRecord, PointRoundTrigger, Settings, ShinyModRecord, WhaleCounterStyle } from "./model.ts";
 import { VISION_CYCLE_WAIT_STARTED_AT, applyRemoteCatalog, clampNumber, createInitialCharacterTracking, resolveTransitionDelayMilliseconds, sharedVisionId, validateCatalog } from "./model.ts";
 import { isUiLanguage } from "./i18n.ts";
 
@@ -17,6 +17,17 @@ const POINT_ROUND_TRIGGERS = new Set<PointRoundTrigger>(["event-start", "manual"
 const PERSONAL_HISTORY_ARRAY_FIELDS = ["actions", "activityHistory", "boxes", "pointRounds", "manualBaselinePoints", "shinyMods"] as const;
 const PERSONAL_DURABLE_HISTORY_ARRAY_FIELDS = ["activityHistory", "boxes", "pointRounds", "manualBaselinePoints", "shinyMods"] as const;
 const MAX_DELETED_ACTION_IDS = 20_000;
+
+function withoutDesktopNotificationSettings<T extends Partial<Settings>>(settings: T): T {
+  const cleaned = { ...settings } as T & {
+    notificationsEnabled?: unknown;
+    lastNotificationPhaseStartedAt?: unknown;
+  };
+  // Old backups remain compatible, without restoring the removed Windows option.
+  delete cleaned.notificationsEnabled;
+  delete cleaned.lastNotificationPhaseStartedAt;
+  return cleaned;
+}
 
 export function personalHistoryCount(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return 0;
@@ -247,7 +258,6 @@ export function initialState(): PersistedState {
       overlayNameMode: "spanish",
       overlayCustomName: "",
       transitionDelayMilliseconds: 3_000,
-      notificationsEnabled: false,
       voiceNotificationsEnabled: true,
       voiceLeadMinutes: 5,
       timingPresetVersion: 4,
@@ -281,7 +291,7 @@ export function loadState(): PersistedState {
     }
     if (!parsed || parsed.schemaVersion !== 1 || !validateCatalog(parsed.catalog)) return initialState();
     const fresh = initialState();
-    const settings = { ...fresh.settings, ...(parsed.settings ?? {}), notificationsEnabled: false };
+    const settings = withoutDesktopNotificationSettings({ ...fresh.settings, ...(parsed.settings ?? {}) });
     settings.uiLanguage = isUiLanguage(parsed.settings?.uiLanguage) ? parsed.settings.uiLanguage : "es";
     if ((parsed.settings?.timingPresetVersion ?? 0) < 4) {
       const timing = fresh.catalog.eventTiming;
@@ -290,7 +300,6 @@ export function loadState(): PersistedState {
       settings.activeMinutes = timing?.activeMinutes ?? 30;
       settings.phase = timing?.phase ?? "waiting";
       settings.phaseStartedAt = timing?.phaseStartedAt ?? VISION_CYCLE_WAIT_STARTED_AT;
-      settings.lastNotificationPhaseStartedAt = undefined;
       settings.lastVoiceAlertPhaseStartedAt = undefined;
       settings.sharedTimingUpdatedAt = timing?.updatedAt;
       settings.timingPresetVersion = 4;
@@ -420,7 +429,7 @@ export function importState(text: string): PersistedState {
     ...characters,
     settings: {
       ...fresh.settings,
-      ...(parsed.settings ?? {}),
+      ...withoutDesktopNotificationSettings(parsed.settings ?? {}),
       uiLanguage: isUiLanguage(parsed.settings?.uiLanguage) ? parsed.settings.uiLanguage : "es",
       selectedVisionId: sharedVisionId(catalog),
       overlayScale: clampNumber(Number(parsed.settings?.overlayScale) || 1, .2, 1.5),
@@ -438,7 +447,6 @@ export function importState(text: string): PersistedState {
       localSyncAddress: typeof parsed.settings?.localSyncAddress === "string" ? parsed.settings.localSyncAddress.trim().slice(0, 80) : "",
       localSyncCode: typeof parsed.settings?.localSyncCode === "string" && /^\d{6}$/.test(parsed.settings.localSyncCode) ? parsed.settings.localSyncCode : "",
       transitionDelayMilliseconds: resolveTransitionDelayMilliseconds(parsed.settings, fresh.settings.transitionDelayMilliseconds),
-      notificationsEnabled: false,
       dataResetVersion: CURRENT_DATA_RESET_VERSION,
     },
   };

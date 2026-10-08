@@ -1,21 +1,17 @@
-# Android
+# Android · Caja Fantasma 1.21.4
 
-## APK disponible
+[Descargar APK](Caja-Fantasma-Android-1.21.4.apk) · [Última versión publicada](https://github.com/OscarD0823/Caja-Fantasma/releases/latest) · [SHA-256](SHA256SUMS.txt)
 
-- Archivo: [`Caja-Fantasma-Android-1.21.1.apk`](Caja-Fantasma-Android-1.21.1.apk)
-- Arquitectura: ARM64 (`arm64-v8a`).
-- Android mínimo: Android 8.0 / API 26.
-- Versión: 1.21.1 (`versionCode` 1021001).
-- Tamaño: 20.217.462 bytes.
-- SHA-256: `D566F4D8186BA08176370F32E58057F37EF4C99903F5280811C93A68DB58DEB5`.
-- Firma: RSA 4096 propia de `OscarD0823`; APK Signature Scheme v2 y v3 verificadas.
+Android 8+ / API 26, ARM64. Versión 1.21.4, `versionCode` 1021004. Firma RSA 4096 del proyecto, con esquemas v2/v3 y el certificado habitual de actualización.
 
-Descarga esta versión una vez, permite la instalación desde esa fuente cuando Android lo solicite y abre **Caja Fantasma · Once Human**. Las versiones siguientes se descargarán y verificarán dentro de la app; Android seguirá mostrando su confirmación de seguridad antes de reemplazarla. Esta APK usa el permiso de Internet para consultar la rueda pública, buscar actualizaciones y comunicarse directamente con el PC dentro de la red local; no incluye Firebase, publicidad ni telemetría. Los puntos y actividades diarios cambian de día a las 8:00 a. m. según la hora de Colombia.
+Instala sobre la versión anterior **sin desinstalarla** para conservar los datos. La app comprueba, descarga y verifica las siguientes versiones; Android requiere aceptar su confirmación de instalación.
 
-Para sincronizar, abre la aplicación en Windows y pulsa **Compartir con el celular**. La misma IP, puerto y código conectan Android y la página al mismo tiempo. Android mantiene Datos en vivo en segundo plano y la unión protectora evita que una copia vacía o atrasada borre un historial con datos. Conserva el protocolo de la versión 1.20.5, que propaga una resta intencional y rechaza con un aviso claro cualquier cliente antiguo que no pueda interpretarla. El intercambio funciona por Wi-Fi privado o anclaje USB, sin Firebase ni nube. El funcionamiento y sus límites están en [`../../docs/ANDROID-Y-SINCRONIZACION.md`](../../docs/ANDROID-Y-SINCRONIZACION.md).
+- Nuevo icono, logo, interfaz industrial y apertura de la caja adaptada a pantallas pequeñas.
+- Crédito visible de OscarD0823 y enlaces a PC, página y GitHub que abren el navegador del teléfono.
+- La misma IP, puerto y código enlazan PC, celular y web. El PC debe permanecer ejecutándose.
+- Datos en vivo pueden continuar en segundo plano mediante el servicio de dispositivos conectados. Android puede limitarlo según sus políticas de batería.
+- Sin Firebase, publicidad ni telemetría. Los datos se guardan localmente y el día del juego cambia a las 8:00 a. m. de Colombia.
 
-La versión 1.21.0 añade el cuadro de próxima Ballena/duración activa, indicadores de PC/Web/Móvil conectados, configuración compacta de contadores, rondas debajo de las recompensas y un icono nuevo. La apertura muestra la llave entrando en la cerradura, los cierres y la tapa articulada.
+Exporta un respaldo desde **Configuración → Respaldo local** antes de desinstalar o cambiar de teléfono.
 
-La versión 1.21.1 reconstruye la apertura con caras tridimensionales, herrajes, llave física, cierres y bisagras. Las mejoras de cierre y apagado son específicas de Windows; Android conserva su sincronización en segundo plano y sus respaldos.
-
-La compilación, `lintVital`, alineación, firma v2/v3 y certificado compatible de la APK fueron verificados. El manifiesto final incluye el servicio `connectedDevice`, la notificación y únicamente los permisos necesarios. La actualización conserva el estado local sin desinstalar la versión anterior.
+[Sincronización y sus límites](../../docs/ANDROID-Y-SINCRONIZACION.md) · [Qué cambió](../../NOTAS-VERSION-1.21.4.md) · [Proyecto comunitario, no oficial](../../AVISO-COMUNITARIO.md)

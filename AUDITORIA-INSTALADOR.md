@@ -1,17 +1,17 @@
 # Auditoría del instalador de Caja Fantasma
 
-Revisión actualizada para la versión 1.12.0 sobre el script NSIS generado por Tauri.
+Revisión actualizada para la versión 1.21.4 sobre el script NSIS generado por Tauri.
 
 ## Qué instala
 
-- El ejecutable `Caja Fantasma · Once Human.exe` en la carpeta de aplicaciones del usuario actual.
+- El ejecutable `caja-fantasma-once-human.exe` en la carpeta de aplicaciones del usuario actual.
 - El desinstalador generado por NSIS.
 - Accesos directos de Caja Fantasma en el menú Inicio y, cuando se selecciona, en el Escritorio.
 - Las entradas estándar de Windows para mostrar la aplicación en “Aplicaciones instaladas” y permitir desinstalarla.
 
 Las imágenes de Lunar, Abismo de Gravedad, Progenie Aberrante, la caja y el recurso WebP transparente del Riftwalker están compiladas dentro del ejecutable; no se instalan como programas independientes.
 
-El catálogo de 1.825 módulos también forma parte del paquete y se carga únicamente al abrir “Mods Brillantes”; no instala una base de datos, un servicio ni un proceso separado.
+El catálogo actual de 1.618 registros (809 normales y 809 Brillantes) también forma parte del paquete y se carga únicamente al abrir “Mods Brillantes”; no instala una base de datos, un servicio ni un proceso separado.
 
 ## Dependencia de Windows
 

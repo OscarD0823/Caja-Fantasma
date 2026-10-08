@@ -1,27 +1,26 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPwaInstaller, type PwaInstallStatus } from "./pwaInstall";
 
-type InstallPrompt = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-};
+export type PwaInstallState = PwaInstallStatus & { install: () => Promise<boolean> };
 
-export function usePwaInstall(enabled: boolean) {
-  const [prompt, setPrompt] = useState<InstallPrompt>();
-  const [installed, setInstalled] = useState(() => window.matchMedia("(display-mode: standalone)").matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone));
+export function usePwaInstall(enabled: boolean): PwaInstallState {
+  const [status, setStatus] = useState<PwaInstallStatus>(() => ({ available: false, installing: false, failed: false, installed: window.matchMedia("(display-mode: standalone)").matches || Boolean((navigator as Navigator & { standalone?: boolean }).standalone) }));
+  const controllerRef = useRef<ReturnType<typeof createPwaInstaller> | null>(null);
+  if (!controllerRef.current) controllerRef.current = createPwaInstaller(setStatus, status.installed);
   useEffect(() => {
     if (!enabled) return;
-    const capture = (event: Event) => { event.preventDefault(); setPrompt(event as InstallPrompt); };
-    const complete = () => { setInstalled(true); setPrompt(undefined); };
-    window.addEventListener("beforeinstallprompt", capture);
-    window.addEventListener("appinstalled", complete);
-    return () => { window.removeEventListener("beforeinstallprompt", capture); window.removeEventListener("appinstalled", complete); };
+    const controller = controllerRef.current!;
+    const display = window.matchMedia("(display-mode: standalone)");
+    const changed = (event: MediaQueryListEvent) => { if (event.matches) controller.complete(); };
+    window.addEventListener("beforeinstallprompt", controller.capture);
+    window.addEventListener("appinstalled", controller.complete);
+    display.addEventListener?.("change", changed);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", controller.capture);
+      window.removeEventListener("appinstalled", controller.complete);
+      display.removeEventListener?.("change", changed);
+    };
   }, [enabled]);
-  const install = async () => {
-    if (!prompt) return false;
-    await prompt.prompt();
-    const choice = await prompt.userChoice;
-    setPrompt(undefined);
-    return choice.outcome === "accepted";
-  };
-  return { available: Boolean(prompt), installed, install };
+  const install = useCallback(() => enabled ? controllerRef.current!.install() : Promise.resolve(false), [enabled]);
+  return useMemo(() => ({ ...status, install }), [status, install]);
 }

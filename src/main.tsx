@@ -5,10 +5,16 @@ import { isTauri } from "@tauri-apps/api/core";
 import App from "./App";
 import Overlay from "./Overlay";
 import WhaleVisualHarness from "./WhaleVisualHarness";
+import InterfaceVisualHarness from "./InterfaceVisualHarness";
 import "./styles.css";
 import "./crateOpening.css";
+import "./interface.css";
 
 const nativeHost = isTauri();
+// Stop decorative CSS motion while this surface is hidden, including background Android/web.
+const updateMotionVisibility = () => { document.documentElement.dataset.appHidden = String(document.hidden); };
+updateMotionVisibility();
+document.addEventListener("visibilitychange", updateMotionVisibility);
 
 if (import.meta.env.PROD && !nativeHost && "serviceWorker" in navigator) {
   window.addEventListener("load", () => void navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => undefined));
@@ -32,7 +38,8 @@ const label = (() => {
 })();
 
 const visualWhaleTest = import.meta.env.DEV && new URLSearchParams(window.location.search).has("whale-visual-test");
+const visualInterfaceTest = import.meta.env.DEV && new URLSearchParams(window.location.search).has("interface-visual-test");
 
 createRoot(document.getElementById("root")!).render(
-  <StrictMode>{visualWhaleTest ? <WhaleVisualHarness /> : label === "overlay" ? <Overlay /> : <App />}</StrictMode>,
+  <StrictMode>{visualInterfaceTest ? <InterfaceVisualHarness /> : visualWhaleTest ? <WhaleVisualHarness /> : label === "overlay" ? <Overlay /> : <App />}</StrictMode>,
 );

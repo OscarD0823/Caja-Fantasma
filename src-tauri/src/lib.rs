@@ -2,6 +2,8 @@
 
 mod local_sync;
 mod native_backup;
+#[cfg(desktop)]
+mod single_instance;
 #[cfg(all(desktop, target_os = "windows"))]
 mod windows_shutdown;
 
@@ -273,6 +275,13 @@ fn publish_catalog(catalog_json: String) -> Result<String, String> {
 #[cfg(desktop)]
 pub fn run() {
     tauri::Builder::default()
+        // Register first: duplicate launches must exit before loading user data,
+        // starting a second bridge or creating another tray icon.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if single_instance::should_reveal_main(&args) {
+                single_instance::reveal_main(app);
+            }
+        }))
         .plugin(
             tauri_plugin_autostart::Builder::new()
                 .args(["--background"])
@@ -320,11 +329,7 @@ pub fn run() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.unminimize();
-                            let _ = window.set_focus();
-                        }
+                        single_instance::reveal_main(app);
                     }
                     "overlay" => {
                         if let Some(window) = app.get_webview_window("overlay") {
@@ -347,11 +352,7 @@ pub fn run() {
                     } = event
                     {
                         let app = tray.app_handle();
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.unminimize();
-                            let _ = window.set_focus();
-                        }
+                        single_instance::reveal_main(app);
                     }
                 })
                 .build(app)?;
@@ -389,7 +390,7 @@ pub fn run() {
 #[cfg(mobile)]
 #[tauri::mobile_entry_point]
 pub fn run() {
-    let builder = tauri::Builder::default();
+    let builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
     #[cfg(target_os = "android")]
     let builder = builder.plugin(tauri_plugin_android_updater::init());
 

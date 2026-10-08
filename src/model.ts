@@ -145,7 +145,6 @@ export type Settings = {
   transitionDelayMilliseconds: number;
   /** Valor legado leído al migrar configuraciones de 1.12.0. */
   transitionDelaySeconds?: number;
-  notificationsEnabled: boolean;
   voiceNotificationsEnabled: boolean;
   voiceLeadMinutes: number;
   timingPresetVersion: number;
@@ -154,7 +153,6 @@ export type Settings = {
   localSyncLiveEnabled: boolean;
   localSyncAddress: string;
   localSyncCode: string;
-  lastNotificationPhaseStartedAt?: string;
   lastVoiceAlertPhaseStartedAt?: string;
   sharedTimingUpdatedAt?: string;
   lastPointRoundEventStartedAt?: string;
@@ -202,8 +200,9 @@ export type CountdownTransitionSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.21.1";
+export const APP_VERSION = "1.21.4";
 export const AUTHOR = "OscarD0823";
+export const AUTHOR_PROFILE_URL = `https://github.com/${AUTHOR}`;
 export const DEFAULT_CHARACTER_ID = "character-main";
 export const GAME_DAY_TIME_ZONE = "America/Bogota";
 export const GAME_DAY_RESET_HOUR = 8;
@@ -356,7 +355,6 @@ export function applyRemoteCatalog(current: PersistedState, catalog: Catalog): P
         transitionDelayMilliseconds: resolveTransitionDelayMilliseconds(timing, current.settings.transitionDelayMilliseconds),
         phaseStartedAt: timing.phaseStartedAt,
         phase: timing.phase,
-        lastNotificationPhaseStartedAt: undefined,
         lastVoiceAlertPhaseStartedAt: undefined,
         sharedTimingUpdatedAt: timing.updatedAt,
       } : {}),

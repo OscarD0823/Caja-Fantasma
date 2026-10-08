@@ -8,7 +8,6 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Activity as ActivityIcon,
   BarChart3,
-  Bell,
   Box,
   Check,
   ChevronRight,
@@ -27,8 +26,6 @@ import {
   Mail,
   Minus,
   MonitorUp,
-  Monitor,
-  Globe,
   Plus,
   RadioTower,
   RefreshCw,
@@ -57,12 +54,18 @@ import CatalogEditor from "./CatalogEditor";
 import LocalSyncAddressFields from "./LocalSyncAddressFields";
 import OverlayPreviewLab from "./OverlayPreviewLab";
 import AppUpdater from "./Updater";
+import WebInstallNotice from "./WebInstallNotice";
+import DevicePresence from "./DevicePresenceStrip";
+import GameLogoMark from "./GameLogoMark";
+import ConsoleGlyph from "./ConsoleGlyph";
+import { recentConnectedDevices } from "./devicePresence";
 import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, SYMBIOSIS_EVENT_IMAGE, visionVisualImage, visionVisualTheme } from "./assets";
 import type { Activity, ActivityHistoryRecord, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, PointRoundRecord, PointRoundTrigger, Settings, ShinyModRecord, Vision, WhaleCounterStyle } from "./model";
 import {
   APP_VERSION,
   ANDROID_APK_URL,
   AUTHOR,
+  AUTHOR_PROFILE_URL,
   DEFAULT_CHARACTER_ID,
   REMOTE_CATALOG_URL,
   REPOSITORY_URL,
@@ -198,6 +201,32 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.21.4",
+    date: "7 de octubre de 2026",
+    title: "Consola de anomalías · nueva identidad visual",
+    items: [
+      "Iconos y logo originales unificados para Windows, Android y la página, con símbolos propios para cada sección.",
+      "Consola industrial, materiales metálicos y acentos Lunar, Gravedad y Simbiosis durante su activación.",
+      "Apertura con escaneo de la caja, llave espectral, cierres mecánicos, tapa articulada y liberación del núcleo.",
+      "Señales conectadas más claras y animaciones ligeras, con movimiento reducido y pausa al ocultar la página.",
+      "Incluye las correcciones de enlaces de Android, instalación web, firma del desarrollador e instancia única en Windows.",
+      "Conserva puntos, personajes, módulos, historial y sincronización. Herramienta comunitaria no oficial.",
+    ],
+  },
+  {
+    version: "1.21.2",
+    date: "7 de octubre de 2026",
+    title: "Firma visible y enlaces de Android reparados",
+    items: [
+      "OscarD0823 aparece en la cabecera y en Dispositivos de Windows, Android y la web, incluso en pantallas pequeñas.",
+      "Android registra el componente que abre la página, GitHub y las descargas en el navegador del teléfono.",
+      "La web muestra un aviso de instalación que se puede cerrar, con botón directo cuando el navegador lo admite e instrucciones disponibles también en Dispositivos.",
+      "Los indicadores de dispositivos conectados emiten una señal animada y se apagan al perder la conexión reciente.",
+      "Windows mantiene una sola instancia y restaura la ventana existente al abrirlo desde Inicio, búsqueda o un acceso directo.",
+      "Se retira el apartado de notificaciones de Windows, conservando la voz, la ventana flotante y los datos personales.",
+    ],
+  },
   {
     version: "1.21.1",
     date: "7 de octubre de 2026",
@@ -904,7 +933,7 @@ export default function App() {
   const whaleAvailable = selectedVision?.id === "gravity" && state.settings.activeMinutes > 15;
   const whaleNextMs = cycle.phase === "active" ? Math.max(0, 15 * 60_000 - (state.settings.activeMinutes * 60_000 - cycle.remainingMs)) : cycle.remainingMs + 15 * 60_000;
   const currentDevice = IS_WEB ? "web" : IS_ANDROID ? "mobile" : "pc";
-  const onlineDevices = state.settings.localSyncEnabled && now - presenceReceivedAt < 30_000 ? connectedDevices : [];
+  const onlineDevices = recentConnectedDevices(state.settings.localSyncEnabled, connectedDevices, presenceReceivedAt);
   const visibleTabs = TABS.filter((item) => item.id !== "changes" || creatorAccess === "granted");
   const targetProgress = Math.min(100, Math.round((currentPoints / target) * 100));
   const selectedShinyMod = SHINY_MOD_CATALOG.find((item) => item.id === selectedShinyModId) ?? defaultShinyMod;
@@ -1747,7 +1776,6 @@ export default function App() {
         ...current.settings,
         phase,
         phaseStartedAt: new Date().toISOString(),
-        lastNotificationPhaseStartedAt: phase === "active" ? undefined : current.settings.lastNotificationPhaseStartedAt,
       },
     }));
     setNow(Date.now());
@@ -1772,7 +1800,6 @@ export default function App() {
         ...current.settings,
         phase: counterPhase,
         phaseStartedAt,
-        lastNotificationPhaseStartedAt: undefined,
         lastVoiceAlertPhaseStartedAt: undefined,
       },
     }));
@@ -1871,7 +1898,6 @@ export default function App() {
           phaseStartedAt: timing.phaseStartedAt,
           phase: timing.phase,
           sharedTimingUpdatedAt: timing.updatedAt,
-          lastNotificationPhaseStartedAt: undefined,
           lastVoiceAlertPhaseStartedAt: undefined,
         } : {}),
       },
@@ -1904,7 +1930,6 @@ export default function App() {
         ...state.settings,
         phase: counterPhase,
         phaseStartedAt: new Date(timestamp - (durationMs - requestedMs)).toISOString(),
-        lastNotificationPhaseStartedAt: undefined,
         lastVoiceAlertPhaseStartedAt: undefined,
       },
     };
@@ -1950,8 +1975,13 @@ export default function App() {
       if (isTauri()) {
         await openUrl(url);
       } else {
-        const opened = window.open(url, "_blank", "noopener,noreferrer");
-        if (!opened) window.location.assign(url);
+        // A noopener popup can return null even when it opened successfully.
+        // Use a normal external link without navigating away from the tracker.
+        const link = document.createElement("a");
+        link.href = url;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.click();
       }
       return true;
     } catch (error) {
@@ -1962,6 +1992,8 @@ export default function App() {
   };
 
   const openRepository = () => void openExternalAddress(REPOSITORY_URL);
+
+  const openCreatorProfile = () => void openExternalAddress(AUTHOR_PROFILE_URL);
 
   const openAndroidDownload = () => void openExternalAddress(ANDROID_APK_URL);
 
@@ -1990,7 +2022,7 @@ export default function App() {
   };
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-event={cycle.phase === "active" ? visionVisualTheme(selectedVision) : "neutral"}>
       <AppUpdater beforeInstall={async () => {
         if (!IS_ANDROID && isTauri()) {
           if (!restoreReadyRef.current) throw new Error("El respaldo inicial todavía se está recuperando. Intenta actualizar de nuevo.");
@@ -2010,9 +2042,9 @@ export default function App() {
         </div>
 
         <nav aria-label={tx("Navegación principal", "Main navigation")}>
-          {visibleTabs.map(({ id, es, en, icon: Icon }) => (
-            <button key={id} type="button" className={tab === id ? "active" : ""} onClick={() => setTab(id)}>
-              <Icon size={19} /><span>{tx(es, en)}</span>{tab === id && <ChevronRight size={15} />}
+          {visibleTabs.map(({ id, es, en }) => (
+            <button key={id} type="button" className={tab === id ? "active" : ""} aria-label={tx(es, en)} title={tx(es, en)} aria-current={tab === id ? "page" : undefined} onClick={() => setTab(id)}>
+              <span className="nav-symbol"><ConsoleGlyph section={id} /></span><span>{tx(es, en)}</span>{tab === id && <ChevronRight size={15} />}
             </button>
           ))}
         </nav>
@@ -2038,9 +2070,10 @@ export default function App() {
           <VisionAtmosphere visionId={selectedVision?.id} active={cycle.phase === "active"} />
           <div className="topbar-copy">
             <span className="eyebrow">{tab === "progress" ? tx("SEGUIMIENTO ACTUAL", "CURRENT TRACKING") : tab === "characters" ? tx("PERFILES DE JUEGO", "GAME PROFILES") : tab === "vision" ? tx("RUEDA VISIONAL", "VISIONAL WHEEL") : tab === "devices" ? tx("PC, WEB Y MÓVIL", "PC, WEB AND MOBILE") : tab === "history" ? tx("REGISTRO PERSONAL", "PERSONAL RECORD") : tab === "shiny" ? tx("COLECCIÓN DE MÓDULOS", "MOD COLLECTION") : tab === "changes" ? tx("NOVEDADES", "WHAT'S NEW") : tx("PREFERENCIAS", "PREFERENCES")}</span>
-            <h1>{(() => { const item = TABS.find((entry) => entry.id === tab); return item ? tx(item.es, item.en) : ""; })()}</h1>
-            <div className="device-presence" aria-label={tx("Dispositivos emparejados", "Paired devices")}>
-              {([{ id: "pc", name: "PC", icon: Monitor }, { id: "web", name: "Web", icon: Globe }, { id: "mobile", name: tx("Móvil", "Mobile"), icon: Smartphone }]).map(({ id, name, icon: Icon }) => <span key={id} className={`${onlineDevices.includes(id) ? "connected" : "offline"} ${id === currentDevice ? "current" : ""}`} title={`${name}: ${onlineDevices.includes(id) ? tx("conectado", "connected") : id === currentDevice ? tx("este dispositivo", "this device") : tx("sin conexión reciente", "no recent connection")}`}><Icon size={12} />{name}<i /></span>)}
+            <h1><ConsoleGlyph section={tab} size={30} />{(() => { const item = TABS.find((entry) => entry.id === tab); return item ? tx(item.es, item.en) : ""; })()}</h1>
+            <div className="topbar-meta">
+              <button type="button" className="creator-credit" onClick={openCreatorProfile}><Github size={12} aria-hidden="true" /><span>{tx("Creado por", "Created by")}</span><strong>{AUTHOR}</strong><ExternalLink size={10} aria-hidden="true" /></button>
+              <DevicePresence online={onlineDevices} current={currentDevice} english={language !== "es"} />
             </div>
           </div>
           <div className="topbar-actions">
@@ -2058,6 +2091,8 @@ export default function App() {
             </label>
           </div>
         </header>
+
+        {IS_WEB && <WebInstallNotice pwa={pwa} language={language} />}
 
         {tab === "progress" && (
           <section className="page progress-page">
@@ -2339,7 +2374,7 @@ export default function App() {
           <section className="page devices-page">
             <article className="device-version-panel panel">
               <div className="device-version-icon"><ShieldCheck size={27} /></div>
-              <div><span className="eyebrow">{tx("VERSIÓN INSTALADA", "INSTALLED VERSION")}</span><h2>Caja Fantasma v{APP_VERSION}</h2><p>{IS_WEB ? tx("Versión web gratuita con guardado local y funcionamiento sin conexión.", "Free web version with local storage and offline support.") : IS_ANDROID ? tx("Aplicación Android ARM64 con actualizaciones verificadas dentro de la app.", "ARM64 Android app with verified in-app updates.") : tx("Aplicación de Windows con actualizaciones firmadas desde GitHub Releases.", "Windows app with signed updates from GitHub Releases.")}</p></div>
+              <div><span className="eyebrow">{tx("VERSIÓN INSTALADA", "INSTALLED VERSION")}</span><h2>Caja Fantasma v{APP_VERSION}</h2><p>{IS_WEB ? tx("Versión web gratuita con guardado local y funcionamiento sin conexión.", "Free web version with local storage and offline support.") : IS_ANDROID ? tx("Aplicación Android ARM64 con actualizaciones verificadas dentro de la app.", "ARM64 Android app with verified in-app updates.") : tx("Aplicación de Windows con actualizaciones firmadas desde GitHub Releases.", "Windows app with signed updates from GitHub Releases.")}</p><small className="version-developer"><Github size={12} aria-hidden="true" /> {tx("Creado por", "Created by")} <strong>{AUTHOR}</strong></small></div>
               <span className="version-current-badge">{tx("ACTUAL", "CURRENT")}</span>
             </article>
 
@@ -2349,7 +2384,7 @@ export default function App() {
               <div className="public-catalog-actions"><button type="button" className="secondary" onClick={() => void syncCatalog()}><RefreshCw size={16} /> {tx("Comprobar ahora", "Check now")}</button><small>{syncStatus}. {tx("Se revisa al abrir, cada 30 segundos, al volver Internet y al regresar a la aplicación.", "Checked at startup, every 30 seconds, when Internet returns, and when the app regains focus.")}</small></div>
             </article>
 
-            {IS_WEB && <article className="web-install-panel panel"><Globe size={24} /><div><h2>{tx(pwa.installed ? "Página instalada" : "Instalar Caja Fantasma", pwa.installed ? "Web app installed" : "Install Caja Fantasma")}</h2><p>{tx(pwa.installed ? "Puedes abrirla desde su icono y usar tus datos guardados sin conexión." : "Abre la página como una aplicación. En iPhone: Compartir → Añadir a pantalla de inicio. En otros navegadores, usa Instalar aplicación en el menú.", pwa.installed ? "Open it from its icon and use saved data offline." : "Open this page as an app. On iPhone: Share → Add to Home Screen. In other browsers, use Install app in the menu.")}</p></div>{pwa.available && <button type="button" className="primary" onClick={() => void pwa.install()}><Download size={16} />{tx("Instalar aplicación", "Install app")}</button>}</article>}
+            {IS_WEB && <WebInstallNotice pwa={pwa} language={language} variant="panel" />}
             <article className={`local-device-sync panel ${state.settings.localSyncEnabled ? "enabled" : ""}`}>
               <div className="local-sync-heading"><div><span className="eyebrow"><Wifi size={15} /> {tx("SIN NUBE NI FIREBASE", "NO CLOUD OR FIREBASE")}</span><h2>{tx("Sincronizar PC ↔ Web ↔ Android", "Sync PC ↔ Web ↔ Android")}</h2><p>{tx("El PC actúa como puente local: combina los historiales sin enviar datos personales a Internet.", "The PC acts as a local bridge, merging history without uploading personal data to the Internet.")}</p></div><span className={`local-sync-state ${state.settings.localSyncEnabled ? "online" : "offline"}`}>{state.settings.localSyncEnabled ? tx("ACTIVA", "ON") : tx("APAGADA", "OFF")}</span></div>
               {!IS_ANDROID && !IS_WEB ? <>
@@ -2384,12 +2419,16 @@ export default function App() {
             {IS_WEB && <article className="backup-panel panel"><div><span className="eyebrow">{tx("ALMACENAMIENTO WEB", "WEB STORAGE")}</span><h2>{tx("Copia local recuperable", "Recoverable local copy")}</h2><p>{tx("Se guarda en localStorage e IndexedDB y la aplicación queda en caché para abrir sin conexión. No se sube a ningún servidor.", "Data is stored in localStorage and IndexedDB, and the app shell is cached for offline use. Nothing is uploaded to a server.")}</p></div><div><span className="version-current-badge">{webStorageStatus?.persisted ? tx("PROTEGIDO", "PERSISTENT") : tx("LOCAL", "LOCAL")}</span><button type="button" className="secondary" onClick={() => void requestPersistentWebStorage().then(setWebStorageStatus)}><ShieldCheck size={17} /> {tx("Proteger almacenamiento", "Protect storage")}</button></div></article>}
 
             <article className="android-download-panel download-hub-panel panel">
-              <div><span className="eyebrow"><Download size={15} /> {tx("CAJA FANTASMA EN TUS DISPOSITIVOS", "CAJA FANTASMA ON YOUR DEVICES")}</span><h2>{tx("Descargas y versión web", "Downloads and web app")}</h2><p>{tx("Abre la última publicación oficial para descargar Windows o Android, o entra directamente a la página gratuita.", "Open the latest official release for Windows or Android, or launch the free web app directly.")}</p></div>
+              <div><span className="eyebrow"><Download size={15} /> {tx("CAJA FANTASMA EN TUS DISPOSITIVOS", "CAJA FANTASMA ON YOUR DEVICES")}</span><h2>{tx("Descargas y versión web", "Downloads and web app")}</h2><p>{tx("Descarga Windows o Android desde la última versión del proyecto, o entra directamente a la página gratuita.", "Download Windows or Android from the latest project release, or launch the free web app directly.")}</p></div>
               <div className="platform-download-actions">
                 {(IS_ANDROID || IS_WEB) && <button type="button" className="primary" onClick={openWindowsDownload}><MonitorUp size={18} /> {tx("Descargar para PC", "Download for PC")}</button>}
                 {!IS_ANDROID && <button type="button" className="primary" onClick={openAndroidDownload}><Smartphone size={18} /> {tx("Descargar APK", "Download APK")}</button>}
                 {!IS_WEB && <button type="button" className="secondary" onClick={openWebApp}><ExternalLink size={18} /> {tx("Abrir página web", "Open web app")}</button>}
               </div>
+            </article>
+            <article className="community-notice">
+              <ShieldCheck size={22} aria-hidden="true" />
+              <div><strong>{tx("Herramienta comunitaria · no oficial", "Community tool · unofficial")}</strong><p>{tx("Creada por OscarD0823 para ayudar a los jugadores. El registro es manual: no lee ni modifica archivos, memoria o procesos del juego y no automatiza partidas. No está afiliada, patrocinada ni aprobada por los responsables de Once Human. La marca y las imágenes de referencia pertenecen a sus titulares; no reclamamos derechos sobre ellas.", "Created by OscarD0823 to help players. Tracking is manual: it does not read or modify game files, memory or processes, or automate gameplay. It is not affiliated with, sponsored or approved by Once Human's owners. Trademarks and reference images belong to their respective owners; we claim no rights to them.")}</p></div>
             </article>
           </section>
         )}
@@ -2403,7 +2442,6 @@ export default function App() {
               <article className="settings-card panel public-timing-summary">
                 <div className="settings-icon"><Clock3 /></div><div><h3>{tx("Duración pública del ciclo", "Public cycle duration")}</h3><p>{tx("Estos valores los define el administrador y se sincronizan junto con la rueda y sus puntos.", "These values are set by the administrator and synced with the wheel and its points.")}</p><div className="timing-summary-values"><span><small>{tx("Espera", "Waiting")}</small><strong>{state.settings.waitMinutes} min</strong></span><span><small>{tx("Activa", "Active")}</small><strong>{state.settings.activeMinutes} min</strong></span><span><small>{tx("Transición al cierre", "End transition")}</small><strong>{state.settings.transitionDelayMilliseconds} ms</strong></span></div><small>{tx("El propietario puede modificarlos en el editor general inferior y enviarlos todos con un solo botón.", "The owner can edit them below and publish everything with one button.")}</small></div>
               </article>
-              <article className="settings-card panel setting-disabled"><div className="settings-icon"><Bell /></div><div><h3>{tx("Notificaciones de escritorio", "Desktop notifications")}</h3><p>{tx("Desactivadas en esta versión. Gravedad puede seguir avisando mediante voz.", "Disabled in this version. Gravity can still warn you by voice.")}</p><span className="disabled-setting-badge">{tx("DESACTIVADAS", "DISABLED")}</span></div></article>
               <article className="settings-card voice-settings panel">
                 <div className="settings-icon"><Volume2 /></div><div><h3>{tx("Aviso por voz · Gravedad", "Voice alert · Gravity")}</h3><p>{tx("Habla antes de que empiece el evento aunque la aplicación esté minimizada.", "Speaks before the event starts even when the app is minimized.")}</p><div className="voice-controls"><label>{tx("Anticipación (minutos)", "Lead time (minutes)")}<input type="number" min={1} max={60} value={state.settings.voiceLeadMinutes} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, voiceLeadMinutes: clampNumber(Number(event.target.value), 1, 60), lastVoiceAlertPhaseStartedAt: undefined } }))} /></label><button type="button" className="secondary compact" onClick={() => { speakMessage(tx("Prueba de voz. El aviso de Gravedad está funcionando.", "Voice test. The Gravity alert is working.")); setToast(tx("Prueba de voz reproducida", "Voice test played")); window.setTimeout(() => setToast(""), 1800); }}><Volume2 size={15} /> {tx("Probar voz", "Test voice")}</button></div></div><button type="button" className={`switch ${state.settings.voiceNotificationsEnabled ? "on" : ""}`} aria-pressed={state.settings.voiceNotificationsEnabled} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, voiceNotificationsEnabled: !current.settings.voiceNotificationsEnabled } }))}><span /></button>
               </article>
@@ -2450,7 +2488,7 @@ function ShinyTrackerCard({ record, language, onDecrease, onIncrease, onToggle, 
   </article>;
 }
 
-function StartupIntro({ language, onSkip }: { language: UiLanguage; onSkip: () => void }) {
+export function StartupIntro({ language, onSkip }: { language: UiLanguage; onSkip: () => void }) {
   const english = language !== "es";
   const previewMs = import.meta.env.DEV ? Number(new URLSearchParams(window.location.search).get("intro-preview")) : 0;
   const onSkipRef = useRef(onSkip);
@@ -2509,16 +2547,6 @@ function ActivityCard({ activity, currentCount, dailyCount, totalCount, language
       </div>
     </article>
   );
-}
-
-function GameLogoMark() {
-  return <svg viewBox="0 0 64 64" role="img" aria-label="Emblema de Caja Fantasma">
-    <path className="ghost-logo-shell" d="M32 3 54 15.5v27L32 61 10 42.5v-27L32 3Z" />
-    <path className="ghost-logo-facet" d="m32 9 16.5 9.3L32 28 15.5 18.3 32 9Zm-16.5 13L29 30v22L15.5 40.1V22Zm33 0v18.1L35 52V30l13.5-8Z" />
-    <path className="ghost-logo-specter" d="M22 24.7c2.6-5 6.1-7.4 10-7.4s7.4 2.4 10 7.4l-3.6 1.9-2.1-2.7-.9 4.2-3.4-2.4-3.4 2.4-.9-4.2-2.1 2.7-3.6-1.9Z" />
-    <path className="ghost-logo-lock" d="M25.5 34h13v11h-13V34Zm3-1.1v-2.2a3.5 3.5 0 0 1 7 0v2.2M32 37.1v4.8" />
-    <path className="ghost-logo-glint" d="m49 10 1.3 3.1 3.2 1.3-3.2 1.3-1.3 3.1-1.3-3.1-3.2-1.3 3.2-1.3L49 10Z" />
-  </svg>;
 }
 
 function StatCard({ icon: Icon, label, value }: { icon: typeof Box; label: string; value: string }) {

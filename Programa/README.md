@@ -1,18 +1,19 @@
 # Caja Fantasma · Once Human
 
-Descargas oficiales del programa creado por [OscarD0823](https://github.com/OscarD0823).
+Herramienta comunitaria gratuita creada por [OscarD0823](https://github.com/OscarD0823). No es un producto oficial del juego.
 
-## Versión actual: 1.21.1
+## Versión 1.21.4
 
-| Plataforma | Descarga | Compatibilidad | SHA-256 |
-| --- | --- | --- | --- |
-| Windows | [`Windows/Caja-Fantasma-1.21.1-Instalador.exe`](Windows/Caja-Fantasma-1.21.1-Instalador.exe) | Windows 10/11 x64 | `F872A39AB0F159C1F5C25EB61D6FE6E1143C5C29B82B8C24916A598BF8DA2506` |
-| Android | [`Android/Caja-Fantasma-Android-1.21.1.apk`](Android/Caja-Fantasma-Android-1.21.1.apk) | Android 8.0+ ARM64 | `D566F4D8186BA08176370F32E58057F37EF4C99903F5280811C93A68DB58DEB5` |
+| Plataforma | Descargar o abrir | Compatibilidad |
+| --- | --- | --- |
+| Windows | [Instalador](Windows/Caja-Fantasma-1.21.4-Instalador.exe) | Windows 10/11 x64 |
+| Android | [APK](Android/Caja-Fantasma-Android-1.21.4.apk) | Android 8+ ARM64 |
+| Web | [Abrir e instalar la página](https://oscard0823.github.io/Caja-Fantasma/) | Navegador compatible |
 
-Cada plataforma tiene sus instrucciones y sumas de comprobación dentro de su carpeta. La [licencia MIT](LICENSE) se conserva junto a las descargas. Las versiones anteriores están archivadas en [`Versiones-anteriores`](Versiones-anteriores/) y los lanzamientos completos permanecen en GitHub Releases.
+También puedes obtener todos los archivos desde el [último lanzamiento](https://github.com/OscarD0823/Caja-Fantasma/releases/latest).
 
-La APK está firmada e incluye únicamente Caja Fantasma. No usa Firebase, publicidad ni telemetría. La versión 1.21.0 conecta Windows, Android y la página mediante una sola IP, puerto y código, y muestra indicadores de conexiones recientes. Añade el contador de Ballena en las tres plataformas, configuración compacta, nuevo icono y una apertura mecánica animada. Los tres clientes conservan el protocolo de eliminación; si uno está desactualizado, solicita instalar una versión compatible en vez de conservar el punto silenciosamente. Los botones abren siempre el Release estable más reciente.
+La actualización renueva iconos, logo, interfaz y apertura de la caja. Conserva puntos, historial, personajes, módulos y sincronización. Consulta las [notas](../NOTAS-VERSION-1.21.4.md), las instrucciones de [Windows](Windows/README.md) y [Android](Android/README.md).
 
-La [página gratuita](https://oscard0823.github.io/Caja-Fantasma/) también puede instalarse desde Dispositivos o el menú del navegador compatible. En iPhone usa Compartir → Añadir a pantalla de inicio.
+Los paquetes contienen únicamente el programa y sus componentes necesarios. No incluyen Firebase, publicidad ni telemetría. Los historiales personales no se distribuyen en GitHub.
 
-La versión 1.21.1 mejora la apertura tridimensional y añade en Windows guardado inmediato al cerrar, «Guardar y salir», respaldo antes de actualizar y guardado al finalizar la sesión de Windows.
+Las sumas de comprobación están en las carpetas de cada plataforma. Los archivos antiguos siguen disponibles en GitHub Releases y [Versiones-anteriores](Versiones-anteriores/). [Licencia del código](LICENSE) · [Aviso comunitario y recursos de terceros](../AVISO-COMUNITARIO.md).

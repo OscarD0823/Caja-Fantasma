@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { recentConnectedDevices } from "../src/devicePresence.ts";
 import catalog from "../catalog/visions.json" with { type: "json" };
 import { BASELINE_BOX_POINTS, DEFAULT_CHARACTER_ID, VISION_CYCLE_WAIT_STARTED_AT, actionsForCharacter, actionsForTeamSession, activityHistorySummary, applyRemoteCatalog, boxStatistics, buildBreakdown, buildPointRoundBreakdown, computeCountdownTransition, computeCycle, computeGravityWhale, createInitialCharacterTracking, detachCharacterFromActions, formatCompactDuration, gameDayKey, overlayVisionName, parseManualBaseline, pointActionsInRound, resolveTransitionDelayMilliseconds, sharedEventTimingFromSettings, sharedVisionId, shouldShowGravityWhale, splitPlatformCarryover, validateCatalog, type ActivityHistoryRecord, type BoxRecord, type Catalog, type PersistedState, type PointAction, type Settings } from "../src/model.ts";
 import { overlayDesignSize, whaleCounterLayoutWithinWindow, whaleCounterScaleWithinWindow, whaleScaleWithinWindow } from "../src/overlayGeometry.ts";
@@ -7,6 +8,14 @@ import { SHINY_MOD_CATALOG, SHINY_MOD_CATALOG_META, SHINY_MOD_GROUPS, matchesMod
 import { initialState, mergePersonalSyncPayload, personalDurableHistoryCount, personalSyncPayload, recoverPersonalBackup } from "../src/storage.ts";
 
 const freshState = { ...createInitialCharacterTracking(Date.parse("2026-09-11T00:00:00Z")), actions: [] as PointAction[] };
+const presenceAt = Date.parse("2026-10-07T18:00:00Z");
+assert.deepEqual(recentConnectedDevices(true, ["pc", "web", "mobile", "unknown", "web"], presenceAt, presenceAt + 29_999), ["pc", "web", "mobile"]);
+assert.deepEqual(recentConnectedDevices(true, ["pc", "mobile"], presenceAt, presenceAt + 30_000), [], "La animación debe apagarse si no llega otro aviso de conexión reciente.");
+assert.deepEqual(recentConnectedDevices(false, ["pc", "mobile"], presenceAt, presenceAt), [], "No mostrar conexión cuando la sincronización está apagada.");
+assert.deepEqual(recentConnectedDevices(true, ["web"], 0, presenceAt), []);
+assert.deepEqual(recentConnectedDevices(true, ["web"], presenceAt, presenceAt - 1), [], "Un cambio del reloj no debe conservar una conexión obsoleta.");
+assert.deepEqual(recentConnectedDevices(true, ["mobile"], presenceAt, Number.NaN), []);
+assert.deepEqual(recentConnectedDevices(true, ["pc", "web"], Date.now()), ["pc", "web"], "Una señal recién recibida debe seguir conectada aunque el reloj del contador aún no haya dado su siguiente tick.");
 assert.equal(freshState.trackingMode, "solo", "La aplicación debe iniciar en Solitario.");
 assert.equal(freshState.characters.length, 1);
 assert.equal(actionsForTeamSession(freshState.actions, freshState.activeTeamSessionId).length, 0, "El conteo inicial de Equipo debe empezar en cero.");
@@ -58,7 +67,6 @@ const settings: Settings = {
   overlayNameMode: "spanish",
   overlayCustomName: "",
   transitionDelayMilliseconds: 3_000,
-  notificationsEnabled: false,
   voiceNotificationsEnabled: true,
   voiceLeadMinutes: 5,
   timingPresetVersion: 4,
