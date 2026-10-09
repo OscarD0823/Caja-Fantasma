@@ -1,6 +1,6 @@
 # Auditoría del instalador de Caja Fantasma
 
-Revisión actualizada para la versión 1.21.5 sobre el script NSIS generado por Tauri.
+Revisión actualizada para la versión 1.22.1 sobre el script NSIS generado por Tauri. El único archivo de aplicación instalado es el ejecutable principal; los recursos del nuevo cofre y sus iconos van integrados en el paquete.
 
 ## Qué instala
 

@@ -14,7 +14,7 @@ Tu seguimiento de recompensas, cajas y módulos Brillantes de Once Human, en **P
 
 Las descargas llevan a la **última versión publicada**, no a versiones en preparación. Los archivos también están organizados en [Programa](Programa/).
 
-**1.22.0 · Conexiones juntas y consola de progreso:** PC, web y Android en un mismo apartado, conexión web–celular corregida en navegadores Android, progreso y dispositivos con energía animada, tutorial y detección automática del idioma. [Qué cambió](docs/versiones/NOTAS-VERSION-1.22.0.md) · [Historial de versiones](docs/versiones/).
+**1.22.1 · Cofre con profundidad e iconos fieles:** herrajes en relieve, tapa curva y metal envejecido. Los iconos de Windows, Android y web usan el mismo cofre de la animación, con proporciones y márgenes seguros. No cambia el progreso ni la sincronización. [Qué cambió](docs/versiones/NOTAS-VERSION-1.22.1.md) · [Historial de versiones](docs/versiones/).
 
 ## Empieza en un minuto
 

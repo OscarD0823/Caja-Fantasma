@@ -212,6 +212,7 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  { version: "1.22.1", date: "9 de octubre de 2026", title: "Cofre con profundidad e iconos fieles", items: ["Cofre con herrajes en relieve, tapa curva, cerradura profunda y paredes interiores; conserva la apertura del módulo y el fantasma.", "Acabado de metal envejecido con tornillos, ranuras y desgaste sutil, sin el aspecto plástico anterior.", "El logo y los iconos de Windows, Android y web se generan desde el mismo cofre tridimensional, con proporciones y márgenes seguros.", "Piezas estáticas reutilizadas y animaciones que respetan movimiento reducido; no cambia el progreso, el historial ni la sincronización."] },
   { version: "1.22.0", date: "9 de octubre de 2026", title: "Conexiones juntas y consola de progreso", items: ["La web en Android y las PWA muestran Conectar con el celular; ya no se confunden con la APK.", "Dispositivos reúne PC, web, Android y ambos enlaces en el mismo lugar.", "Progreso con energía segmentada, cofre que refleja su carga, botones de metal e indicadores de conexión con circuitos animados.", "Apertura más fluida, icono con márgenes seguros para móvil, tutorial de seis pasos y nueva vista de actualización.", "Detección automática del idioma en instalaciones nuevas; las elecciones anteriores se conservan."] },
   {
     version: "1.21.8",

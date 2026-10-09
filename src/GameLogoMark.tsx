@@ -1,4 +1,5 @@
 import { useId } from "react";
+import chestEmblem from "./assets/chest-emblem.png";
 
 function ModuleGlyph({ id }: { id: string }) {
   return <g className="module-glyph">
@@ -48,46 +49,10 @@ export function GhostMark() {
   </svg>;
 }
 
-/** Original chest + Brillante module identity, not the game's logo. */
+/** A cached still of CrateOpeningArt, not a second, flattened drawing.
+ * Regenerate with pnpm icons after changing the model, materials or module. */
 export default function GameLogoMark() {
-  const id = useId().replace(/:/g, "");
   return <svg className="chest-emblem" viewBox="0 0 128 128" role="img" aria-label="Caja Fantasma">
-    <defs>
-      <linearGradient id={`${id}-metal`} x1="28" y1="22" x2="84" y2="115" gradientUnits="userSpaceOnUse"><stop stopColor="#506975" /><stop offset=".27" stopColor="#122d3b" /><stop offset=".56" stopColor="#38505a" /><stop offset="1" stopColor="#071822" /></linearGradient>
-      <linearGradient id={`${id}-gold`} x1="0" y1="0" x2=".8" y2="1"><stop stopColor="#fff2c6" /><stop offset=".24" stopColor="#c9a16a" /><stop offset=".5" stopColor="#68472d" /><stop offset=".73" stopColor="#e8c587" /><stop offset="1" stopColor="#85572e" /></linearGradient>
-      <linearGradient id={`${id}-roof`} x1="0" y1="0" x2=".2" y2="1"><stop stopColor="#182b37" /><stop offset=".32" stopColor="#63717a" /><stop offset=".54" stopColor="#314652" /><stop offset="1" stopColor="#0a1b27" /></linearGradient>
-      <linearGradient id={`${id}-side`} x1="0" y1="0" x2="1" y2="1"><stop stopColor="#49616b" /><stop offset="1" stopColor="#07151e" /></linearGradient>
-      <linearGradient id={`${id}-energy`}><stop stopColor="#127d9c" /><stop offset=".5" stopColor="#b1ffff" /><stop offset="1" stopColor="#2baec9" /></linearGradient>
-      <radialGradient id={`${id}-aura`}><stop stopColor="#57c9de" stopOpacity=".32" /><stop offset="1" stopColor="#57c9de" stopOpacity="0" /></radialGradient>
-    </defs>
-    <ellipse cx="62" cy="60" rx="62" ry="58" fill={`url(#${id}-aura)`} />
-    <ellipse cx="67" cy="114" rx="52" ry="9" fill="#030d17" opacity=".7" />
-    <g className="emblem-spirit" fill={`url(#${id}-energy)`} opacity=".8"><path d="M43 29c-4-9 0-18 6-24-1 10 6 9 8 19l-6 12ZM65 27c1-8 10-13 11-20 4 12-5 16-1 25Z" /><path d="m26 24 2-7 3 8-3 4Zm75-7 1-5 2 5-1 3Z" /></g>
-    <g className="emblem-chest">
-      <path d="m14 62 85 8 21-15-1 48-23 17-81-12Z" fill={`url(#${id}-metal)`} stroke="#050f18" strokeWidth="3" strokeLinejoin="round" />
-      <path d="m98 72 22-17-1 48-22 17Z" fill={`url(#${id}-side)`} stroke="#ab9062" strokeWidth="1.3" />
-      <path d="m20 74 69 7v24l-69-7Z" fill="#102631" stroke="#57727b" strokeWidth=".9" />
-      <path d="m25 79 58 6m-58 3 58 6m-58 3 58 6" stroke="#d3e6e8" strokeOpacity=".13" strokeWidth=".7" />
-      <path d="m14 102 82 10 22-16v7l-23 17-80-11Z" fill={`url(#${id}-gold)`} stroke="#edcc90" strokeWidth=".7" />
-      <path d="M14 61C12 35 23 22 45 23l53 9c18 3 25 17 22 28l-21 16-85-10Z" fill={`url(#${id}-roof)`} stroke={`url(#${id}-gold)`} strokeWidth="2.7" strokeLinejoin="round" />
-      <path d="M99 75c1-22-4-35-15-45m15 45 21-15c3-12-4-25-22-28" fill={`url(#${id}-side)`} stroke="#bca175" strokeWidth="1.1" />
-      <path d="M22 60c-2-17 5-29 17-33m1 36c-1-14 3-24 13-32m7 34c0-13 3-22 9-32m12 35c-1-12 0-20 4-32" fill="none" stroke="#0b1d29" strokeWidth="2" />
-      <path d="M15 58c20-4 49 4 83 10m-78-23c19-4 45 2 72 10M29 31c16-4 35 0 57 7" fill="none" stroke="#cfdee4" strokeOpacity=".2" strokeWidth=".8" />
-      <path d="M27 26c-9 8-11 20-9 39l8 1c-3-17 0-29 9-38Zm43 4c-7 8-10 23-8 39l8 1c-2-16 0-29 8-38Z" fill={`url(#${id}-gold)`} stroke="#eed09d" strokeWidth=".6" />
-      <path d="M25 33c-5 9-6 18-5 27m49-23c-4 9-5 16-4 26" fill="none" stroke="#6e482c" strokeWidth="1.8" />
-      <path d="m14 63 85 10 21-16v5l-21 17-85-10Z" fill="#050e18" stroke="#b79962" strokeWidth="1" />
-      <path className="emblem-energy" d="m17 66 80 10 21-16" fill="none" stroke={`url(#${id}-energy)`} strokeWidth="2.1" />
-      <path d="m18 72 9 1v32l-9-1Zm58 7 9 1v31l-9-1Z" fill={`url(#${id}-gold)`} stroke="#e5c78f" strokeWidth=".7" />
-      <path d="m48 72 13 2v17l-6 8-7-9Z" fill={`url(#${id}-gold)`} stroke="#fff0c2" strokeWidth="1.2" />
-      <path d="m51 77 7 1v12l-3 4-4-5Z" fill="#052737" stroke="#56d7e8" strokeWidth="1" />
-      <path d="m54 80 2 1v8l-2 1Z" fill="#b5ffff" />
-      <path d="m105 76 10-8v22l-10 8Z" fill="#071720" stroke="#d4b678" strokeWidth="1" />
-      <path d="m108 78 5-4v12l-5 4Z" fill="#386573" />
-      <path d="m13 71 8 1v8l-8-1Zm77 8 8 1v8l-8-1ZM14 99l8 1v8l-8-1Zm74 8 8 1v9l-8-1Z" fill={`url(#${id}-gold)`} />
-      {[ [22, 38], [21, 53], [67, 41], [65, 56], [22, 77], [22, 100], [80, 84], [80, 105], [16, 75], [94, 83] ].map(([x, y]) => <g key={`${x}-${y}`}><circle cx={x} cy={y} r="1.5" fill="#332620" stroke="#e6c891" strokeWidth=".5" /><path d={`m${x - .7} ${y}h1.4`} stroke="#fff0c1" strokeWidth=".45" /></g>)}
-      <path className="emblem-trace" d="m17 66 80 10 21-16" fill="none" stroke="#e4ffff" strokeWidth="1.5" strokeDasharray="12 110" />
-    </g>
-    <g className="emblem-module" transform="translate(79 81) scale(.68)"><ModuleGlyph id={id} /></g>
-    <path d="m114 24 2 6 6 2-6 2-2 6-2-6-6-2 6-2Z" fill="#fff0bb" />
+    <image className="emblem-model" href={chestEmblem} x="0" y="0" width="128" height="128" preserveAspectRatio="xMidYMid meet" />
   </svg>;
 }

@@ -1,62 +1,47 @@
-import { useId, type CSSProperties, type ReactNode } from "react";
+import { memo, useId, type CSSProperties, type ReactNode } from "react";
+import { ChestBolt, ChestMaterialDefs } from "./ChestMaterials";
+import ChestRelief, { LidLatchRelief, LockRelief } from "./ChestRelief";
 
-/** Static vector metalwork, not a crop of the illustration or a per-frame renderer. */
-function Metalwork({ side = false, lid = false }: { side?: boolean; lid?: boolean }) {
+
+/** Static vector metalwork; identical finishes are used by the app icon. */
+const Metalwork = memo(function Metalwork({ side = false, lid = false }: { side?: boolean; lid?: boolean }) {
   const id = `vault-${useId().replace(/:/g, "")}`;
   const width = side ? 160 : 300;
   const height = lid ? 52 : 180;
+  const cornerWidth = side ? 43 : 62;
   const paint = (name: string) => `url(#${id}-${name})`;
   const bodyOutline = lid
     ? "M0 50C0 22 29 0 80 0S160 22 160 50Z"
     : `M8 0H${width - 8}L${width} 8V172L${width - 8} 180H8L0 172V8Z`;
-  const plateOutline = lid
-    ? "M13 43C18 22 38 10 80 10S142 22 147 43Z"
-    : `M15 30H${width - 15}V144L${width - 29} 160H29L15 144Z`;
   return <svg className="vault-metalwork" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" aria-hidden="true">
     <defs>
-      <linearGradient id={`${id}-steel`} x1="0" y1="0" x2=".8" y2="1">
-        <stop stopColor="#737c84" /><stop offset=".16" stopColor="#343e49" /><stop offset=".55" stopColor="#202831" /><stop offset=".82" stopColor="#434e57" /><stop offset="1" stopColor="#111920" />
-      </linearGradient>
-      <linearGradient id={`${id}-gold`} x1="0" y1="0" x2="1" y2=".7">
-        <stop stopColor="#725032" /><stop offset=".15" stopColor="#ebc38a" /><stop offset=".22" stopColor="#997047" /><stop offset=".47" stopColor="#d8ab66" /><stop offset=".72" stopColor="#72502d" /><stop offset=".93" stopColor="#e4b771" /><stop offset="1" stopColor="#50351f" />
-      </linearGradient>
-      <radialGradient id={`${id}-bolt`} cx=".35" cy=".25">
-        <stop stopColor="#fff2c7" /><stop offset=".3" stopColor="#aa7948" /><stop offset=".65" stopColor="#3b291c" /><stop offset=".83" stopColor="#d4a05d" /><stop offset="1" stopColor="#261b15" />
-      </radialGradient>
-      <pattern id={`${id}-grain`} width="49" height="37" patternUnits="userSpaceOnUse">
-        <path d="M2 5l9-2m12 15 5-2m9 15 7-2M5 31l3-2m32-24 5-1M16 22l6-4" stroke="#d7d4c7" strokeWidth=".6" opacity=".14" />
-        <path d="M1 15l12-1m11 13 12-5M18 4l11-2" stroke="#050b10" strokeWidth=".8" opacity=".4" />
-        <path d="M6 10h1m25 14h1m-17 9h1" stroke="#efe3c8" opacity=".2" />
-      </pattern>
+      <ChestMaterialDefs id={id} />
       <clipPath id={`${id}-outline`}><path d={bodyOutline} /></clipPath>
     </defs>
     <g clipPath={paint("outline")}>
       <path d={bodyOutline} fill={paint("steel")} stroke="#111a21" strokeWidth="4" />
-      <path d={plateOutline} fill="#111b23" stroke="#a8a394" strokeWidth="1" />
-      <path d={plateOutline} fill={paint("steel")} transform={lid ? "translate(0 2)" : "translate(0 4)"} stroke="#060e14" strokeWidth="3" />
       {!lid && <>
-        <path d={`M5 5H${width - 5}L${width - 14} 23H14ZM12 164H${width - 12}L${width - 3} 178H3Z`} fill={paint("steel")} stroke="#a2a397" strokeWidth="1.4" />
-        <path d={`M10 27H${width - 10}M25 162H${width - 25}`} stroke="#070e14" strokeWidth="5" />
-        <path className="vault-luminous-line" d={`M14 27H${width - 14}M31 160H${width - 31}`} stroke="#45dfff" strokeWidth="3" />
-        <path d={side ? "M26 45h108v78l-15 18H41l-15-18Z" : "M73 52h38l28 26v55l-29 22H73l-12-13V65ZM227 52h-38l-28 26v55l29 22h37l12-13V65Z"} fill="#18232c" stroke="#9b7247" strokeWidth="3" />
-        <path d={side ? "M30 49h100v72l-14 16H44l-14-16Z" : "M76 57h33l23 23v50l-24 19H77l-9-10V70ZM224 57h-33l-23 23v50l24 19h31l9-10V70Z"} fill={paint("steel")} stroke="#030a10" strokeWidth="3" />
-        <path d={`M29 23v130h19V23ZM${width - 48} 23v130h19V23Z`} fill={paint("gold")} stroke="#1a1511" strokeWidth="3" />
-        <path className="vault-luminous-line" d={`M53 39v101M${width - 53} 39v101`} stroke="#39dfff" strokeWidth="4" />
-        {[0, width - 47].map((x) => <g key={x} transform={`translate(${x})`}>
-          <path d="M4 4h34l9 10v23l-10 10H9L1 37V13ZM8 145h29l10 10v18l-7 7H6l-5-7v-19Z" fill={paint("gold")} stroke="#24180f" strokeWidth="2" />
-          <path d="M7 8h28l7 7v19l-7 8H11l-6-7V15ZM11 150h23l8 8v13l-5 5H9l-4-5v-15Z" fill="none" stroke="#f5d297" strokeWidth=".8" opacity=".8" />
-          <circle cx="23" cy="24" r="6.5" fill={paint("bolt")} stroke="#120e0a" strokeWidth="2" /><circle cx="23" cy="162" r="6.5" fill={paint("bolt")} stroke="#120e0a" strokeWidth="2" />
-        </g>)}
+        <path d={`M12 28H${width - 12}V148L${width - 29} 166H29L12 148Z`} fill="#080f17" stroke="#61696c" strokeWidth="1" />
+        <path d={`M15 31H${width - 15}V145L${width - 30} 162H30L15 145Z`} fill={paint("panel")} stroke="#0a1119" strokeWidth="2" />
+        <path d={`M19 28H${width - 19}M28 153H${width - 28}`} stroke="#030d15" strokeWidth="8" />
+        <path className="vault-luminous-line" d={side ? "M45 28h70M48 154l10-5h44l10 5" : "M62 28h50l8-4h60l8 4h50M70 154l10-7h32l8 7m60 0 8-7h32l10 7"} stroke={paint("cyan")} strokeWidth="3.6" fill="none" />
+        <path className="vault-luminous-line" d={`M${cornerWidth - 7} 53v75m${width - cornerWidth + 7} -75v75`} stroke="#06141d" strokeWidth="10" />
+        <path className="vault-luminous-line" d={`M${cornerWidth - 7} 55v71m${width - cornerWidth + 7} -71v71`} stroke={paint("cyan")} strokeWidth="4.8" />
+        <path d={side ? "M64 70l11-4m21 58 9-6" : "M80 77l14-5m-14 54 10-6m107-36 16-5m-9 56 12-7"} fill="none" stroke="#b7b2a0" strokeWidth="1.1" opacity=".25" />
       </>}
       {lid && <>
-        <path d="M2 49C3 23 28 2 80 2s77 21 78 47h-13C140 27 120 13 80 13S20 27 15 49Z" fill={paint("gold")} stroke="#e8c28c" strokeWidth=".7" />
-        <path className="vault-luminous-line" d="M36 43h30l4-6h22l5 6h30" stroke="#39dfff" strokeWidth="3" fill="none" />
-        <circle cx="12" cy="41" r="4" fill={paint("bolt")} /><circle cx="148" cy="41" r="4" fill={paint("bolt")} />
+        <path d="M2 49C3 23 28 2 80 2s77 21 78 47h-17C136 26 119 15 80 15S24 27 19 49Z" fill={paint("bevel")} stroke="#e8c28c" strokeWidth="1" />
+        <path d="M11 45C16 23 38 8 80 8s64 16 69 37" fill="none" stroke={paint("gold")} strokeWidth="7" />
+        <path d="M26 42C32 26 50 20 80 20s48 6 54 22" fill="none" stroke="#a8afb0" strokeWidth=".9" />
+        <path d="M24 42h35l9-7h25l10 7h33" stroke="#081721" strokeWidth="7" fill="none" />
+        <path className="vault-luminous-line" d="M27 42h31l10-7h25l10 7h30" stroke={paint("cyan")} strokeWidth="3" fill="none" />
+        <path d="M8 38h15l5 9-6 5H7l-5-5Zm130 0h15l5 9-6 5h-15l-5-5Z" fill={paint("gold")} stroke="#e9c793" strokeWidth="1" />
+        <ChestBolt id={id} x={15} y={44} radius={3.5} /><ChestBolt id={id} x={145} y={44} radius={3.5} />
       </>}
       <path d={bodyOutline} fill={paint("grain")} />
     </g>
   </svg>;
-}
+});
 
 // Eight contiguous physical plates form a vaulted lid (a 160 × 48 ellipse),
 // all sharing one rear hinge. Computed once; no timers, canvas or render loop.
@@ -68,24 +53,52 @@ const ROOF_PLATES = Array.from({ length: 8 }, (_, index) => {
   return {
     height: Math.hypot(y2 - y1, z2 - z1) + .6,
     transform: `translate3d(0, ${(y1 + y2) / 2}px, ${(z1 + z2) / 2}px) rotateX(${Math.atan2(z2 - z1, y2 - y1) * 180 / Math.PI}deg) translateY(-50%)`,
-    "--roof-light": ["#303a43", "#53616d", "#78828a", "#515d68", "#3c4651", "#303a44", "#222c35", "#303a42"][index],
+    "--roof-light": ["#27323b", "#45545d", "#667780", "#3f505a", "#2e3d47", "#27333e", "#182630", "#24333e"][index],
   } as CSSProperties;
 });
 
-function VaultedLid() {
+const VaultedLid = memo(function VaultedLid() {
+  const id = `lid-metal-${useId().replace(/:/g, "")}`;
   return <>
+    <svg className="vault-relief-materials" aria-hidden="true"><defs><ChestMaterialDefs id={id} /></defs></svg>
     {ROOF_PLATES.map((style, index) => <span key={index} className="vault-roof-plate" style={style}>
-      <span className="vault-roof-band band-left" /><span className="vault-roof-band band-middle" /><span className="vault-roof-band band-right" />
+      <svg className="vault-roof-machining" viewBox="0 0 300 30" preserveAspectRatio="none" aria-hidden="true">
+        <rect width="300" height="30" fill={`url(#${id}-brushed)`} />
+        <rect width="300" height="30" fill={`url(#${id}-grain)`} />
+        <path d={index % 2 ? "M75 9h21m8 0h12m73 12 12-3M83 24l18-4m103-15 10-2" : "M77 4l17-2m9 9 13-3m71 15 22-5M85 27l10-2m109-12 6-2"} fill="none" stroke="#c3c9bc" strokeWidth=".35" opacity=".45" />
+        <path d="M70 27h54m54 0h53M70 2h54m54 0h53" stroke="#030b12" strokeWidth=".8" />
+        {(index === 2 || index === 6) && <><ChestBolt id={id} x={79} y={15} radius={1.8} /><ChestBolt id={id} x={219} y={15} radius={1.8} /></>}
+      </svg>
+      <span className="vault-roof-band band-left"><i className="vault-band-cap" /><i className="vault-band-wall wall-left" /><i className="vault-band-wall wall-right" /></span>
+      <span className="vault-roof-band band-middle"><i className="vault-band-cap" /><i className="vault-band-wall wall-left" /><i className="vault-band-wall wall-right" /></span>
+      <span className="vault-roof-band band-right"><i className="vault-band-cap" /><i className="vault-band-wall wall-left" /><i className="vault-band-wall wall-right" /></span>
+      {(index === 1 || index === 5) && <span className="vault-roof-fasteners"><i /><i /><i /></span>}
       <span className="vault-roof-traces"><i /><i /><i /></span>
     </span>)}
     <span className="vault-lid-end end-left"><Metalwork side lid /></span>
     <span className="vault-lid-end end-right"><Metalwork side lid /></span>
     <span className="vault-lid-lip lip-front"><i /><i /><i /></span>
     <span className="vault-lid-lip lip-back" />
-    <span className="vault-lid-underside"><span /><i /><i /></span>
-    <span className="vault-lid-latch"><i /></span>
+    <span className="vault-lid-underside">
+      <svg className="vault-interior-machining" viewBox="0 0 300 160" aria-hidden="true">
+        <rect width="300" height="160" fill={`url(#${id}-brushed)`} opacity=".6" />
+        <rect width="300" height="160" fill={`url(#${id}-grain)`} opacity=".5" />
+        <path d="M15 15h270v130H15Zm21 12v106m228-106v106" fill="none" stroke="#09131b" strokeWidth="4" />
+        <path d="M15 14h270M35 27v106m228-106v106" fill="none" stroke="#a0aba6" strokeWidth=".6" />
+        <path d="M47 19h206l8 8v105l-8 9H47l-8-9V27Z" fill="#0b1c22" stroke="#867a63" strokeWidth="1" />
+        <path d="M54 29h192v95H54Z" fill={`url(#${id}-panel)`} stroke="#536569" strokeWidth=".7" />
+        <path d="M58 118h184M57 34h185M63 47h15v55H63Zm159 0h15v55h-15Z" fill="none" stroke="#0a171e" strokeWidth="2" />
+        <path d="M69 55h3m-3 5h3m-3 5h3m-3 5h3m-3 5h3m-3 5h3m-3 5h3m-3 5h3M227 55h4m-4 7h4m-4 7h4m-4 7h4m-4 7h4m-4 7h4" stroke="#84938f" strokeWidth=".55" opacity=".5" />
+        <path d="M53 135h17l6-6h135l7 6h31" fill="none" stroke="#70b8ba" strokeWidth=".8" opacity=".5" />
+        <path d="M109 57h81l12 13v28l-12 12h-81L97 98V70Z" fill="none" stroke="#769294" strokeWidth=".75" opacity=".6" />
+        <text x="149" y="85" textAnchor="middle" fill="#93a9a6" fontFamily="Consolas,monospace" fontSize="8" letterSpacing="3" opacity=".45">CF · 017</text>
+        <path d="m114 93 16-4m29 0 10-3m-6-19 12-2M23 40l6-3m240 70 7-2" stroke="#c0c8b9" strokeWidth=".5" opacity=".45" />
+        {[24, 275].flatMap(x => [25, 79, 134].map(y => <ChestBolt key={`${x}-${y}`} id={id} x={x} y={y} radius={2.8} />))}
+      </svg>
+    </span>
+    <span className="vault-lid-latch"><LidLatchRelief /></span>
   </>;
-}
+});
 
 /** An assembled chest: the docking module stays in its lock after the ghost leaves. */
 export default function CrateOpeningArt({ keyMark, ghostMark, compact = false }: { keyMark: ReactNode; ghostMark?: ReactNode; compact?: boolean }) {
@@ -96,13 +109,16 @@ export default function CrateOpeningArt({ keyMark, ghostMark, compact = false }:
       <span className="vault-floor-shadow" />
       <span className="vault-solid">
         <span className="vault-face vault-back"><Metalwork /></span>
-        <span className="vault-face vault-side vault-left"><Metalwork side /><span className="vault-handle" /></span>
-        <span className="vault-face vault-side vault-right"><Metalwork side /><span className="vault-handle" /></span>
+        <span className="vault-face vault-side vault-left"><Metalwork side /><ChestRelief side /><span className="vault-handle" /></span>
+        <span className="vault-face vault-side vault-right"><Metalwork side /><ChestRelief side /><span className="vault-handle" /></span>
         <span className="vault-face vault-bottom" />
+        <span className="vault-inner-wall inner-back"><i /></span><span className="vault-inner-wall inner-front"><i /></span>
+        <span className="vault-inner-wall inner-left"><i /></span><span className="vault-inner-wall inner-right"><i /></span>
         <span className="vault-cavity"><span className="vault-core" /><i /><i /><i /></span>
         <span className="vault-face vault-front">
           <Metalwork />
-          <span className="vault-keystone"><i /><b /></span>
+          <ChestRelief />
+          <span className="vault-keystone"><LockRelief /></span>
           <span className="vault-identity"><small>CF · PHANTOM</small><em>17</em></span>
           <span className="vault-serial"><i /><i /><i /><i /><i /><i /><i /><i /></span>
           <span className="vault-clasp clasp-left"><i /></span><span className="vault-clasp clasp-right"><i /></span>
