@@ -1,8 +1,8 @@
 # Windows · Caja Fantasma
 
-## Versión 1.21.8
+## Versión 1.22.0
 
-[Descargar instalador](Caja-Fantasma-1.21.8-Instalador.exe) · [Último lanzamiento](https://github.com/OscarD0823/Caja-Fantasma/releases/latest) · [SHA-256](SHA256SUMS.txt)
+[Descargar instalador](Caja-Fantasma-1.22.0-Instalador.exe) · [Último lanzamiento](https://github.com/OscarD0823/Caja-Fantasma/releases/latest) · [SHA-256](SHA256SUMS.txt)
 
 Windows 10/11 x64. Ejecuta el instalador sobre la versión anterior sin desinstalarla para conservar el progreso. Solo incluye Caja Fantasma y su desinstalador; si falta WebView2, descarga el componente oficial de Microsoft necesario para mostrar la interfaz.
 
@@ -18,4 +18,4 @@ Windows 10/11 x64. Ejecuta el instalador sobre la versión anterior sin desinsta
 
 Exporta un JSON desde **Configuración → Respaldo local** antes de cambiar de equipo o desinstalar.
 
-[Qué cambió](../../NOTAS-VERSION-1.21.8.md) · [Proyecto comunitario, no oficial](../../AVISO-COMUNITARIO.md)
+[Qué cambió](../../docs/versiones/NOTAS-VERSION-1.22.0.md) · [Proyecto comunitario, no oficial](../../AVISO-COMUNITARIO.md)

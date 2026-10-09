@@ -16,6 +16,17 @@ export const UI_LANGUAGES = [
 export type UiLanguage = typeof UI_LANGUAGES[number]["code"];
 const SUPPORTED = new Set<string>(UI_LANGUAGES.map((item) => item.code));
 export function isUiLanguage(value: unknown): value is UiLanguage { return typeof value === "string" && SUPPORTED.has(value); }
+export function detectUiLanguage(preferences: readonly string[] = typeof navigator === "undefined" ? [] : [ ...(navigator.languages ?? []), navigator.language ]): UiLanguage {
+  for (const preference of preferences) {
+    const primary = preference?.trim().replace(/_/g, "-").split("-")[0].toLowerCase();
+    if (isUiLanguage(primary)) return primary;
+  }
+  return "en";
+}
+export function restoredLanguage(settings?: { uiLanguage?: unknown; uiLanguageMode?: unknown }): { uiLanguage: UiLanguage; uiLanguageMode: "auto" | "manual" } {
+  if (settings?.uiLanguageMode !== "auto" && isUiLanguage(settings?.uiLanguage)) return { uiLanguage: settings.uiLanguage, uiLanguageMode: "manual" };
+  return { uiLanguage: detectUiLanguage(), uiLanguageMode: "auto" };
+}
 export function localeForLanguage(language: UiLanguage) { return UI_LANGUAGES.find((item) => item.code === language)?.locale ?? "en-US"; }
 
 type TranslationRow = Partial<Record<Exclude<UiLanguage, "es" | "en">, string>>;

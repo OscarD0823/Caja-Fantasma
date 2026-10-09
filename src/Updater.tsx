@@ -2,14 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
-import { Download, RefreshCw, ShieldCheck, TriangleAlert } from "lucide-react";
+import UpdateExperience, { type UpdateStatus } from "./UpdateExperience";
+import { runtimePlatform } from "./runtimePlatform";
+import type { UiLanguage } from "./i18n";
 import { APP_VERSION } from "./model";
 
-type Status = "downloading" | "installing" | "restarting" | "permission" | "confirming" | "error";
+type Status = UpdateStatus;
 type AndroidRelease = { version: string; notes: string; url: string; sha256: string };
 type AndroidInstallResult = { status: "permission-required" | "installer-opened" };
 
-const IS_ANDROID = /Android/i.test(navigator.userAgent);
+const IS_ANDROID = runtimePlatform(isTauri(), navigator.userAgent) === "android";
 
 function isNewerVersion(candidate: string, current: string) {
   const left = candidate.replace(/^v/i, "").split(/[.+-]/).map((part) => Number.parseInt(part, 10) || 0);
@@ -20,7 +22,7 @@ function isNewerVersion(candidate: string, current: string) {
   return false;
 }
 
-export default function AppUpdater({ beforeInstall }: { beforeInstall?: () => Promise<void> }) {
+export default function AppUpdater({ beforeInstall, language = "es" }: { beforeInstall?: () => Promise<void>; language?: UiLanguage }) {
   const beforeInstallRef = useRef(beforeInstall);
   beforeInstallRef.current = beforeInstall;
   const desktopUpdateRef = useRef<Update | null>(null);
@@ -147,45 +149,5 @@ export default function AppUpdater({ beforeInstall }: { beforeInstall?: () => Pr
 
   if (!visible) return null;
 
-  const title = status === "downloading"
-    ? "Actualizando Caja Fantasma"
-    : status === "installing"
-      ? "Verificando e instalando"
-      : status === "restarting"
-        ? "Reiniciando aplicación"
-        : status === "permission"
-          ? "Permite actualizar esta aplicación"
-          : status === "confirming"
-            ? "Confirma la actualización en Android"
-            : "No se pudo actualizar";
-  const message = status === "downloading"
-    ? IS_ANDROID
-      ? "Descargando la APK oficial y verificando su suma SHA-256."
-      : "Descargando el paquete firmado desde GitHub Releases."
-    : status === "installing"
-      ? "Comprobando la firma antes de aplicar los archivos."
-      : status === "restarting"
-        ? "La nueva versión volverá a abrirse."
-        : status === "permission"
-          ? "Android abrió el permiso «Instalar apps desconocidas». Actívalo para Caja Fantasma, regresa aquí y pulsa continuar."
-          : status === "confirming"
-            ? "La descarga ya fue verificada. Android requiere que confirmes la instalación por seguridad."
-            : error;
-
-  return <div className="update-overlay" role="dialog" aria-modal="true" aria-labelledby="update-title"><section className="update-card" aria-live="polite">
-    <div className={`update-icon ${status === "downloading" || status === "installing" || status === "restarting" ? "spinning" : ""}`}>{status === "error" ? <TriangleAlert /> : status === "downloading" ? <Download /> : status === "permission" || status === "confirming" ? <ShieldCheck /> : <RefreshCw />}</div>
-    <span className="eyebrow">ACTUALIZACIÓN AUTOMÁTICA SEGURA</span>
-    <h2 id="update-title">{title}</h2>
-    <div className="update-route"><span>{route.current}</span><RefreshCw size={14} /><strong>{route.next}</strong></div>
-    <p>{message}</p>
-
-    {(status === "downloading" || status === "installing") && <><div className={`update-progress ${progress === null ? "indeterminate" : ""}`}><span style={progress === null ? undefined : { width: `${progress}%` }} /></div><strong>{progress === null ? IS_ANDROID ? "Descargando y verificando…" : "Descargando…" : `${progress}%`}</strong></>}
-
-    {status !== "error" && <div className="update-trust"><ShieldCheck size={16} /> {IS_ANDROID ? "SHA-256 y firma Android verificados antes de instalar" : "Firma verificada antes de instalar"}</div>}
-    {notes && status !== "error" && <details><summary>Ver cambios de la versión</summary><pre>{notes}</pre></details>}
-
-    {status === "permission" && <div className="update-actions"><button type="button" className="secondary" onClick={dismiss}>Más tarde</button><button type="button" className="primary" onClick={() => void install()}><Download size={17} /> Continuar actualización</button></div>}
-    {status === "confirming" && <div className="update-actions"><button type="button" className="secondary" onClick={dismiss}>Cerrar</button><button type="button" className="primary" onClick={() => void install()}><RefreshCw size={17} /> Abrir instalador otra vez</button></div>}
-    {status === "error" && <div className="update-actions"><button type="button" className="secondary" onClick={dismiss}>Continuar sin actualizar</button><button type="button" className="primary" onClick={() => void install()}><RefreshCw size={17} /> Reintentar</button></div>}
-  </section></div>;
+  return <UpdateExperience status={status} progress={progress} route={route} notes={notes} error={error} android={IS_ANDROID} language={language} dismiss={dismiss} install={() => void install()} />;
 }

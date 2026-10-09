@@ -87,7 +87,7 @@ export default function GameLogoMark() {
       {[ [22, 38], [21, 53], [67, 41], [65, 56], [22, 77], [22, 100], [80, 84], [80, 105], [16, 75], [94, 83] ].map(([x, y]) => <g key={`${x}-${y}`}><circle cx={x} cy={y} r="1.5" fill="#332620" stroke="#e6c891" strokeWidth=".5" /><path d={`m${x - .7} ${y}h1.4`} stroke="#fff0c1" strokeWidth=".45" /></g>)}
       <path className="emblem-trace" d="m17 66 80 10 21-16" fill="none" stroke="#e4ffff" strokeWidth="1.5" strokeDasharray="12 110" />
     </g>
-    <g className="emblem-module" transform="translate(87 88) scale(.54)"><ModuleGlyph id={id} /></g>
+    <g className="emblem-module" transform="translate(79 81) scale(.68)"><ModuleGlyph id={id} /></g>
     <path d="m114 24 2 6 6 2-6 2-2 6-2-6-6-2 6-2Z" fill="#fff0bb" />
   </svg>;
 }

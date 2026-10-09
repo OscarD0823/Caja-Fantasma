@@ -6,16 +6,20 @@ import RewardProgressBar from "./RewardProgressBar";
 import ObservedProbability from "./ObservedProbability";
 import CrateHistoryCard from "./CrateHistoryCard";
 import CounterChestArt from "./CounterChestArt";
+import AppTutorial from "./AppTutorial";
+import UpdateExperience from "./UpdateExperience";
 
 /** DEV-only, isolated visual QA: does not mount App or touch personal storage/bridge. */
 export default function InterfaceVisualHarness() {
   const [intro, setIntro] = useState(new URLSearchParams(location.search).has("intro-preview"));
   const [points, setPoints] = useState(187);
+  const [tutorial, setTutorial] = useState(false);
+  const [update, setUpdate] = useState(false);
   const historyOnly = new URLSearchParams(location.search).has("history-preview");
   const counterPreviewMs = Number(new URLSearchParams(location.search).get("counter-preview"));
   const counterOnly = new URLSearchParams(location.search).has("counter-only");
   const tx = (es: string) => es;
-  const counterCard = <article className="progress-hero panel"><div className="hero-copy"><span className="eyebrow">INTENTO · PERSONAJE DE PRUEBA</span><h2>{points}<small> / 1000 puntos</small></h2><p>Vista de prueba, sin modificar el progreso personal.</p><RewardProgressBar value={points} target={1000} label="Progreso de prueba" /><div className="hero-actions"><button className="primary" type="button" onClick={() => setPoints(current => Math.min(1000, current + 100))}>Sumar 100 de prueba</button><button className="secondary" type="button" onClick={() => setPoints(current => Math.max(0, current - 100))}>Restar 100 de prueba</button></div></div><CounterChestArt previewAtMs={counterPreviewMs} /></article>;
+  const counterCard = <article className="progress-hero panel"><div className="hero-copy"><span className="eyebrow">INTENTO · PERSONAJE DE PRUEBA</span><h2>{points}<small> / 1000 puntos</small></h2><p>Vista de prueba, sin modificar el progreso personal.</p><RewardProgressBar value={points} target={1000} label="Progreso de prueba" /><div className="hero-actions"><button className="primary" type="button" onClick={() => setPoints(current => Math.min(1000, current + 100))}>Sumar 100 de prueba</button><button className="secondary" type="button" onClick={() => setPoints(current => Math.max(0, current - 100))}>Restar 100 de prueba</button></div></div><CounterChestArt value={points} previewAtMs={counterPreviewMs} /></article>;
   const historyPreview = <section className="history-page">
     <ObservedProbability count={16} perPointPercent={.1046} currentChancePercent={17.77} tx={tx} />
     <ObservedProbability count={0} perPointPercent={0} currentChancePercent={0} tx={tx} />
@@ -34,6 +38,10 @@ export default function InterfaceVisualHarness() {
     {historyPreview}
     </>}
     <button type="button" className="primary" onClick={() => setIntro(true)}>Reproducir apertura</button>
+    <button type="button" className="secondary" onClick={() => setTutorial(true)}>Probar tutorial</button>
+    <button type="button" className="secondary" onClick={() => setUpdate(true)}>Probar actualización</button>
+    {tutorial && <AppTutorial language="es" onClose={() => setTutorial(false)} onVisit={() => setTutorial(false)} />}
+    {update && <UpdateExperience status="permission" progress={null} route={{ current: "1.21.8", next: "1.22.0" }} notes="Vista de prueba de la actualización." error="" android language="es" dismiss={() => setUpdate(false)} install={() => setUpdate(false)} />}
     {intro && <StartupIntro language="es" onSkip={() => setIntro(false)} />}
   </main>;
 }

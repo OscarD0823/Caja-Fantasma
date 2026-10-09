@@ -10,6 +10,7 @@ import {
   BarChart3,
   Box,
   Check,
+  CircleHelp,
   ChevronRight,
   Clock3,
   Download,
@@ -99,7 +100,8 @@ import {
 } from "./model";
 import { STORAGE_KEY, applyPersonalSyncPayload, exportState, hasIntentionalActionDeletions, importState, loadPersonalSyncUpdatedAt, loadState, mergePersonalSyncPayload, personalDurableHistoryCount, personalHistoryCount, personalSyncPayload, recoverPersonalBackup, savePersonalSyncUpdatedAt, saveState } from "./storage";
 import { isValidLocalSyncAddress, localSyncTargetAddressSpace, splitLocalSyncAddress } from "./localSyncAddress";
-import { UI_LANGUAGES, localeForLanguage, translate, type UiLanguage } from "./i18n";
+import { UI_LANGUAGES, detectUiLanguage, localeForLanguage, translate, type UiLanguage } from "./i18n";
+import AppTutorial from "./AppTutorial";
 import type { ShinyModCatalogItem } from "./shinyModsCatalog";
 import { loadWebPersonalBackup, readWebStorageStatus, requestPersistentWebStorage, saveWebPersonalBackup, type WebStorageStatus } from "./webStorage";
 import { usePwaInstall } from "./usePwaInstall";
@@ -107,6 +109,7 @@ import CrateOpeningArt from "./CrateOpeningArt";
 import CounterChestArt from "./CounterChestArt";
 import { persistDesktopProgress } from "./desktopProgress";
 import PhoneBridgeSyncPanel from "./PhoneBridgeSyncPanel";
+import { runtimePlatform } from "./runtimePlatform";
 import { usePhoneBridgeSync } from "./usePhoneBridgeSync";
 import type { PhoneBridgeSnapshot } from "./phoneBridgeProtocol";
 import RewardProgressBar from "./RewardProgressBar";
@@ -158,8 +161,9 @@ type BackgroundSyncStatus = {
 };
 
 const REMOTE_CATALOG_API_URL = "https://api.github.com/repos/OscarD0823/Caja-Fantasma/contents/catalog/visions.json?ref=main";
-const IS_ANDROID = /Android/i.test(navigator.userAgent);
-const IS_WEB = !isTauri();
+const PLATFORM = runtimePlatform(isTauri(), navigator.userAgent);
+const IS_ANDROID = PLATFORM === "android";
+const IS_WEB = PLATFORM === "web";
 let catalogApiFallbackAvailableAt = 0;
 
 function createPairingCode() {
@@ -208,6 +212,7 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  { version: "1.22.0", date: "9 de octubre de 2026", title: "Conexiones juntas y consola de progreso", items: ["La web en Android y las PWA muestran Conectar con el celular; ya no se confunden con la APK.", "Dispositivos reúne PC, web, Android y ambos enlaces en el mismo lugar.", "Progreso con energía segmentada, cofre que refleja su carga, botones de metal e indicadores de conexión con circuitos animados.", "Apertura más fluida, icono con márgenes seguros para móvil, tutorial de seis pasos y nueva vista de actualización.", "Detección automática del idioma en instalaciones nuevas; las elecciones anteriores se conservan."] },
   {
     version: "1.21.8",
     date: "8 de octubre de 2026",
@@ -875,6 +880,15 @@ export default function App() {
   const [syncStatus, setSyncStatus] = useState("Catálogo local listo");
   const [toast, setToast] = useState("");
   const [introVisible, setIntroVisible] = useState(true);
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [tutorialNotice, setTutorialNotice] = useState(() => {
+    try { return !localStorage.getItem(STORAGE_KEY) && !localStorage.getItem("caja-fantasma.tutorial.seen.v1"); } catch { return false; }
+  });
+  const finishTutorial = useCallback(() => {
+    setTutorialOpen(false);
+    setTutorialNotice(false);
+    try { localStorage.setItem("caja-fantasma.tutorial.seen.v1", "1"); } catch { /* Tutorial preference must not block progress saving. */ }
+  }, []);
   const [homeOverlayConfigOpen, setHomeOverlayConfigOpen] = useState(false);
   const [localSyncInfo, setLocalSyncInfo] = useState<LocalSyncInfo>();
   const [localSyncStatus, setLocalSyncStatus] = useState("Sin conexión local");
@@ -1011,6 +1025,13 @@ export default function App() {
   const commitState = useCallback((update: PersistedState | ((current: PersistedState) => PersistedState)) => {
     setState((current) => typeof update === "function" ? update(current) : update);
   }, []);
+
+  useEffect(() => { document.documentElement.lang = localeForLanguage(language); }, [language]);
+  useEffect(() => {
+    const refreshLanguage = () => commitState(current => current.settings.uiLanguageMode === "auto" ? { ...current, settings: { ...current.settings, uiLanguage: detectUiLanguage() } } : current);
+    window.addEventListener("languagechange", refreshLanguage);
+    return () => window.removeEventListener("languagechange", refreshLanguage);
+  }, [commitState]);
 
   const saveAndClose = useCallback(async (exitApp: boolean) => {
     if (IS_ANDROID || !isTauri()) return;
@@ -2107,7 +2128,7 @@ export default function App() {
 
   return (
     <div className="app-shell" data-event={cycle.phase === "active" ? visionVisualTheme(selectedVision) : "neutral"}>
-      <AppUpdater beforeInstall={async () => {
+      <AppUpdater language={language} beforeInstall={async () => {
         if (!IS_ANDROID && isTauri()) {
           if (!restoreReadyRef.current) throw new Error("El respaldo inicial todavía se está recuperando. Intenta actualizar de nuevo.");
           const saved = await persistDesktopProgress(currentStateRef.current, invoke, false);
@@ -2117,6 +2138,7 @@ export default function App() {
       }} />
       {closeBusy && <div className="progress-saving" role="status" aria-live="polite"><Save size={25} /><strong>{tx("Guardando tu progreso…", "Saving your progress…")}</strong><span>{tx("Preparando un cierre seguro", "Preparing a safe close")}</span></div>}
       {introVisible && <StartupIntro language={language} onSkip={() => setIntroVisible(false)} />}
+      {tutorialOpen && !introVisible && <AppTutorial language={language} onClose={finishTutorial} onVisit={targetTab => { setTab(targetTab); finishTutorial(); }} />}
       {toast && <div className="toast" role="status"><Check size={17} />{toast}</div>}
 
       <aside className="sidebar">
@@ -2171,12 +2193,14 @@ export default function App() {
             </div>
             <label className="topbar-language" aria-label={tx("Idioma de la aplicación", "Application language")}>
               <Languages size={15} aria-hidden="true" />
-              <select value={language} onChange={(event) => commitState((current) => ({ ...current, settings: { ...current.settings, uiLanguage: event.target.value as UiLanguage } }))}>{UI_LANGUAGES.map((item) => <option key={item.code} value={item.code}>{item.short}</option>)}</select>
+              <select value={state.settings.uiLanguageMode === "auto" ? "auto" : language} onChange={(event) => { const automatic = event.target.value === "auto"; commitState(current => ({ ...current, settings: { ...current.settings, uiLanguageMode: automatic ? "auto" : "manual", uiLanguage: automatic ? detectUiLanguage() : event.target.value as UiLanguage } })); }}><option value="auto">Auto · {language.toUpperCase()}</option>{UI_LANGUAGES.map((item) => <option key={item.code} value={item.code}>{item.short}</option>)}</select>
             </label>
+            <button type="button" className="secondary tutorial-open" onClick={() => setTutorialOpen(true)} aria-label={tx("Abrir tutorial", "Open tutorial")}><CircleHelp size={18} /><span>{tx("Tutorial", "Tutorial")}</span></button>
           </div>
         </header>
 
         {IS_WEB && <WebInstallNotice pwa={pwa} language={language} />}
+        {tutorialNotice && !introVisible && <div className="tutorial-welcome"><CircleHelp size={20} /><span>{tx("¿Primera vez? Conoce Caja Fantasma en seis pasos.", "First time? Learn Caja Fantasma in six steps.")}</span><button type="button" className="primary compact" onClick={() => setTutorialOpen(true)}>{tx("Ver tutorial", "View tutorial")}</button><button type="button" className="experience-close" aria-label={tx("Ocultar aviso", "Hide notice")} onClick={finishTutorial}><X size={16} /></button></div>}
 
         {tab === "progress" && (
           <section className="page progress-page">
@@ -2239,7 +2263,7 @@ export default function App() {
                     <button type="button" className="secondary" disabled={currentPointRoundActions.length === 0} onClick={saveCurrentPointRound}><Save size={18} /> {tx("Guardar ronda", "Save round")}</button>
                   </div>
                 </div>
-                <CounterChestArt />
+                <CounterChestArt value={currentPoints} target={target} />
               </article>
 
               <article className="chance-card panel">
@@ -2447,7 +2471,7 @@ export default function App() {
 
         {tab === "devices" && (
           <section className="page devices-page">
-            <PhoneBridgeSyncPanel bridge={phoneBridge} mobile={IS_ANDROID} web={IS_WEB} language={language} address={state.settings.phoneSyncAddress} code={state.settings.phoneSyncCode} newCode={createPairingCode} onAddress={address => { phoneBridge.setEnabled(false); commitState(current => ({ ...current, settings: { ...current.settings, phoneSyncAddress: address } })); }} onCode={code => { if (IS_WEB) phoneBridge.setEnabled(false); commitState(current => ({ ...current, settings: { ...current.settings, phoneSyncCode: code } })); }} />
+            <article className="platform-access-panel panel"><span className="eyebrow">{tx("PC, WEB Y CELULAR", "PC, WEB AND PHONE")}</span><h2>{tx("Tu caja, en cualquier pantalla", "Your crate, on every screen")}</h2><div className="platform-download-actions"><button type="button" className="secondary" onClick={openWindowsDownload}><MonitorUp size={21} /><span><strong>Windows</strong><small>{tx("Descargar para PC", "Download for PC")}</small></span></button><button type="button" className="secondary" onClick={openWebApp}><ExternalLink size={21} /><span><strong>Web</strong><small>{tx("Abrir página web", "Open web app")}</small></span></button><button type="button" className="secondary" onClick={openAndroidDownload}><Smartphone size={21} /><span><strong>Android</strong><small>{tx("Descargar APK", "Download APK")}</small></span></button></div><div className="connection-shortcuts"><a href="#pc-connection">{tx("Conectar con PC", "Connect with PC")}</a><a href="#phone-connection">{tx("Web ↔ Celular sin PC", "Web ↔ Phone without PC")}</a></div></article>
             <article className="device-version-panel panel">
               <div className="device-version-icon"><ShieldCheck size={27} /></div>
               <div><span className="eyebrow">{tx("VERSIÓN INSTALADA", "INSTALLED VERSION")}</span><h2>Caja Fantasma v{APP_VERSION}</h2><p>{IS_WEB ? tx("Versión web gratuita con guardado local y funcionamiento sin conexión.", "Free web version with local storage and offline support.") : IS_ANDROID ? tx("Aplicación Android ARM64 con actualizaciones verificadas dentro de la app.", "ARM64 Android app with verified in-app updates.") : tx("Aplicación de Windows con actualizaciones firmadas desde GitHub Releases.", "Windows app with signed updates from GitHub Releases.")}</p><small className="version-developer"><Github size={12} aria-hidden="true" /> {tx("Creado por", "Created by")} <strong>{AUTHOR}</strong></small></div>
@@ -2461,7 +2485,8 @@ export default function App() {
             </article>
 
             {IS_WEB && <WebInstallNotice pwa={pwa} language={language} variant="panel" />}
-            <article className={`local-device-sync panel ${state.settings.localSyncEnabled ? "enabled" : ""}`}>
+            <div className="connection-hub"><div className="connection-hub-heading"><span className="eyebrow"><Wifi size={15} /> {tx("CONECTA TUS DISPOSITIVOS", "CONNECT YOUR DEVICES")}</span><h2>{tx("Elige el dispositivo que comparte", "Choose the sharing device")}</h2><p>{tx("Con PC: usa los datos de Windows. Sin PC: comparte desde Android y conecta la web abajo.", "With a PC: use the Windows details. Without a PC: share from Android and connect the web below.")}</p></div>
+            <article id="pc-connection" className={`local-device-sync panel ${state.settings.localSyncEnabled ? "enabled" : ""}`}>
               <div className="local-sync-heading"><div><span className="eyebrow"><Wifi size={15} /> {tx("SIN NUBE NI FIREBASE", "NO CLOUD OR FIREBASE")}</span><h2>{tx("Sincronizar PC ↔ Web ↔ Android", "Sync PC ↔ Web ↔ Android")}</h2><p>{tx("El PC actúa como puente local: combina los historiales sin enviar datos personales a Internet.", "The PC acts as a local bridge, merging history without uploading personal data to the Internet.")}</p></div><span className={`local-sync-state ${state.settings.localSyncEnabled ? "online" : "offline"}`}>{state.settings.localSyncEnabled ? tx("ACTIVA", "ON") : tx("APAGADA", "OFF")}</span></div>
               {!IS_ANDROID && !IS_WEB ? <>
                 <div className="local-sync-desktop-grid">
@@ -2492,16 +2517,10 @@ export default function App() {
               <small>{tx("Usa una red Wi‑Fi de confianza o el anclaje USB del teléfono. Los cambios públicos del administrador también viajan del PC al celular mientras estén conectados.", "Use a trusted Wi-Fi network or USB tethering. Public administrator changes also travel from the PC to the phone while connected.")}</small>
             </article>
 
+            <PhoneBridgeSyncPanel bridge={phoneBridge} mobile={IS_ANDROID} web={IS_WEB} language={language} address={state.settings.phoneSyncAddress} code={state.settings.phoneSyncCode} newCode={createPairingCode} onAddress={address => { phoneBridge.setEnabled(false); commitState(current => ({ ...current, settings: { ...current.settings, phoneSyncAddress: address } })); }} onCode={code => { if (IS_WEB) phoneBridge.setEnabled(false); commitState(current => ({ ...current, settings: { ...current.settings, phoneSyncCode: code } })); }} />
+            </div>
             {IS_WEB && <article className="backup-panel panel"><div><span className="eyebrow">{tx("ALMACENAMIENTO WEB", "WEB STORAGE")}</span><h2>{tx("Copia local recuperable", "Recoverable local copy")}</h2><p>{tx("Se guarda en localStorage e IndexedDB y la aplicación queda en caché para abrir sin conexión. No se sube a ningún servidor.", "Data is stored in localStorage and IndexedDB, and the app shell is cached for offline use. Nothing is uploaded to a server.")}</p></div><div><span className="version-current-badge">{webStorageStatus?.persisted ? tx("PROTEGIDO", "PERSISTENT") : tx("LOCAL", "LOCAL")}</span><button type="button" className="secondary" onClick={() => void requestPersistentWebStorage().then(setWebStorageStatus)}><ShieldCheck size={17} /> {tx("Proteger almacenamiento", "Protect storage")}</button></div></article>}
 
-            <article className="android-download-panel download-hub-panel panel">
-              <div><span className="eyebrow"><Download size={15} /> {tx("CAJA FANTASMA EN TUS DISPOSITIVOS", "CAJA FANTASMA ON YOUR DEVICES")}</span><h2>{tx("Descargas y versión web", "Downloads and web app")}</h2><p>{tx("Descarga Windows o Android desde la última versión del proyecto, o entra directamente a la página gratuita.", "Download Windows or Android from the latest project release, or launch the free web app directly.")}</p></div>
-              <div className="platform-download-actions">
-                {(IS_ANDROID || IS_WEB) && <button type="button" className="primary" onClick={openWindowsDownload}><MonitorUp size={18} /> {tx("Descargar para PC", "Download for PC")}</button>}
-                {!IS_ANDROID && <button type="button" className="primary" onClick={openAndroidDownload}><Smartphone size={18} /> {tx("Descargar APK", "Download APK")}</button>}
-                {!IS_WEB && <button type="button" className="secondary" onClick={openWebApp}><ExternalLink size={18} /> {tx("Abrir página web", "Open web app")}</button>}
-              </div>
-            </article>
             <article className="community-notice">
               <ShieldCheck size={22} aria-hidden="true" />
               <div><strong>{tx("Herramienta comunitaria · no oficial", "Community tool · unofficial")}</strong><p>{tx("Creada por OscarD0823 para ayudar a los jugadores. El registro es manual: no lee ni modifica archivos, memoria o procesos del juego y no automatiza partidas. No está afiliada, patrocinada ni aprobada por los responsables de Once Human. La marca y las imágenes de referencia pertenecen a sus titulares; no reclamamos derechos sobre ellas.", "Created by OscarD0823 to help players. Tracking is manual: it does not read or modify game files, memory or processes, or automate gameplay. It is not affiliated with, sponsored or approved by Once Human's owners. Trademarks and reference images belong to their respective owners; we claim no rights to them.")}</p></div>
@@ -2513,7 +2532,7 @@ export default function App() {
           <section className="page settings-page">
             <div className="settings-grid">
               <article className="settings-card language-settings panel">
-                <div className="settings-icon"><Settings2 /></div><div><h3>{tx("Idioma de la aplicación", "App language")}</h3><p>{tx("Elige entre 12 idiomas. Los nombres personalizados del administrador se conservan tal como fueron escritos.", "Choose from 12 languages. Custom administrator names are preserved as written.")}</p><div className="language-choice" role="group" aria-label={tx("Idioma", "Language")}>{UI_LANGUAGES.map((item) => <button key={item.code} type="button" className={language === item.code ? "selected" : ""} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, uiLanguage: item.code } }))}>{item.name}</button>)}</div></div>
+                <div className="settings-icon"><Languages /></div><div><h3>{tx("Idioma de la aplicación", "App language")}</h3><p>{tx("Detecta el idioma del dispositivo o elige uno de los 12 disponibles. Tu elección manual se conserva. Los textos aún no traducidos aparecen en inglés.", "Detect the device language or choose one of the 12 supported languages. Your manual choice is preserved. Text not yet translated appears in English.")}</p><div className="language-choice" role="group" aria-label={tx("Idioma", "Language")}><button type="button" className={state.settings.uiLanguageMode === "auto" ? "selected" : ""} onClick={() => commitState(current => ({ ...current, settings: { ...current.settings, uiLanguageMode: "auto", uiLanguage: detectUiLanguage() } }))}>Auto · {language.toUpperCase()}</button>{UI_LANGUAGES.map((item) => <button key={item.code} type="button" className={state.settings.uiLanguageMode !== "auto" && language === item.code ? "selected" : ""} onClick={() => commitState((current) => ({ ...current, settings: { ...current.settings, uiLanguageMode: "manual", uiLanguage: item.code } }))}>{item.name}</button>)}</div></div>
               </article>
               <article className="settings-card panel public-timing-summary">
                 <div className="settings-icon"><Clock3 /></div><div><h3>{tx("Duración pública del ciclo", "Public cycle duration")}</h3><p>{tx("Estos valores los define el administrador y se sincronizan junto con la rueda y sus puntos.", "These values are set by the administrator and synced with the wheel and its points.")}</p><div className="timing-summary-values"><span><small>{tx("Espera", "Waiting")}</small><strong>{state.settings.waitMinutes} min</strong></span><span><small>{tx("Activa", "Active")}</small><strong>{state.settings.activeMinutes} min</strong></span><span><small>{tx("Transición al cierre", "End transition")}</small><strong>{state.settings.transitionDelayMilliseconds} ms</strong></span></div><small>{tx("El propietario puede modificarlos en el editor general inferior y enviarlos todos con un solo botón.", "The owner can edit them below and publish everything with one button.")}</small></div>

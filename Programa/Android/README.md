@@ -1,10 +1,10 @@
 # Android · Caja Fantasma
 
-## Versión 1.21.8
+## Versión 1.22.0
 
-[Descargar APK](Caja-Fantasma-Android-1.21.8.apk) · [Último lanzamiento](https://github.com/OscarD0823/Caja-Fantasma/releases/latest) · [SHA-256](SHA256SUMS.txt)
+[Descargar APK](Caja-Fantasma-Android-1.22.0.apk) · [Último lanzamiento](https://github.com/OscarD0823/Caja-Fantasma/releases/latest) · [SHA-256](SHA256SUMS.txt)
 
-Android 8+ / API 26, ARM64. Versión 1.21.8, `versionCode` 1021008. Firma RSA 4096 del proyecto, con esquemas v2/v3 y el certificado habitual de actualización. También actualiza la APK de prueba 1.21.7.
+Android 8+ / API 26, ARM64. Versión 1.22.0, `versionCode` 1022000. Firma RSA 4096 del proyecto, con esquemas v2/v3 y el certificado habitual de actualización. También actualiza la APK de prueba 1.21.7.
 
 Instala sobre la versión anterior **sin desinstalarla** para conservar los datos. La app comprueba, descarga y verifica las siguientes versiones; Android requiere aceptar su confirmación de instalación.
 
@@ -22,4 +22,4 @@ Instala sobre la versión anterior **sin desinstalarla** para conservar los dato
 
 Exporta un respaldo desde **Configuración → Respaldo local** antes de desinstalar o cambiar de teléfono.
 
-[Sincronización y sus límites](../../docs/ANDROID-Y-SINCRONIZACION.md) · [Qué cambió](../../NOTAS-VERSION-1.21.8.md) · [Proyecto comunitario, no oficial](../../AVISO-COMUNITARIO.md)
+[Sincronización y sus límites](../../docs/ANDROID-Y-SINCRONIZACION.md) · [Qué cambió](../../docs/versiones/NOTAS-VERSION-1.22.0.md) · [Proyecto comunitario, no oficial](../../AVISO-COMUNITARIO.md)

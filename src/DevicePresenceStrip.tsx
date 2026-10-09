@@ -10,6 +10,7 @@ export default memo(function DevicePresenceStrip({ online, current, english = fa
       const connected = online.includes(id);
       const status = connected ? (english ? "connected" : "conectado") : id === current ? (english ? "this device · not paired" : "este dispositivo · sin emparejar") : (english ? "no recent connection" : "sin conexión reciente");
       return <span key={id} className={`device-node ${connected ? "connected" : "offline"} ${id === current ? "current" : ""}`} style={{ "--signal-offset": `${index * -.6}s` } as CSSProperties} title={`${name}: ${status}`} aria-label={`${name}: ${status}`}>
+        <svg className="device-circuit" viewBox="0 0 110 40" preserveAspectRatio="none" aria-hidden="true"><path className="device-rail" d="M8 1h78l7 6h16v24l-8 8H24l-7-6H1V8Z" /><path className="device-packet outgoing" d="M8 1h78l7 6h16v24l-8 8H24l-7-6H1V8Z" /><path className="device-packet incoming" d="M8 1h78l7 6h16v24l-8 8H24l-7-6H1V8Z" /></svg>
         <span className="device-node-icon" aria-hidden="true"><Icon size={14} /><i className="device-orbit" /></span>
         <span className="device-node-name">{name}</span>
         <span className="device-telemetry" aria-hidden="true"><i /><i /><i /><i /></span>

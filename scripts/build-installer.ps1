@@ -63,7 +63,7 @@ try {
     Copy-Item -LiteralPath $Installer.FullName -Destination $DeliveredInstaller -Force
     Copy-Item -LiteralPath $Signature -Destination $DeliveredSignature -Force
 
-    $NotesPath = Join-Path $ProjectRoot "NOTAS-VERSION-$Version.md"
+    $NotesPath = Join-Path $ProjectRoot "docs\versiones\NOTAS-VERSION-$Version.md"
     $Manifest = [ordered]@{
         version = $Version
         notes = [IO.File]::ReadAllText($NotesPath, [Text.Encoding]::UTF8)

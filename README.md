@@ -1,5 +1,7 @@
 # Caja Fantasma
 
+<img src="public/icons/app-192.png" width="96" alt="Cofre y módulo Brillante de Caja Fantasma" />
+
 Tu seguimiento de recompensas, cajas y módulos Brillantes de Once Human, en **PC, Android y web**. Creado por [OscarD0823](https://github.com/OscarD0823).
 
 ## Descargar o abrir
@@ -7,12 +9,12 @@ Tu seguimiento de recompensas, cajas y módulos Brillantes de Once Human, en **P
 | Plataforma | Acceso | Qué elegir |
 | --- | --- | --- |
 | Windows | [Descargar para PC](https://github.com/OscarD0823/Caja-Fantasma/releases/latest) | En **Assets**, el archivo `Caja-Fantasma-…-Instalador.exe`. |
-| Android | [Descargar APK](https://github.com/OscarD0823/Caja-Fantasma/releases/latest) | En **Assets**, `Caja-Fantasma-Android-….apk`. Android 8 o superior, ARM64. |
 | Web | [Abrir Caja Fantasma](https://oscard0823.github.io/Caja-Fantasma/) | Sin instalación. También puedes instalarla como app desde el aviso del navegador. |
+| Android | [Descargar APK](https://github.com/OscarD0823/Caja-Fantasma/releases/latest) | En **Assets**, `Caja-Fantasma-Android-….apk`. Android 8 o superior, ARM64. |
 
 Las descargas llevan a la **última versión publicada**, no a versiones en preparación. Los archivos también están organizados en [Programa](Programa/).
 
-**1.21.8 · Cofre custodio y conexión por IP:** el módulo abre el cofre, emerge el fantasma y se retira; cofre animado junto a los puntos, botones metálicos, progreso con energía e historial móvil reorganizado. Web y celular se enlazan sin PC con IP, puerto y seis números. [Qué cambió](NOTAS-VERSION-1.21.8.md).
+**1.22.0 · Conexiones juntas y consola de progreso:** PC, web y Android en un mismo apartado, conexión web–celular corregida en navegadores Android, progreso y dispositivos con energía animada, tutorial y detección automática del idioma. [Qué cambió](docs/versiones/NOTAS-VERSION-1.22.0.md) · [Historial de versiones](docs/versiones/).
 
 ## Empieza en un minuto
 
@@ -20,7 +22,7 @@ Las descargas llevan a la **última versión publicada**, no a versiones en prep
 2. Usa **Guardar ronda** para archivar el parcial sin reiniciar el total del intento. Al obtener la caja, pulsa **¡Salió la caja!**; si llegó por correo de Plataformas, usa su botón específico.
 3. En **Personajes**, crea tus perfiles o selecciona un equipo. En **Mods Brillantes**, busca el módulo, lleva sus intentos y marca los conseguidos.
 
-No necesitas iniciar sesión. El inicio de sesión en GitHub es solo para el editor del propietario.
+No necesitas iniciar sesión. Pulsa **Tutorial** en la cabecera para recorrer las funciones. El inicio de sesión en GitHub es solo para el editor del propietario.
 
 ## Qué puedes hacer
 
@@ -29,7 +31,8 @@ No necesitas iniciar sesión. El inicio de sesión en GitHub es solo para el edi
 - Personalizar los contadores en **Caja → Abrir configuración**. Windows ofrece una ventana flotante que deja pasar los clics al juego mientras no la estás ajustando.
 - Llevar personajes por separado o sumar actividades a un equipo.
 - Buscar módulos normales de nivel **1 a 17** y sus versiones **Brillantes**.
-- Elegir entre 12 idiomas y abrir las otras plataformas desde **Dispositivos**.
+- Detectar el idioma del dispositivo o elegir entre 12 idiomas; se conserva tu elección manual. Los textos todavía sin traducción usan inglés.
+- Abrir o descargar las tres plataformas y conectar con PC o celular desde **Dispositivos**, en un mismo apartado.
 
 Los porcentajes son estimaciones de tu historial: **no garantizan una caja ni son tasas oficiales**. Una instalación nueva comienza sin historial personal precargado.
 
@@ -39,7 +42,7 @@ En Windows, abre **Dispositivos → Compartir con el celular**. Conecta el telé
 
 El PC debe seguir ejecutándose y los dispositivos deben comunicarse por una red local de confianza o anclaje USB. Algunos navegadores restringen el acceso de páginas HTTPS a la red local; la web muestra instrucciones cuando ocurre. No es sincronización en la nube: no requiere Firebase ni un servicio de pago.
 
-**Sin PC:** en Android, abre **Dispositivos → Compartir con la web**. En la página, escribe la IP del teléfono en sus cuatro casillas, el puerto y el código de seis números; pulsa **Conectar con el celular**. Activa **Sincronización en vivo** para reflejar cambios en ambos sentidos. Ambas apps deben estar abiertas en la misma Wi-Fi de confianza. [Detalles y límites](DISENO-COFRE-Y-CONEXION-LOCAL.md).
+**Sin PC:** en la APK Android, abre **Dispositivos → Compartir con la web**. En la página, ve a **Dispositivos → Conecta tus dispositivos → Web ↔ Celular**. Escribe la IP del teléfono en sus cuatro casillas, el puerto y el código de seis números; pulsa **Conectar con el celular**. La web muestra ese botón también en un navegador Android o una PWA. Activa **Sincronización en vivo** para reflejar cambios en ambos sentidos. Ambas apps deben estar abiertas en la misma Wi-Fi de confianza. [Detalles y límites](DISENO-COFRE-Y-CONEXION-LOCAL.md).
 
 ## Cuida tu progreso
 

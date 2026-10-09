@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { readFileSync, existsSync } from "node:fs";
 import { createRequire } from "node:module";
-import { resolve } from "node:path";
+import { resolve, dirname, extname } from "node:path";
 import ts from "typescript";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -9,10 +10,22 @@ import { renderToStaticMarkup } from "react-dom/server";
 const root = resolve(import.meta.dirname, "..");
 const read = (file) => readFile(resolve(root, file), "utf8");
 const loadComponent = async (file, exportName = "default") => {
-  const module = { exports: {} };
-  const compiled = ts.transpileModule(await read(file), { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
-  new Function("require", "module", "exports", compiled)(createRequire(resolve(root, file)), module, module.exports);
-  return module.exports[exportName];
+  const cache = new Map();
+  const load = path => {
+    if (cache.has(path)) return cache.get(path).exports;
+    const module = { exports: {} }; cache.set(path, module);
+    const compiled = ts.transpileModule(readFileSync(path, "utf8").replaceAll("import.meta.env.DEV", "false"), { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
+    const require = name => {
+      if (!name.startsWith(".")) return createRequire(path)(name);
+      const base = resolve(dirname(path), name);
+      const source = extname(base) ? base : [base + ".tsx", base + ".ts"].find(existsSync);
+      if (!source) throw new Error(`Missing test module: ${name}`);
+      return load(source);
+    };
+    new Function("require", "module", "exports", compiled)(require, module, module.exports);
+    return module.exports;
+  };
+  return load(resolve(root, file))[exportName];
 };
 const Presence = await loadComponent("src/DevicePresenceStrip.tsx");
 const renderPresence = (online) => renderToStaticMarkup(createElement(Presence, { online, current: "pc" }));
@@ -39,6 +52,9 @@ for (const [points, expected, state] of [[-5, 0, "empty"], [187, 187, "energized
   assert(bar.includes(`aria-valuenow="${expected}"`) && bar.includes(state));
   assert.equal(bar.includes("reward-energy-gain"), expected > 0);
 }
+assert(renderToStaticMarkup(createElement(Progress, { value: NaN, target: Infinity, label: "Progreso" })).includes('aria-valuenow="0"'));
+const refinement = await read("src/refinement.css");
+assert(refinement.includes(".progress-track .reward-energy-ticks"), "Decorative ticks must override the old span gradient, not visually fill an incomplete bar.");
 const Probability = await loadComponent("src/ObservedProbability.tsx");
 const estimate = renderToStaticMarkup(createElement(Probability, { count: 16, perPointPercent: .1, currentChancePercent: 18, tx: es => es }));
 assert(estimate.includes("Frecuencia por punto") && estimate.includes("Estimación del intento actual"));
@@ -83,7 +99,7 @@ assert(openingStyles.includes("counter-hinge-cycle") && openingStyles.includes("
 const counter = await read("src/CounterChestArt.tsx");
 assert(counter.includes("memo(function CounterChestArt") && counter.includes("<CrateOpeningArt compact") && !counter.includes("<img") && !counter.includes("setInterval"));
 const app = await read("src/App.tsx");
-assert(app.includes('<CrateOpeningArt keyMark={<ShinyModuleMark />}') && app.includes("<CounterChestArt />") && !app.includes("PHANTOM_CRATE_IMAGE"));
+assert(app.includes('<CrateOpeningArt keyMark={<ShinyModuleMark />}') && app.includes("<CounterChestArt value={currentPoints} target={target}") && !app.includes("PHANTOM_CRATE_IMAGE"));
 assert(app.includes('(creatorAccess === "granted" || ownerEntryRequested) && <article className="owner-panel panel">'), "Visitors must not see the owner login panel by default.");
 assert(app.includes('event.ctrlKey && event.altKey && event.shiftKey') && !app.includes("Suma lo que reclames"));
 assert(openingStyles.includes(".startup-intro *, .startup-intro *::before, .startup-intro *::after { animation: none !important; }"), "Reduced motion must win the opening cascade.");
@@ -92,4 +108,32 @@ assert(readme.includes("https://github.com/OscarD0823/Caja-Fantasma/releases/lat
 assert(readme.includes("https://oscard0823.github.io/Caja-Fantasma/"));
 assert(readme.includes("no un producto oficial") && readme.includes("recursos de terceros"));
 assert(readme.includes("GUIA-TECNICA.md"));
+const platform = await loadComponent("src/runtimePlatform.ts", "runtimePlatform");
+assert.equal(platform(false, "Mozilla Android"), "web");
+assert.equal(platform(false, "Windows NT"), "web");
+assert.equal(platform(true, "Mozilla Android"), "android");
+assert.equal(platform(true, "Windows NT"), "windows");
+const Phone = await loadComponent("src/PhoneBridgeSyncPanel.tsx");
+const props = { bridge: { enabled: false, busy: false, online: [], message: "", live: true }, language: "es", address: "", code: "", onAddress() {}, onCode() {}, newCode() {} };
+for (const mobile of [false, true]) {
+  const phoneWeb = renderToStaticMarkup(createElement(Phone, { ...props, mobile, web: true }));
+  const buttons = [...phoneWeb.matchAll(/<button\b[^>]*>(.*?)<\/button>/gs)].map(match => match[1].replace(/<[^>]*>/g, ""));
+  assert(buttons.includes("Conectar con el celular") && !buttons.includes("Compartir con la web"), "Every web surface, including Android browsers, must show the phone client.");
+  assert(phoneWeb.includes("Código del celular"));
+}
+assert(renderToStaticMarkup(createElement(Phone, { ...props, mobile: true, web: false })).includes("Compartir con la web"));
+const Tutorial = await loadComponent("src/AppTutorial.tsx");
+const tour = renderToStaticMarkup(createElement(Tutorial, { language: "es", onClose() {}, onVisit() {} }));
+assert(tour.includes('role="dialog"') && tour.includes("Registra tus recompensas") && tour.includes("Siguiente"));
+const Update = await loadComponent("src/UpdateExperience.tsx");
+for (const progress of [null, 72]) {
+  const experience = renderToStaticMarkup(createElement(Update, { status: "downloading", progress, route: { current: "1.21.8", next: "1.22.0" }, language: "en", android: true, notes: "", error: "", dismiss() {}, install() {} }));
+  assert(experience.includes("Updating Caja Fantasma") && experience.includes('role="progressbar"'));
+  assert.equal(experience.includes("aria-valuenow"), progress !== null, "Unknown download progress must not invent a percentage.");
+}
+const Counter = await loadComponent("src/CounterChestArt.tsx");
+const confirmation = renderToStaticMarkup(createElement(Update, { status: "confirming", progress: 100, route: { current: "1.21.8", next: "1.22.0" }, language: "en", android: true, notes: "", error: "", dismiss() {}, install() {} }));
+assert(confirmation.includes("Verification") && !confirmation.includes(">Installation</li>"), "Opening Android's installer confirms verification, not that installation has finished.");
+const charged = renderToStaticMarkup(createElement(Counter, { value: 187, target: 1000 }));
+assert(charged.includes("chest-charge-ring") && charged.includes('aria-hidden="true"') && !charged.includes("puntos"));
 console.log("Interface OK: real-presence states, unique emblems, reduced motion, assembled opening and practical downloads/disclaimer.");

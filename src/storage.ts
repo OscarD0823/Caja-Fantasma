@@ -1,7 +1,7 @@
 import defaultCatalog from "../catalog/visions.json" with { type: "json" };
 import type { ActivityHistoryRecord, BoxRecord, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, PointRoundRecord, PointRoundTrigger, Settings, ShinyModRecord, WhaleCounterStyle } from "./model.ts";
 import { VISION_CYCLE_WAIT_STARTED_AT, applyRemoteCatalog, clampNumber, createInitialCharacterTracking, removeBoxCompletedActions, resolveTransitionDelayMilliseconds, sharedVisionId, validateCatalog } from "./model.ts";
-import { isUiLanguage } from "./i18n.ts";
+import { detectUiLanguage, restoredLanguage } from "./i18n.ts";
 
 export const STORAGE_KEY = "caja-fantasma.once-human.state.v1";
 const SAFETY_BACKUP_KEY = "caja-fantasma.once-human.safety-backup.v1";
@@ -240,7 +240,8 @@ export function initialState(): PersistedState {
     shinyMods: [],
     ...createInitialCharacterTracking(),
     settings: {
-      uiLanguage: "es",
+      uiLanguage: detectUiLanguage(),
+      uiLanguageMode: "auto",
       selectedVisionId: sharedVisionId(defaultCatalog as Catalog),
       waitMinutes: 30,
       activeMinutes: 30,
@@ -294,7 +295,7 @@ export function loadState(): PersistedState {
     if (!parsed || parsed.schemaVersion !== 1 || !validateCatalog(parsed.catalog)) return initialState();
     const fresh = initialState();
     const settings = withoutDesktopNotificationSettings({ ...fresh.settings, ...(parsed.settings ?? {}) });
-    settings.uiLanguage = isUiLanguage(parsed.settings?.uiLanguage) ? parsed.settings.uiLanguage : "es";
+    Object.assign(settings, restoredLanguage(parsed.settings));
     if ((parsed.settings?.timingPresetVersion ?? 0) < 4) {
       const timing = fresh.catalog.eventTiming;
       settings.selectedVisionId = timing?.selectedVisionId ?? "gravity";
@@ -434,7 +435,7 @@ export function importState(text: string): PersistedState {
     settings: {
       ...fresh.settings,
       ...withoutDesktopNotificationSettings(parsed.settings ?? {}),
-      uiLanguage: isUiLanguage(parsed.settings?.uiLanguage) ? parsed.settings.uiLanguage : "es",
+      ...restoredLanguage(parsed.settings),
       selectedVisionId: sharedVisionId(catalog),
       overlayScale: clampNumber(Number(parsed.settings?.overlayScale) || 1, .2, 1.5),
       overlayAddonScale: clampNumber(Number(parsed.settings?.overlayAddonScale) || 1, .2, 1),
