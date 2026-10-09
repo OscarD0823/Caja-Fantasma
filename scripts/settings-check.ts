@@ -35,6 +35,8 @@ try {
     existing.settings.lastVoiceAlertPhaseStartedAt = occurredAt;
     existing.settings.overlayEnabled = true;
     existing.settings.overlayScale = .5;
+    existing.settings.phoneSyncAddress = "192.168.1.20:47183";
+    existing.settings.phoneSyncCode = "123456";
     const legacy = {
       ...existing,
       settings: { ...existing.settings, notificationsEnabled: true, lastNotificationPhaseStartedAt: occurredAt },
@@ -51,6 +53,9 @@ try {
       assert.equal(migrated.settings.lastVoiceAlertPhaseStartedAt, occurredAt);
       assert.equal(migrated.settings.overlayEnabled, true);
       assert.equal(migrated.settings.overlayScale, .5);
+      assert.equal(migrated.settings.phoneSyncAddress, "192.168.1.20:47183");
+      assert.equal(migrated.settings.phoneSyncCode, "123456");
+      assert.equal(Object.hasOwn(personalSyncPayload(migrated), "settings"), false, "Connection details must remain device-local.");
     }
 
     memory.set(storageKey, "invalid JSON");

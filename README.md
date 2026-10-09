@@ -12,7 +12,7 @@ Tu seguimiento de recompensas, cajas y módulos Brillantes de Once Human, en **P
 
 Las descargas llevan a la **última versión publicada**, no a versiones en preparación. Los archivos también están organizados en [Programa](Programa/).
 
-**1.21.6 · Cofre espectral y conexión local:** nueva apertura con fantasma y módulo Brillante, cronómetros en la notificación Android con PC y conexión directa web ↔ celular en la misma Wi-Fi. [Qué cambió](NOTAS-VERSION-1.21.6.md).
+**1.21.8 · Cofre custodio y conexión por IP:** el módulo abre el cofre, emerge el fantasma y se retira; cofre animado junto a los puntos, botones metálicos, progreso con energía e historial móvil reorganizado. Web y celular se enlazan sin PC con IP, puerto y seis números. [Qué cambió](NOTAS-VERSION-1.21.8.md).
 
 ## Empieza en un minuto
 
@@ -39,7 +39,7 @@ En Windows, abre **Dispositivos → Compartir con el celular**. Conecta el telé
 
 El PC debe seguir ejecutándose y los dispositivos deben comunicarse por una red local de confianza o anclaje USB. Algunos navegadores restringen el acceso de páginas HTTPS a la red local; la web muestra instrucciones cuando ocurre. No es sincronización en la nube: no requiere Firebase ni un servicio de pago.
 
-**Sin PC:** en **Dispositivos → Conexión directa**, crea una invitación en la web o el celular, pégala en el otro y devuelve su respuesta al primero. Ambas apps deben estar abiertas en la misma Wi-Fi. Se combinan los historiales, incluyendo las restas; una copia vacía no sustituye tu progreso. Si el sistema suspende una app, vuelve a emparejarlas. No usa Cloudflare ni servidores de retransmisión. [Detalles y límites](DISENO-COFRE-Y-CONEXION-LOCAL.md).
+**Sin PC:** en Android, abre **Dispositivos → Compartir con la web**. En la página, escribe la IP del teléfono en sus cuatro casillas, el puerto y el código de seis números; pulsa **Conectar con el celular**. Activa **Sincronización en vivo** para reflejar cambios en ambos sentidos. Ambas apps deben estar abiertas en la misma Wi-Fi de confianza. [Detalles y límites](DISENO-COFRE-Y-CONEXION-LOCAL.md).
 
 ## Cuida tu progreso
 

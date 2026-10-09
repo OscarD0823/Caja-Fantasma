@@ -155,6 +155,8 @@ export type Settings = {
   localSyncLiveEnabled: boolean;
   localSyncAddress: string;
   localSyncCode: string;
+  phoneSyncAddress: string;
+  phoneSyncCode: string;
   lastVoiceAlertPhaseStartedAt?: string;
   sharedTimingUpdatedAt?: string;
   lastPointRoundEventStartedAt?: string;
@@ -202,7 +204,7 @@ export type CountdownTransitionSnapshot = {
   progress: number;
 };
 
-export const APP_VERSION = "1.21.6";
+export const APP_VERSION = "1.21.8";
 export const AUTHOR = "OscarD0823";
 export const AUTHOR_PROFILE_URL = `https://github.com/${AUTHOR}`;
 export const DEFAULT_CHARACTER_ID = "character-main";

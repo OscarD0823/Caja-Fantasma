@@ -4,6 +4,9 @@ import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 
 const root = resolve(import.meta.dirname, "..");
+const release = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
+const serviceWorker = await readFile(resolve(root, "public/sw.js"), "utf8");
+assert(serviceWorker.includes(`const CACHE = "caja-fantasma-web-v${release.version}";`), "Each release must renew the web interface cache without clearing personal storage.");
 const manifest = JSON.parse(await readFile(resolve(root, "public/manifest.webmanifest"), "utf8"));
 assert.equal(manifest.display, "standalone");
 assert.equal(manifest.start_url, "./");
@@ -30,7 +33,7 @@ const cache = {
   addAll: async (requests) => { for (const request of requests) { const response = await fetchResource(request); assert(response.ok); await cache.put(request, response); } },
 };
 let claimed = false;
-runInNewContext(await readFile(resolve(root, "public/sw.js"), "utf8"), {
+runInNewContext(serviceWorker, {
   URL, Response, fetch: fetchResource,
   caches: { open: async () => cache, keys: async () => [], delete: async () => true, match: async (request) => records.get(key(request))?.clone() },
   self: { registration: { scope }, location: { origin: new URL(scope).origin }, skipWaiting: async () => {}, clients: { claim: async () => { claimed = true; } }, addEventListener: (event, listener) => events.set(event, listener) },

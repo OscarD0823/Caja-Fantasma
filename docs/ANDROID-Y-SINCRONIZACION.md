@@ -4,7 +4,13 @@
 
 Caja Fantasma puede reutilizar su interfaz React y su núcleo Tauri para generar una APK. No conviene copiar el paquete Android de Lankdea: aquel proyecto usa Python, Kivy y Buildozer, mientras Caja Fantasma usa React, TypeScript, Rust y Tauri 2.
 
-La sincronización de Caja Fantasma no usa Firebase, servicios en la nube, cuentas ni servidores externos. El programa de Windows debe permanecer en ejecución y debe existir una conexión local entre ambos dispositivos; en Android, el modo Datos en vivo puede continuar mediante un servicio nativo aunque la interfaz de la aplicación ya no esté visible. Los datos personales nunca se envían a GitHub.
+La sincronización de Caja Fantasma no usa Firebase, servicios en la nube, cuentas ni servidores externos. Con el puente de Windows, el PC debe permanecer en ejecución; en Android, ese modo Datos en vivo puede continuar mediante un servicio nativo aunque la interfaz ya no esté visible. Desde 1.21.8, Android también puede compartir directamente con la web sin PC, mientras ambas interfaces estén abiertas en la misma red local. Los datos personales nunca se envían a GitHub.
+
+## Web–celular sin PC
+
+En Android, pulsa **Dispositivos → Compartir con la web**. El teléfono muestra su IP, puerto y código de seis números. En la página, introduce esos datos en **Conectar con el celular**. Puedes enviar manualmente o activar **Sincronización en vivo** para reflejar cambios en ambos sentidos. El puente guarda los datos recibidos antes de confirmarlos, combina los historiales y conserva cierres de caja y restas intencionales.
+
+Ambas apps deben estar abiertas en la misma Wi-Fi de confianza. Este puente HTTP local no ofrece cifrado de extremo a extremo ni garantiza ejecución en segundo plano. El navegador puede pedir permiso para acceder a la red local. [Detalles del protocolo y pruebas](../DISENO-COFRE-Y-CONEXION-LOCAL.md).
 
 ## Conexión local implementada
 
@@ -24,7 +30,7 @@ Un cable USB en modo normal de carga o transferencia de archivos no crea por sí
 2. La aplicación genera un código aleatorio de seis números que puede cambiarse desde Windows.
 3. El cliente solo acepta direcciones privadas, de enlace local o de bucle local; no permite enviar el historial a una IP pública.
 4. Cada intercambio valida código, versión del protocolo, fecha, JSON y un límite máximo de 8 MB.
-5. El teléfono decide la dirección: **PC → Celular** descarga y reemplaza la copia personal del teléfono; **Celular → PC** carga y reemplaza la copia personal del PC. La hora del dispositivo no decide cuál gana.
+5. El teléfono decide la dirección: **PC → Celular** descarga la copia del PC con confirmación; **Celular → PC** envía la copia del teléfono y el anfitrión combina los historiales conocidos para proteger el progreso. La hora del dispositivo no decide por sí sola cuál gana.
 6. Si **Sincronización en vivo** está apagada, la APK comprueba la conexión cada cinco segundos sin transferir ni reemplazar datos personales. Los botones manuales siguen disponibles.
 7. Si se activa en ambos dispositivos, un servicio nativo Android intercambia cambios aproximadamente cada segundo y medio, incluso al usar otra aplicación. Una revisión monotónica del PC impide que una copia atrasada lo sobrescriba; si ambos lados cambiaron, los registros con identificador se combinan antes de confirmar una nueva revisión.
 8. La respuesta del PC incluye su catálogo público vigente para que espera, duración activa, fase y transición también lleguen al teléfono por la conexión local.
@@ -34,7 +40,7 @@ El canal no se publica en Internet ni utiliza Firebase. En esta versión el cont
 
 ## Qué se sincroniza
 
-Cada equipo mantiene su copia local. En modo manual, los datos solo se reemplazan cuando la persona pulsa una de las dos direcciones. En modo en vivo, se reflejan mientras Windows siga ejecutándose, el servicio Android esté habilitado y ambos dispositivos conserven la conexión local; la pantalla de la APK no necesita permanecer abierta:
+Cada equipo mantiene su copia local. En modo manual, los datos se transfieren al pulsar una dirección; los envíos al anfitrión combinan los historiales conocidos. En modo en vivo con PC, se reflejan mientras Windows siga ejecutándose, el servicio Android esté habilitado y ambos dispositivos conserven la conexión local; la pantalla de la APK no necesita permanecer abierta:
 
 - recompensas, puntos, resumen diario y ranking histórico;
 - personajes y equipos;
@@ -44,7 +50,7 @@ Cada equipo mantiene su copia local. En modo manual, los datos solo se reemplaza
 
 El acceso de administrador, GitHub CLI, claves de publicación, bandeja de Windows, autoinicio y posición de la ventana flotante nunca se envían al teléfono.
 
-Mientras no haya conexión, cada dispositivo conserva su copia local. Al reconectar en modo manual no se reemplaza nada automáticamente. En modo en vivo, las colecciones personales con identificador se unen y nunca se permite que una copia sin historial borre automáticamente otra que sí contiene registros. Los reemplazos completos e intencionales permanecen reservados para **PC → Celular** y **Celular → PC**, ambos con confirmación.
+Mientras no haya conexión, cada dispositivo conserva su copia local. Al reconectar en modo manual con PC no se reemplaza nada automáticamente. En modo en vivo, las colecciones personales con identificador se unen; las restas y las cajas completadas conservan sus identificadores para que una copia atrasada no resucite puntos. **PC → Celular** exige confirmación para descargar la copia del anfitrión; **Celular → PC** combina los historiales conocidos.
 
 ## Ejecución en segundo plano de Android
 
@@ -93,7 +99,7 @@ La APK con sincronización local, modo en vivo protegido, servicio Android en se
 - Ningún dato se transmite cuando Windows está cerrado o la conexión local está desactivada; ocultar la interfaz Android no detiene el servicio de Datos en vivo.
 - Al desconectar, el PC rechaza de inmediato cualquier intercambio aunque el proceso conserve su listener local hasta cerrarse.
 - Un teléfono sin el código vigente no puede leer ni modificar datos.
-- **Celular → PC** reemplaza los datos personales del PC aunque el reloj del teléfono sea anterior.
+- **Celular → PC** combina los historiales conocidos aunque el reloj del teléfono sea anterior.
 - **PC → Celular** reemplaza los datos personales del teléfono sin cargar primero su copia al PC.
 - La comprobación automática de conexión nunca reemplaza datos personales.
 - El modo en vivo solo acepta cambios del teléfono después de reconocer la última revisión del PC.

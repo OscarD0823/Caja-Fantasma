@@ -3,6 +3,11 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
+const packageInfo = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
+const tauriInfo = JSON.parse(await readFile(resolve(root, "src-tauri/tauri.conf.json"), "utf8"));
+assert.equal(tauriInfo.version, packageInfo.version, "Windows, Android and web must publish the same version.");
+assert((await readFile(resolve(root, "src/model.ts"), "utf8")).includes(`export const APP_VERSION = "${packageInfo.version}";`));
+assert((await readFile(resolve(root, "src-tauri/Cargo.toml"), "utf8")).includes(`version = "${packageInfo.version}"`));
 const source = (await readFile(resolve(root, "src-tauri/src/lib.rs"), "utf8")).replace(/\r\n/g, "\n");
 const mobile = source.slice(source.indexOf("#[cfg(mobile)]\n"));
 assert(mobile.includes(".plugin(tauri_plugin_opener::init())"), "Android must register opener at runtime, not just include its dependency.");

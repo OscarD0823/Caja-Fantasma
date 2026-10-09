@@ -1,15 +1,19 @@
-# Android · Caja Fantasma 1.21.6
+# Android · Caja Fantasma
 
-[Descargar APK](Caja-Fantasma-Android-1.21.6.apk) · [Última versión publicada](https://github.com/OscarD0823/Caja-Fantasma/releases/latest) · [SHA-256](SHA256SUMS.txt)
+## Versión 1.21.8
 
-Android 8+ / API 26, ARM64. Versión 1.21.6, `versionCode` 1021006. Firma RSA 4096 del proyecto, con esquemas v2/v3 y el certificado habitual de actualización.
+[Descargar APK](Caja-Fantasma-Android-1.21.8.apk) · [Último lanzamiento](https://github.com/OscarD0823/Caja-Fantasma/releases/latest) · [SHA-256](SHA256SUMS.txt)
+
+Android 8+ / API 26, ARM64. Versión 1.21.8, `versionCode` 1021008. Firma RSA 4096 del proyecto, con esquemas v2/v3 y el certificado habitual de actualización. También actualiza la APK de prueba 1.21.7.
 
 Instala sobre la versión anterior **sin desinstalarla** para conservar los datos. La app comprueba, descarga y verifica las siguientes versiones; Android requiere aceptar su confirmación de instalación.
 
 - Indicativos PC, Web y Móvil conservados al atravesar el servicio nativo; Web conectado activa su animación también en el teléfono.
-- Cofre original con tapa curva, fantasma y módulo Brillante 17. Nuevo icono propio, sin el logo oficial del juego.
+- El módulo Brillante activa la cerradura, el cofre abre y el fantasma emerge y se retira. El cofre junto al conteo también está animado. Nuevo icono metálico propio, sin el logo oficial del juego.
+- Botones con herrajes, barra de progreso con energía e historial adaptado a pantallas pequeñas. Las animaciones respetan movimiento reducido y se pausan al ocultarse.
 - La notificación del servicio con PC muestra cronómetros de evento y Ballena, incluso con la interfaz en segundo plano.
-- **Dispositivos → Conexión directa** permite combinar datos con la web en la misma Wi-Fi sin PC, intercambiando invitación y respuesta. Ambas apps deben permanecer abiertas; vuelve a emparejarlas si Android las suspende.
+- **Dispositivos → Compartir con la web** muestra IP, puerto y código de seis números. En la web, pulsa **Conectar con el celular** y activa **Sincronización en vivo**. Ambas apps deben permanecer abiertas en la misma Wi-Fi de confianza. Usa HTTP local, no cifrado de extremo a extremo.
+- El enlace directo se verificó con un teléfono físico, conservando el progreso y el indicativo Web conectado con animación. Android guarda los cambios antes de confirmarlos.
 - Recuperación protegida del intento tras una caja; conserva la interfaz industrial y su apertura adaptada a pantallas pequeñas.
 - Crédito visible de OscarD0823 y enlaces a PC, página y GitHub que abren el navegador del teléfono.
 - La misma IP, puerto y código enlazan PC, celular y web. El PC debe permanecer ejecutándose.
@@ -18,4 +22,4 @@ Instala sobre la versión anterior **sin desinstalarla** para conservar los dato
 
 Exporta un respaldo desde **Configuración → Respaldo local** antes de desinstalar o cambiar de teléfono.
 
-[Sincronización y sus límites](../../docs/ANDROID-Y-SINCRONIZACION.md) · [Qué cambió](../../NOTAS-VERSION-1.21.6.md) · [Proyecto comunitario, no oficial](../../AVISO-COMUNITARIO.md)
+[Sincronización y sus límites](../../docs/ANDROID-Y-SINCRONIZACION.md) · [Qué cambió](../../NOTAS-VERSION-1.21.8.md) · [Proyecto comunitario, no oficial](../../AVISO-COMUNITARIO.md)

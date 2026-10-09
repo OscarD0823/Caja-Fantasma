@@ -12,7 +12,6 @@ mod single_instance;
 mod windows_shutdown;
 
 use local_sync::mobile_sync_exchange;
-#[cfg(desktop)]
 use local_sync::{
     read_local_sync_state, start_local_sync, stop_local_sync, update_local_sync_state,
 };
@@ -21,6 +20,7 @@ use local_sync::{
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 #[cfg(desktop)]
 use serde_json::{json, Value};
+#[cfg(desktop)]
 use std::fs;
 #[cfg(all(desktop, target_os = "windows"))]
 use std::os::windows::process::CommandExt;
@@ -401,6 +401,10 @@ pub fn run() {
     builder
         .invoke_handler(tauri::generate_handler![
             mobile_sync_exchange,
+            start_local_sync,
+            stop_local_sync,
+            update_local_sync_state,
+            read_local_sync_state,
             load_native_personal_backup,
             save_native_personal_backup
         ])

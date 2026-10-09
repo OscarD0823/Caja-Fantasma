@@ -266,6 +266,8 @@ export function initialState(): PersistedState {
       localSyncLiveEnabled: false,
       localSyncAddress: "",
       localSyncCode: "",
+      phoneSyncAddress: "",
+      phoneSyncCode: "",
       sharedTimingUpdatedAt: (defaultCatalog as Catalog).eventTiming?.updatedAt,
       dataResetVersion: CURRENT_DATA_RESET_VERSION,
     },
@@ -324,6 +326,8 @@ export function loadState(): PersistedState {
     settings.localSyncLiveEnabled = settings.localSyncLiveEnabled === true;
     settings.localSyncAddress = typeof settings.localSyncAddress === "string" ? settings.localSyncAddress.trim().slice(0, 80) : "";
     settings.localSyncCode = typeof settings.localSyncCode === "string" && /^\d{6}$/.test(settings.localSyncCode) ? settings.localSyncCode : "";
+    settings.phoneSyncAddress = typeof settings.phoneSyncAddress === "string" ? settings.phoneSyncAddress.trim().slice(0, 80) : "";
+    settings.phoneSyncCode = typeof settings.phoneSyncCode === "string" && /^\d{6}$/.test(settings.phoneSyncCode) ? settings.phoneSyncCode : "";
     settings.transitionDelayMilliseconds = resolveTransitionDelayMilliseconds(parsed.settings, fresh.settings.transitionDelayMilliseconds);
     const characters = characterState(parsed, fresh);
     const deletedActionIds = mustClearPreviousRecords ? [] : sanitizeDeletedActionIds(parsed.deletedActionIds);
@@ -446,6 +450,8 @@ export function importState(text: string): PersistedState {
       localSyncLiveEnabled: parsed.settings?.localSyncLiveEnabled === true,
       localSyncAddress: typeof parsed.settings?.localSyncAddress === "string" ? parsed.settings.localSyncAddress.trim().slice(0, 80) : "",
       localSyncCode: typeof parsed.settings?.localSyncCode === "string" && /^\d{6}$/.test(parsed.settings.localSyncCode) ? parsed.settings.localSyncCode : "",
+      phoneSyncAddress: typeof parsed.settings?.phoneSyncAddress === "string" ? parsed.settings.phoneSyncAddress.trim().slice(0, 80) : "",
+      phoneSyncCode: typeof parsed.settings?.phoneSyncCode === "string" && /^\d{6}$/.test(parsed.settings.phoneSyncCode) ? parsed.settings.phoneSyncCode : "",
       transitionDelayMilliseconds: resolveTransitionDelayMilliseconds(parsed.settings, fresh.settings.transitionDelayMilliseconds),
       dataResetVersion: CURRENT_DATA_RESET_VERSION,
     },

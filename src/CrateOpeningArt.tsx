@@ -87,9 +87,9 @@ function VaultedLid() {
   </>;
 }
 
-/** An assembled chest: independent faces, vaulted lid, hinges and a docking key. */
-export default function CrateOpeningArt({ keyMark, ghostMark, moduleMark }: { keyMark: ReactNode; ghostMark?: ReactNode; moduleMark?: ReactNode }) {
-  return <span className="opening-vault" aria-hidden="true">
+/** An assembled chest: the docking module stays in its lock after the ghost leaves. */
+export default function CrateOpeningArt({ keyMark, ghostMark, compact = false }: { keyMark: ReactNode; ghostMark?: ReactNode; compact?: boolean }) {
+  return <span className={`opening-vault${compact ? " counter-vault" : ""}`} aria-hidden="true">
     <span className="vault-anomaly-orbits"><i /><i /><i /></span>
     <span className="vault-ground-radar"><i /><i /><b>17</b></span>
     <span className="vault-camera">
@@ -117,9 +117,8 @@ export default function CrateOpeningArt({ keyMark, ghostMark, moduleMark }: { ke
     </span>
     <span className="vault-energy-column" />
     <span className="vault-release-shock"><i /><i /></span>
-    <span className="vault-hologram"><span className="vault-holo-rings"><i /><i /></span><span className="vault-holo-emblem">{ghostMark ?? keyMark}</span></span>
-    {moduleMark && <span className="vault-reward-module"><span>{moduleMark}</span><b>BRILLANTE · 17</b><i /><i /></span>}
+    <span className="vault-spirit-aperture"><span className="vault-hologram"><span className="vault-holo-rings"><i /><i /></span><span className="vault-holo-emblem">{ghostMark ?? keyMark}</span><span className="vault-spirit-wake"><i /><i /><i /></span></span></span>
     <span className="vault-motes">{Array.from({ length: 10 }, (_, index) => <i key={index} />)}</span>
-    <span className="vault-sequence"><i>01 · KEY</i><i>02 · UNLOCK</i><i>03 · OPEN</i></span>
+    <span className="vault-sequence"><i>01 · MODULE</i><i>02 · UNLOCK</i><i>03 · RELEASE</i></span>
   </span>;
 }

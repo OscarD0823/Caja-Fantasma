@@ -110,12 +110,116 @@
 .community-notice > svg { flex: none; color: #a3bdac; margin-top: 1px; }
 .community-notice strong { color: #d1e5de; font-size: 12px; }
 .community-notice p { max-width: 850px; margin: 7px 0 0; font-size: 11px; line-height: 1.7; color: #92a8af; }
-.interface-visual-harness { padding: 30px; background: #07131e; }
+.interface-visual-harness { --console-accent: #83e6d2; padding: 30px; background: #07131e; }
 .interface-visual-harness > article { padding: 20px; margin-block: 15px; border: 1px solid #385963; border-radius: 12px; }
 .interface-visual-harness h2 { font-size: 15px; margin: 0 0 12px; }
 .interface-visual-harness p { font-size: 12px; color: #aac1c5; }
+.interface-visual-harness > .progress-hero { padding: 31px 34px; }
+.interface-visual-harness .hero-copy h2 { font-size: 56px; margin: 13px 0 8px; }
 .direct-peer-panel { padding: 20px; }.direct-peer-panel > p, .direct-peer-panel li { font-size: 12px; line-height: 1.7; color: #aec4c9; }.direct-peer-panel > small { display: block; margin-top: 14px; color: #92a8af; line-height: 1.7; }.direct-peer-panel > label { display: grid; gap: 7px; margin-block: 15px; font-size: 12px; color: #bdd2d8; }.direct-peer-panel textarea { width: 100%; resize: vertical; min-height: 80px; border: 1px solid #52787d; color: #c9edf1; background: #06151f; padding: 10px; font: 11px/1.5 Consolas, monospace; overflow-wrap: anywhere; }.direct-peer-panel .eyebrow { display: flex; gap: 7px; align-items: center; }.direct-peer-panel label button { justify-self: start; }.direct-peer-live { display: flex; flex-wrap: wrap; align-items: center; gap: 15px; margin-top: 15px; }.direct-peer-live label { display: flex; align-items: center; gap: 8px; font-size: 12px; }
 .direct-peer-code { display: grid; justify-items: start; gap: 8px; margin-block: 15px; }.direct-peer-code > label { display: grid; width: 100%; gap: 7px; font-size: 12px; color: #bdd2d8; }
+
+/* A chest silhouette, rather than a flat shield. Installed icons share this SVG. */
+.brand-mark { background: radial-gradient(ellipse at 45% 28%, #244a59, #081724 80%); border-color: #807459; }
+.brand-mark svg { width: 44px; height: 44px; }
+.brand-mark::after { display: none; }
+.brand-mark .emblem-spirit { transform-origin: 60px 22px; animation: chest-spirit-breathe 6s ease-in-out infinite; }
+.brand-mark .emblem-trace { animation-duration: 6s; }
+@keyframes chest-spirit-breathe { 0%, 100% { transform: translateY(1px); opacity: .55; } 50% { transform: translateY(-1px); opacity: .95; } }
+.logo-qa-scales { display: flex; flex-wrap: wrap; align-items: center; gap: 28px; }
+.logo-qa-scales > svg { width: 190px; height: 190px; }
+.logo-qa-scales > span svg { width: 100%; }
+
+/* Only transforms/opacity move. No JS tick, layout animation, or blur filter. */
+.reward-energy { position: relative; isolation: isolate; height: 12px; border: 1px solid #517b7b55; background: repeating-linear-gradient(90deg, #102830 0 17px, #36575b 18px 19px); }
+.progress-track .reward-energy-fill { position: relative; overflow: hidden; width: 100%; transform: scaleX(var(--reward-fraction)); transform-origin: left; transition: transform .5s cubic-bezier(.2,.8,.2,1); background: linear-gradient(90deg, #28747d, var(--console-accent)); border-radius: 0; box-shadow: none; }
+.reward-energy-flow { position: absolute; inset: 0; background: linear-gradient(110deg, transparent 25%, #efffffa8 50%, transparent 75%); transform: translateX(-110%); pointer-events: none; }
+.energized .reward-energy-flow { animation: reward-current-flow 4s ease-in-out infinite; }
+.reward-energy-edge { position: absolute; top: 0; bottom: 0; right: 0; width: 4px; background: #efffff; opacity: .8; }
+.reward-energy-gain { position: absolute; inset: 0; background: #b3ffeb; pointer-events: none; opacity: 0; animation: reward-gain .55s ease-out both; }
+.charged .reward-energy-edge { animation: reward-full 2.8s ease-in-out infinite; }
+@keyframes reward-current-flow { 0%, 35% { transform: translateX(-110%); opacity: 0; } 45% { opacity: .55; } 80%, 100% { transform: translateX(110%); opacity: 0; } }
+@keyframes reward-gain { from { opacity: .22; } to { opacity: 0; } }
+@keyframes reward-full { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+.phone-bridge-panel { padding: 20px; }
+.phone-bridge-panel .eyebrow { display: flex; align-items: center; gap: 7px; }
+.phone-bridge-panel > small { display: block; margin-top: 12px; font-size: 11px; line-height: 1.6; color: #9bb4bc; }
+.phone-bridge-panel .local-sync-actions { margin-top: 15px; }
+.phone-bridge-panel .local-live-sync-option { padding-block: 11px; grid-template-columns: minmax(0, 1fr) auto; }
+.phone-bridge-panel .local-live-sync-option > span { min-width: 0; }
+.phone-bridge-panel .local-sync-desktop-grid { margin-top: 15px; }
+
+/* Metal fittings and a powered seam, shared with the chest without perpetual motion. */
+:is(.app-shell, .interface-visual-harness) button:is(.primary, .secondary), .save-exit-button { position: relative; isolation: isolate; overflow: hidden; border-radius: 4px 12px 4px 8px; border: 1px solid #a4906566; box-shadow: inset 0 1px #e8d4aa28, inset 0 -3px #0004, 0 3px 8px #0002; transition: transform .16s ease, border-color .16s ease, background-color .16s ease; }
+:is(.app-shell, .interface-visual-harness) button.primary { background: linear-gradient(115deg, #c6e5d8, var(--console-accent, #83e6d2)); color: #0d2631; border-color: #ecd4a28c; }
+:is(.app-shell, .interface-visual-harness) button.secondary { background: linear-gradient(150deg, #31464d, #13232e 66%, #3b382b); color: #d3e4de; }
+:is(.app-shell, .interface-visual-harness) button:is(.primary, .secondary)::before, .save-exit-button::before { content: ""; position: absolute; inset: 0; border-top: 1px solid #e6d3a33b; background: linear-gradient(105deg, transparent 35%, #eaffeb35 50%, transparent 65%); transform: translateX(-115%); pointer-events: none; }
+:is(.app-shell, .interface-visual-harness) button:is(.primary, .secondary)::after { content: ""; position: absolute; width: 4px; height: 4px; top: 4px; right: 5px; background: #efd5a3; box-shadow: -1px 1px #09151a; transform: rotate(45deg); opacity: .7; pointer-events: none; }
+:is(.app-shell, .interface-visual-harness) button:is(.primary, .secondary):is(:hover, :focus-visible):not(:disabled)::before, .save-exit-button:hover:not(:disabled)::before { animation: crate-button-sweep .55s ease-out both; }
+:is(.app-shell, .interface-visual-harness) button:is(.primary, .secondary):active:not(:disabled) { transform: translateY(1px); box-shadow: inset 0 2px 5px #0005; }
+.app-shell button:focus-visible, .interface-visual-harness button:focus-visible { outline: 2px solid #a8eee0; outline-offset: 3px; }
+.activity-counter button { border-color: #b5a57b5c; border-radius: 4px 9px 4px 4px; background: linear-gradient(145deg, #304750, #102530); box-shadow: inset 0 1px #d5c69b33, inset 0 -2px #0004; }
+.activity-counter button:hover:not(:disabled) { border-color: var(--console-accent); color: #e0fff1; }
+.activity-counter button:active:not(:disabled) { transform: translateY(1px); }
+@keyframes crate-button-sweep { to { transform: translateX(115%); } }
+
+/* Distinct statistical measures, with a ring that cannot shrink or overflow on phones. */
+.probability-explainer { display: block; padding: 22px; min-height: 0; }
+.probability-explainer > header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-bottom: 15px; border-bottom: 1px solid #38515c; }
+.probability-explainer > header > small { color: #a8b8bb; font-size: 10px; }
+.probability-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(115px, 180px); align-items: center; gap: 20px; padding-block: 20px; }
+.probability-rate > small { font-size: 11px; color: #a6c4c3; }
+.probability-rate > strong { display: block; margin-block: 6px; color: #b0efdb; font: 800 clamp(26px, 5vw, 38px) "Space Grotesk", sans-serif; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.probability-explainer p { font-size: 12px; line-height: 1.7; color: #a6bec3; }
+.probability-attempt { display: grid; justify-items: center; gap: 9px; min-width: 0; text-align: center; }
+.probability-attempt > small { font-size: 10px; line-height: 1.5; color: #aec4cd; max-width: 150px; }
+.probability-ring { width: 104px; height: 104px; flex: none; border: 1px solid #577884; box-shadow: inset 0 0 0 3px #071720; }
+.probability-ring::before { background: #0b1e2a; }
+.probability-ring span { font-size: 23px; color: #e8fff2; font-variant-numeric: tabular-nums; }
+.probability-method { padding-top: 13px; border-top: 1px solid #38515c; font-size: 11px; color: #8cdaca; }
+.probability-method summary { cursor: pointer; padding-block: 3px; }
+.probability-method p { margin-top: 10px; }
+.history-record { grid-template-columns: 42px minmax(0, 1fr) auto; gap: 13px; padding: 18px; border-radius: 5px 16px 5px 5px; border-left: 2px solid #c5a66c80; }
+.record-number { border-radius: 4px; border: 1px solid #aa986b4d; background: #3c3c2e55; color: #e0d4a9; }
+.record-main { min-width: 0; }
+.record-main > strong { font-size: 13px; color: #daede5; overflow-wrap: anywhere; }
+.record-main > time { display: block; color: #a0b9c2; font-size: 11px; line-height: 1.6; }
+.record-result { display: grid; gap: 4px; text-align: right; }
+.record-result > strong { font: 800 21px "Space Grotesk", sans-serif; color: #b0efdb; font-variant-numeric: tabular-nums; }
+.record-result > small { font-size: 10px; color: #aabfc4; }
+.history-record details { grid-column: 2 / -1; font-size: 11px; padding-top: 12px; border-top: 1px solid #425b6455; }
+.history-record summary { padding-block: 3px; color: #a0d7d2; }
+.history-record details > div { padding: 5px 0; gap: 15px; }
+.history-record details > div > span { min-width: 0; overflow-wrap: anywhere; }
+.history-record details > div > strong { flex: none; font-variant-numeric: tabular-nums; }
+.record-mail { grid-column: 2 / -1; margin: 0; color: #d3bc90; font-size: 10px; line-height: 1.6; }
+.manual-history-entry, .manual-history-entry textarea { min-width: 0; }
+@media (max-width: 620px) {
+  .history-page .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  .history-page .stat-card { min-width: 0; padding: 14px; }
+  .history-page .stat-card strong { font-size: 22px; }
+  .probability-explainer { padding: 16px; }
+  .probability-explainer .eyebrow { font-size: 9px; letter-spacing: .09em; }
+  .probability-body { grid-template-columns: minmax(0, 1fr) 102px; gap: 12px; padding-block: 17px; }
+  .probability-ring { width: 94px; height: 94px; }
+  .probability-rate > small { font-size: 10px; }
+  .probability-explainer p { font-size: 11px; }
+  .history-record { grid-template-columns: 36px minmax(0, 1fr); padding: 14px; gap: 10px; }
+  .record-number { width: 32px; height: 35px; }
+  .record-result { grid-column: 2; display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; text-align: left; }
+  .history-record details, .record-mail { grid-column: 1 / -1; }
+  .history-title { align-items: flex-start; gap: 10px; }
+  .history-title h2 { font-size: 17px; }
+  .manual-history-entry { grid-template-columns: minmax(0, 1fr); }
+  .manual-history-entry button { width: 100%; }
+  .section-heading { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .activity-counter button { width: 44px; height: 44px; }
+  .phone-bridge-panel { padding: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { :is(.app-shell, .interface-visual-harness) button::before { animation: none !important; }.app-shell button { transition: none !important; } }
+@media (max-width: 380px) { .probability-body { grid-template-columns: minmax(0, 1fr) 90px; gap: 8px; }.probability-rate > strong { font-size: 24px; white-space: nowrap; }.probability-ring { width: 84px; height: 84px; }.probability-attempt > small { font-size: 9px; }.interface-visual-harness { padding: 20px; } }
+@media (max-width: 620px) { .interface-visual-harness .hero-copy h2 { font-size: 47px; } }
+@media (prefers-reduced-motion: reduce) { .reward-energy *, .brand-mark .emblem-spirit { animation: none !important; transition: none !important; }.reward-energy-flow, .reward-energy-gain { display: none; } }
 
 @media (min-width: 761px) and (max-width: 1300px) { .topbar { flex-wrap: wrap; gap: 15px; }.topbar-actions { margin-left: auto; }.topbar-copy { flex: 1; min-width: 285px; } }
 @media (max-width: 620px) { .device-presence > .device-node { min-height: 31px; padding-inline: 6px; gap: 4px; }.device-node-icon { width: 19px; height: 19px; }.device-telemetry { gap: 1.5px; }.topbar-meta { gap: 7px; }.topbar-actions { flex-wrap: wrap; }.phase-chip { min-width: 95px; padding: 8px; }.phase-chip strong { font-size: 15px; }.activity-counter button { width: 39px; height: 39px; }.activity-grid { grid-template-columns: minmax(0, 1fr); }.activity-card { padding: 11px; gap: 8px; }.activity-counts > small { max-width: 104px; text-align: center; white-space: normal; }.hero-copy h2 { font-size: 47px; }.community-notice p { font-size: 11px; } }

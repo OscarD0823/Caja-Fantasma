@@ -4,17 +4,16 @@ use std::collections::BTreeSet;
 use std::io::{Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::time::Duration;
-#[cfg(desktop)]
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const LOCAL_SYNC_PROTOCOL: u8 = 2;
 const DEFAULT_LOCAL_SYNC_PORT: u16 = 47_183;
+#[cfg(desktop)]
 const DEFAULT_WEB_SYNC_PORT: u16 = 48_183;
 const MAX_SYNC_BYTES: usize = 8 * 1024 * 1024;
 const MAX_CATALOG_BYTES: usize = 512 * 1024;
 const MAX_DELETED_ACTION_IDS: usize = 20_000;
 
-#[cfg(desktop)]
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalSyncSnapshot {
@@ -28,7 +27,6 @@ pub struct LocalSyncSnapshot {
     pub connected_devices: Vec<String>,
 }
 
-#[cfg(desktop)]
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalSyncInfo {
@@ -652,7 +650,6 @@ pub async fn mobile_sync_exchange(
     .map_err(|error| format!("La conexión local se interrumpió: {error}"))?
 }
 
-#[cfg(desktop)]
 mod desktop {
     use super::*;
     use std::net::{TcpListener, UdpSocket};
@@ -672,9 +669,16 @@ mod desktop {
         address: String,
         port: u16,
         web_port: u16,
+        host_kind: &'static str,
     }
 
     static LOCAL_SYNC_SERVER: OnceLock<ServerState> = OnceLock::new();
+    static MOBILE_BACKUP_DIRECTORY: OnceLock<std::path::PathBuf> = OnceLock::new();
+
+    #[cfg(any(target_os = "android", test))]
+    pub fn configure_mobile_backup(directory: std::path::PathBuf) {
+        let _ = MOBILE_BACKUP_DIRECTORY.set(directory);
+    }
 
     fn local_ip_address() -> String {
         UdpSocket::bind("0.0.0.0:0")
@@ -698,6 +702,7 @@ mod desktop {
         Err("No se encontró un puerto disponible para conectar el celular.".into())
     }
 
+    #[cfg(desktop)]
     fn bind_web_listener() -> Result<(TcpListener, u16), String> {
         for port in DEFAULT_WEB_SYNC_PORT..=DEFAULT_WEB_SYNC_PORT + 10 {
             if let Ok(listener) = TcpListener::bind(("127.0.0.1", port)) {
@@ -837,11 +842,29 @@ mod desktop {
         peer_address: SocketAddr,
         state: &ServerState,
     ) -> Result<LocalSyncExchange, String> {
+        process_sync_request_with_persist(request, peer_address, state, |data| {
+            if state.host_kind == "mobile" {
+                let directory = MOBILE_BACKUP_DIRECTORY
+                    .get()
+                    .ok_or_else(|| "El respaldo del celular todavía no está listo.".to_string())?;
+                crate::native_backup::save(directory, data)
+            } else {
+                Ok(data.to_string())
+            }
+        })
+    }
+
+    fn process_sync_request_with_persist(
+        request: LocalSyncRequest,
+        peer_address: SocketAddr,
+        state: &ServerState,
+        persist: impl FnOnce(&str) -> Result<String, String>,
+    ) -> Result<LocalSyncExchange, String> {
         if !is_local_ip(peer_address.ip()) {
             return Err("La sincronización solo acepta equipos de la red local.".into());
         }
         if !state.enabled.load(Ordering::Relaxed) {
-            return Err("La sincronización está desactivada en el PC.".into());
+            return Err("La conexión está desactivada en el dispositivo que comparte.".into());
         }
         if request.protocol != LOCAL_SYNC_PROTOCOL {
             return Err("La sincronización en vivo cambió para admitir la resta de puntos. Actualiza Caja Fantasma en todos los dispositivos.".into());
@@ -853,18 +876,23 @@ mod desktop {
             .map_err(|_| "No se pudo comprobar el código.".to_string())?
             .clone();
         if request.pairing_code != expected_code {
-            return Err("El código de conexión no coincide con el del PC.".into());
+            return Err("El código no coincide con el dispositivo que comparte.".into());
         }
         if request.action == LocalSyncAction::Live && !state.live_enabled.load(Ordering::Relaxed) {
-            return Err("Activa Sincronización en vivo también en el PC.".into());
+            return Err(
+                "Activa Sincronización en vivo también en el dispositivo que comparte.".into(),
+            );
         }
         validate_sync_payload(&request.data_json, &request.updated_at)?;
-        let mut snapshot = state
+        let mut guard = state
             .snapshot
             .lock()
             .map_err(|_| "No se pudieron abrir los datos compartidos.".to_string())?;
+        // Stage the exchange. A failed disk save must not become visible to
+        // other peers or the Android WebView as if it had been acknowledged.
+        let mut snapshot = guard.clone();
         if !state.enabled.load(Ordering::Relaxed) {
-            return Err("El PC guardó el progreso y cerró la conexión.".into());
+            return Err("El dispositivo guardó el progreso y cerró la conexión.".into());
         }
         let exchange_at = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -914,6 +942,16 @@ mod desktop {
             }
             LocalSyncAction::Status | LocalSyncAction::Pull | LocalSyncAction::Auto => {}
         }
+        // On Android, acknowledge a received edit only after it is durable. The
+        // WebView may be suspended before its next polling/persistence effect.
+        if state.host_kind == "mobile" && request.action != LocalSyncAction::Status {
+            let saved = persist(&snapshot.data_json)?;
+            if saved != snapshot.data_json {
+                snapshot.revision = snapshot.revision.saturating_add(1);
+                snapshot.data_json = saved;
+            }
+        }
+        *guard = snapshot.clone();
         let (response_updated_at, response_data_json) = if request.action == LocalSyncAction::Status
         {
             ("1970-01-01T00:00:00.000Z".into(), "{}".into())
@@ -923,11 +961,11 @@ mod desktop {
         Ok(LocalSyncExchange {
             ok: true,
             message: match request.action {
-                LocalSyncAction::Status => "PC conectado.".into(),
-                LocalSyncAction::Pull => "Datos del PC listos para el dispositivo.".into(),
-                LocalSyncAction::Push => "Datos del dispositivo guardados en el PC.".into(),
+                LocalSyncAction::Status => "Dispositivo conectado.".into(),
+                LocalSyncAction::Pull => "Datos listos para el dispositivo.".into(),
+                LocalSyncAction::Push => "Datos recibidos y guardados.".into(),
                 LocalSyncAction::Live => "Cambios en vivo sincronizados.".into(),
-                LocalSyncAction::Auto => "Datos sincronizados directamente con el PC.".into(),
+                LocalSyncAction::Auto => "Datos sincronizados directamente.".into(),
             },
             revision: snapshot.revision,
             updated_at: response_updated_at,
@@ -948,10 +986,10 @@ mod desktop {
             .lock()
             .map_err(|_| "No se pudieron leer los dispositivos.".to_string())?;
         peers.retain(|_, seen| now.saturating_sub(*seen) < 30_000);
-        if matches!(kind, "web" | "mobile") {
+        if matches!(kind, "pc" | "web" | "mobile") && kind != state.host_kind {
             peers.insert(kind.to_string(), now);
         }
-        let mut devices = vec!["pc".to_string()];
+        let mut devices = vec![state.host_kind.to_string()];
         devices.extend(peers.keys().cloned());
         Ok(devices)
     }
@@ -999,8 +1037,10 @@ mod desktop {
         updated_at: String,
         catalog_json: String,
         live_enabled: bool,
+        host_kind: &'static str,
     ) -> Result<ServerState, String> {
         let (listener, port) = bind_listener()?;
+        #[cfg(desktop)]
         let (web_listener, _legacy_web_port) = bind_web_listener()?;
         let state = ServerState {
             enabled: Arc::new(AtomicBool::new(true)),
@@ -1020,6 +1060,7 @@ mod desktop {
             address: local_ip_address(),
             port,
             web_port: port,
+            host_kind,
         };
         let thread_state = state.clone();
         thread::Builder::new()
@@ -1036,21 +1077,24 @@ mod desktop {
                 }
             })
             .map_err(|error| format!("No se pudo iniciar la conexión local: {error}"))?;
-        let legacy_web_state = state.clone();
-        thread::Builder::new()
-            .name("caja-fantasma-web-bridge".into())
-            .spawn(move || loop {
-                match web_listener.accept() {
-                    Ok((stream, peer_address)) => {
-                        process_web_client(stream, peer_address, &legacy_web_state)
+        #[cfg(desktop)]
+        {
+            let legacy_web_state = state.clone();
+            thread::Builder::new()
+                .name("caja-fantasma-web-bridge".into())
+                .spawn(move || loop {
+                    match web_listener.accept() {
+                        Ok((stream, peer_address)) => {
+                            process_web_client(stream, peer_address, &legacy_web_state)
+                        }
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                            thread::sleep(Duration::from_millis(90))
+                        }
+                        Err(_) => thread::sleep(Duration::from_millis(250)),
                     }
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        thread::sleep(Duration::from_millis(90))
-                    }
-                    Err(_) => thread::sleep(Duration::from_millis(250)),
-                }
-            })
-            .map_err(|error| format!("No se pudo iniciar el puente web: {error}"))?;
+                })
+                .map_err(|error| format!("No se pudo iniciar el puente web: {error}"))?;
+        }
         Ok(state)
     }
 
@@ -1092,6 +1136,11 @@ mod desktop {
                 updated_at.clone(),
                 catalog_json.clone(),
                 live_enabled,
+                if cfg!(target_os = "android") {
+                    "mobile"
+                } else {
+                    "pc"
+                },
             )?;
             let _ = LOCAL_SYNC_SERVER.set(server);
         }
@@ -1195,6 +1244,7 @@ mod desktop {
         Ok(snapshot)
     }
 
+    #[cfg(desktop)]
     pub fn persist_close_snapshot(
         data: &str,
         exit_app: bool,
@@ -1221,6 +1271,105 @@ mod desktop {
         }
         Ok(saved)
     }
+
+    #[cfg(test)]
+    mod phone_tests {
+        use super::*;
+        use serde_json::json;
+
+        #[test]
+        fn phone_host_uses_web_identity_and_saves_before_acknowledging() {
+            let directory =
+                std::env::temp_dir().join(format!("caja-phone-host-{}", std::process::id()));
+            configure_mobile_backup(directory.clone());
+            let base = json!({"actions":[],"deletedActionIds":[],"activityHistory":[],"boxes":[],"pointRounds":[],"manualBaselinePoints":[],"shinyMods":[],"characters":[]}).to_string();
+            let state = create_server(
+                "693824".into(),
+                base.clone(),
+                "2026-10-08T22:00:00.000Z".into(),
+                "{}".into(),
+                true,
+                "mobile",
+            )
+            .unwrap();
+            let request = |data: String, code: &str| LocalSyncRequest {
+                protocol: 2,
+                client_kind: "web".into(),
+                pairing_code: code.into(),
+                action: LocalSyncAction::Live,
+                known_revision: 0,
+                updated_at: "2026-10-08T22:01:00.000Z".into(),
+                data_json: data,
+            };
+            let peer = "127.0.0.1:50101".parse().unwrap();
+            assert!(process_sync_request(request(base.clone(), "111111"), peer, &state).is_err());
+            let added = json!({"actions":[{"id":"new","points":4}],"deletedActionIds":[],"activityHistory":[{"id":"new","points":4}],"boxes":[],"pointRounds":[],"manualBaselinePoints":[],"shinyMods":[],"characters":[]}).to_string();
+            let failed = process_sync_request_with_persist(
+                request(added.clone(), "693824"),
+                peer,
+                &state,
+                |_| Err("disk full".into()),
+            );
+            assert!(failed.is_err());
+            assert_eq!(state.snapshot.lock().unwrap().data_json, base);
+            assert_eq!(state.snapshot.lock().unwrap().revision, 1);
+            let response =
+                process_sync_request(request(added.clone(), "693824"), peer, &state).unwrap();
+            assert_eq!(response.connected_devices, vec!["mobile", "web"]);
+            assert_eq!(
+                crate::native_backup::load(&directory).unwrap().unwrap(),
+                response.data_json
+            );
+            let empty = process_sync_request(request(base, "693824"), peer, &state).unwrap();
+            assert_eq!(
+                serde_json::from_str::<Value>(&empty.data_json).unwrap()["actions"][0]["points"],
+                4
+            );
+            let deletion = json!({"actions":[],"deletedActionIds":["new"],"activityHistory":[],"boxes":[],"pointRounds":[],"manualBaselinePoints":[],"shinyMods":[],"characters":[]}).to_string();
+            let removed = process_sync_request(request(deletion, "693824"), peer, &state).unwrap();
+            assert_eq!(
+                serde_json::from_str::<Value>(&removed.data_json).unwrap()["actions"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                0
+            );
+            assert_eq!(
+                crate::native_backup::load(&directory).unwrap().unwrap(),
+                removed.data_json
+            );
+            // Exercise the actual socket/HTTP path used by the web, including
+            // CORS, a six-digit code, presence and stale deletion propagation.
+            let http = |origin: &str, data: &str| {
+                let body = serde_json::to_string(&request(data.into(), "693824")).unwrap();
+                let mut stream = TcpStream::connect(("127.0.0.1", state.port)).unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                write!(stream, "POST /sync HTTP/1.1\r\nOrigin: {origin}\r\nContent-Type: text/plain\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();
+                let mut response = String::new();
+                stream.read_to_string(&mut response).unwrap();
+                response
+            };
+            assert!(http("https://untrusted.example", &added).starts_with("HTTP/1.1 403"));
+            let live = http("http://127.0.0.1:1420", &added);
+            assert!(live.starts_with("HTTP/1.1 200"));
+            assert!(live.contains("Access-Control-Allow-Origin: http://127.0.0.1:1420"));
+            let value: LocalSyncExchange =
+                serde_json::from_str(live.split_once("\r\n\r\n").unwrap().1).unwrap();
+            assert_eq!(value.connected_devices, vec!["mobile", "web"]);
+            assert_eq!(
+                serde_json::from_str::<Value>(&value.data_json).unwrap()["actions"]
+                    .as_array()
+                    .unwrap()
+                    .len(),
+                0,
+                "An old web payload must not revive a deleted reward."
+            );
+            state.enabled.store(false, Ordering::Relaxed);
+            assert!(process_sync_request(request(added, "693824"), peer, &state).is_err());
+        }
+    }
 }
 
 #[cfg(desktop)]
@@ -1232,15 +1381,26 @@ pub(crate) fn persist_close_snapshot(
     desktop::persist_close_snapshot(data, exit_app, persist)
 }
 
-#[cfg(desktop)]
 #[tauri::command]
 pub fn start_local_sync(
+    app: tauri::AppHandle,
     pairing_code: String,
     data_json: String,
     updated_at: String,
     catalog_json: String,
     live_enabled: bool,
 ) -> Result<LocalSyncInfo, String> {
+    #[cfg(target_os = "android")]
+    {
+        use tauri::Manager;
+        desktop::configure_mobile_backup(
+            app.path()
+                .app_data_dir()
+                .map_err(|error| error.to_string())?,
+        );
+    }
+    #[cfg(not(target_os = "android"))]
+    let _ = app;
     desktop::start(
         pairing_code,
         data_json,
@@ -1250,13 +1410,11 @@ pub fn start_local_sync(
     )
 }
 
-#[cfg(desktop)]
 #[tauri::command]
 pub fn stop_local_sync() -> Result<(), String> {
     desktop::stop()
 }
 
-#[cfg(desktop)]
 #[tauri::command]
 pub fn update_local_sync_state(
     data_json: String,
@@ -1274,7 +1432,6 @@ pub fn update_local_sync_state(
     )
 }
 
-#[cfg(desktop)]
 #[tauri::command]
 pub fn read_local_sync_state() -> Result<LocalSyncSnapshot, String> {
     desktop::read()

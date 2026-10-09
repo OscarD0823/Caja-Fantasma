@@ -17,7 +17,7 @@ const compiled = ts.transpileModule(readFileSync(componentPath, "utf8"), { compi
 new Function("require", "module", "exports", compiled)(createRequire(componentPath), componentModule, componentModule.exports);
 const emblem = renderToStaticMarkup(createElement(componentModule.exports.default));
 const emblemArtwork = emblem.slice(emblem.indexOf(">") + 1, emblem.lastIndexOf("</svg>"));
-writeFileSync(source, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><radialGradient id="app-background" cx=".35" cy=".2"><stop stop-color="#244652"/><stop offset="1" stop-color="#07131e"/></radialGradient></defs><rect width="512" height="512" rx="106" fill="#07131e"/><rect x="17" y="17" width="478" height="478" rx="91" fill="url(#app-background)" stroke="#607e86" stroke-width="3"/><g transform="translate(26 26) scale(7.18)">${emblemArtwork}</g></svg>\n`);
+writeFileSync(source, `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><radialGradient id="app-background" cx=".35" cy=".2"><stop stop-color="#244652"/><stop offset="1" stop-color="#07131e"/></radialGradient></defs><rect width="512" height="512" rx="106" fill="#07131e"/><rect x="17" y="17" width="478" height="478" rx="91" fill="url(#app-background)" stroke="#607e86" stroke-width="3"/><g transform="translate(18 12) scale(3.72)">${emblemArtwork}</g></svg>\n`);
 const cli = join(root, "node_modules/@tauri-apps/cli/tauri.js");
 const temporary = mkdtempSync(join(tmpdir(), "caja-fantasma-icons-"));
 const run = (args) => execFileSync(process.execPath, [cli, "icon", ...args], { cwd: root, stdio: "inherit" });

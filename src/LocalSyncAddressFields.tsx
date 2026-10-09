@@ -7,10 +7,12 @@ type Props = {
   value: string;
   onChange: (value: string) => void;
   language?: UiLanguage;
+  device?: "pc" | "phone";
 };
 
-export default function LocalSyncAddressFields({ value, onChange, language = "es" }: Props) {
+export default function LocalSyncAddressFields({ value, onChange, language = "es", device = "pc" }: Props) {
   const english = language !== "es";
+  const deviceName = device === "phone" ? (english ? "phone" : "celular") : "PC";
   const parts = splitLocalSyncAddress(value);
   const octetRefs = useRef<Array<HTMLInputElement | null>>([]);
   const portRef = useRef<HTMLInputElement>(null);
@@ -49,9 +51,9 @@ export default function LocalSyncAddressFields({ value, onChange, language = "es
   };
 
   return <div className={`local-address-editor ${ready ? "ready" : "incomplete"}`} onPaste={pasteCompleteAddress}>
-    <div className="local-address-heading"><span>{english ? "PC IP" : "IP DEL PC"}</span><small>{ready ? (english ? "Complete address" : "Dirección completa") : (english ? "Fill in all four blocks" : "Completa los cuatro bloques")}</small></div>
+    <div className="local-address-heading"><span>{english ? `${deviceName.toUpperCase()} IP` : `IP DEL ${deviceName.toUpperCase()}`}</span><small>{ready ? (english ? "Complete address" : "Dirección completa") : (english ? "Fill in all four blocks" : "Completa los cuatro bloques")}</small></div>
     <div className="local-address-row">
-      <div className="local-ip-octets" aria-label={english ? "PC IP address" : "Dirección IP del PC"}>
+      <div className="local-ip-octets" aria-label={english ? `${deviceName} IP address` : `Dirección IP del ${deviceName}`}>
         {parts.octets.map((octet, index) => <span className="local-ip-part" key={index}>
           <input
             ref={(node) => { octetRefs.current[index] = node; }}
@@ -70,8 +72,8 @@ export default function LocalSyncAddressFields({ value, onChange, language = "es
         </span>)}
       </div>
       <span className="local-address-colon" aria-hidden="true">:</span>
-      <label className="local-port-field"><span>{english ? "PORT" : "PUERTO"}</span><input ref={portRef} aria-label={english ? "PC port" : "Puerto del PC"} aria-invalid={Number(parts.port) < 1 || Number(parts.port) > 65_535} autoComplete="off" enterKeyHint="done" inputMode="numeric" maxLength={5} placeholder="47183" value={parts.port} onChange={(event) => commit({ ...parts, port: event.target.value.replace(/\D/g, "").slice(0, 5) })} /></label>
+      <label className="local-port-field"><span>{english ? "PORT" : "PUERTO"}</span><input ref={portRef} aria-label={english ? `${deviceName} port` : `Puerto del ${deviceName}`} aria-invalid={Number(parts.port) < 1 || Number(parts.port) > 65_535} autoComplete="off" enterKeyHint="done" inputMode="numeric" maxLength={5} placeholder="47183" value={parts.port} onChange={(event) => commit({ ...parts, port: event.target.value.replace(/\D/g, "").slice(0, 5) })} /></label>
     </div>
-    <small className="local-address-tip">{english ? "You can also paste the full PC address into any block." : "También puedes pegar la dirección completa del PC en cualquiera de los bloques."}</small>
+    <small className="local-address-tip">{english ? `You can also paste the full ${deviceName} address into any block.` : `También puedes pegar la dirección completa del ${deviceName} en cualquiera de los bloques.`}</small>
   </div>;
 }

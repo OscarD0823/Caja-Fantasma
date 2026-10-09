@@ -12,7 +12,7 @@ La versión web escribe el estado principal en `localStorage` y mantiene una seg
 
 En Dispositivos aparece **Instalar aplicación** cuando el navegador ofrece esa función. También puedes usar la opción de instalación del menú de Chrome o Edge. En iPhone, abre la página en Safari y usa **Compartir → Añadir a pantalla de inicio**. La instalación abre la misma página en una ventana independiente: no crea una cuenta ni cambia el lugar de guardado de los datos.
 
-La caché incluye la pantalla inicial, su código y los iconos. Los módulos cargados por separado y las imágenes quedan disponibles sin conexión después de haberlos abierto con Internet. La sincronización sigue necesitando el PC encendido y acceso a la red local; la instalación no elimina los permisos de acceso a dispositivos que pueda exigir el navegador.
+La caché incluye la pantalla inicial, su código y los iconos. Los módulos cargados por separado y las imágenes quedan disponibles sin conexión después de haberlos abierto con Internet. La sincronización necesita un anfitrión local activo (PC o Android); la instalación no elimina los permisos de acceso a dispositivos que pueda exigir el navegador. La actualización renueva la caché de interfaz, no el historial guardado.
 
 ## Sincronización sin nube
 
@@ -31,3 +31,4 @@ La página y la APK usan la misma IP privada, el mismo puerto y el mismo código
 - Windows y Android: guardado local duradero y sincronización directa en red local.
 - Web: doble guardado local, caché sin conexión y publicación automática en GitHub Pages.
 - PC–Web–Android: sincronización local mediante el PC, sin Firebase ni almacenamiento en nube.
+- Web–Android sin PC: en el celular, **Compartir con la web** muestra IP, puerto y código; en la página, **Conectar con el celular** permite envío manual o sincronización en vivo. Ambas apps deben estar abiertas en la misma Wi-Fi de confianza. Es HTTP local, no cifrado de extremo a extremo.

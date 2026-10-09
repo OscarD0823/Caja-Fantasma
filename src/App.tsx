@@ -58,8 +58,8 @@ import WebInstallNotice from "./WebInstallNotice";
 import DevicePresence from "./DevicePresenceStrip";
 import GameLogoMark, { GhostMark, ShinyModuleMark } from "./GameLogoMark";
 import ConsoleGlyph from "./ConsoleGlyph";
-import { recentConnectedDevices } from "./devicePresence";
-import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, SYMBIOSIS_EVENT_IMAGE, visionVisualImage, visionVisualTheme } from "./assets";
+import { recentConnectedDevices, type DeviceKind } from "./devicePresence";
+import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, SYMBIOSIS_EVENT_IMAGE, visionVisualImage, visionVisualTheme } from "./assets";
 import type { Activity, ActivityHistoryRecord, Catalog, CharacterProfile, OverlayCounterStyle, OverlayNameMode, OverlayShape, PersistedState, PointAction, PointRoundRecord, PointRoundTrigger, Settings, ShinyModRecord, Vision, WhaleCounterStyle } from "./model";
 import {
   APP_VERSION,
@@ -104,10 +104,14 @@ import type { ShinyModCatalogItem } from "./shinyModsCatalog";
 import { loadWebPersonalBackup, readWebStorageStatus, requestPersistentWebStorage, saveWebPersonalBackup, type WebStorageStatus } from "./webStorage";
 import { usePwaInstall } from "./usePwaInstall";
 import CrateOpeningArt from "./CrateOpeningArt";
+import CounterChestArt from "./CounterChestArt";
 import { persistDesktopProgress } from "./desktopProgress";
-import DirectPeerSyncPanel from "./DirectPeerSyncPanel";
-import { useDirectPeerSync } from "./useDirectPeerSync";
-import type { PeerKind, PeerSnapshot } from "./directPeerProtocol";
+import PhoneBridgeSyncPanel from "./PhoneBridgeSyncPanel";
+import { usePhoneBridgeSync } from "./usePhoneBridgeSync";
+import type { PhoneBridgeSnapshot } from "./phoneBridgeProtocol";
+import RewardProgressBar from "./RewardProgressBar";
+import ObservedProbability from "./ObservedProbability";
+import CrateHistoryCard from "./CrateHistoryCard";
 
 type ShinyCatalogModule = typeof import("./shinyModsCatalog");
 const EMPTY_SHINY_CATALOG: ShinyModCatalogItem[] = [];
@@ -204,6 +208,18 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.21.8",
+    date: "8 de octubre de 2026",
+    title: "Cofre custodio y conexión por IP",
+    items: [
+      "Web y Android se enlazan sin PC con IP, puerto y seis números; ambas aplicaciones deben estar abiertas en la misma Wi-Fi.",
+      "El puente móvil guarda los cambios antes de confirmarlos, conserva cierres de caja y propaga las restas intencionales.",
+      "El módulo Brillante activa la cerradura y el fantasma emerge, saluda y se retira dejando el cofre visible; esa apertura también anima el cofre junto a los puntos.",
+      "Barra de progreso animada con movimiento reducido y pausa al ocultarse; historial móvil y medidas de probabilidad reorganizados.",
+      "Acceso al editor oculto para visitantes, manteniendo la verificación de la cuenta propietaria al publicar.",
+    ],
+  },
   {
     version: "1.21.6",
     date: "8 de octubre de 2026",
@@ -873,6 +889,7 @@ export default function App() {
   restoreReadyRef.current = personalRestoreReady;
   const [webStorageStatus, setWebStorageStatus] = useState<WebStorageStatus>();
   const [creatorAccess, setCreatorAccess] = useState<CreatorAccess>("checking");
+  const [ownerEntryRequested, setOwnerEntryRequested] = useState(false);
   const [creatorMessage, setCreatorMessage] = useState("Comprobando la cuenta de GitHub…");
   const initialCycle = useRef(computeCycle(state.settings));
   const initialCycleSeconds = Math.ceil(initialCycle.current.remainingMs / 1000);
@@ -965,9 +982,8 @@ export default function App() {
   const whale = computeGravityWhale(state.settings, now);
   const whaleAvailable = selectedVision?.id === "gravity" && state.settings.activeMinutes > 15;
   const whaleNextMs = cycle.phase === "active" ? Math.max(0, 15 * 60_000 - (state.settings.activeMinutes * 60_000 - cycle.remainingMs)) : cycle.remainingMs + 15 * 60_000;
-  const currentDevice: PeerKind = IS_WEB ? "web" : IS_ANDROID ? "mobile" : "pc";
+  const currentDevice: DeviceKind = IS_WEB ? "web" : IS_ANDROID ? "mobile" : "pc";
   const visibleTabs = TABS.filter((item) => item.id !== "changes" || creatorAccess === "granted");
-  const targetProgress = Math.min(100, Math.round((currentPoints / target) * 100));
   const selectedShinyMod = SHINY_MOD_CATALOG.find((item) => item.id === selectedShinyModId) ?? defaultShinyMod;
   const normalizedShinySearch = normalizeModSearch(shinySearch);
   const filteredShinyCatalog = useMemo(() => SHINY_MOD_CATALOG.filter((item) => {
@@ -1073,28 +1089,16 @@ export default function App() {
   const acceptLocalSyncCatalog = useCallback((catalogJson?: string) => {
     if (!catalogJson) return;
     const catalog = JSON.parse(catalogJson) as unknown;
-    if (!validateCatalog(catalog)) throw new Error(tx("El PC devolvió un catálogo público inválido.", "The PC returned an invalid public catalog."));
+    if (!validateCatalog(catalog)) throw new Error(tx("El dispositivo devolvió un catálogo público inválido.", "The device returned an invalid public catalog."));
     setState((current) => applyRemoteCatalog(current, catalog));
   }, [tx]);
 
-  const acceptDirectSnapshot = useCallback((snapshot: PeerSnapshot) => {
-    const value: unknown = JSON.parse(snapshot.dataJson);
-    setState((current) => {
-      if (personalHistoryCount(current) > 0 && personalHistoryCount(value) === 0 && !hasIntentionalActionDeletions(value)) return current;
-      const newer = Date.parse(snapshot.updatedAt) >= Date.parse(personalSyncUpdatedAtRef.current);
-      const synchronized = mergePersonalSyncPayload(current, value, newer);
-      personalSyncJsonRef.current = JSON.stringify(personalSyncPayload(synchronized));
-      const updatedAt = newer ? snapshot.updatedAt : personalSyncUpdatedAtRef.current;
-      personalSyncUpdatedAtRef.current = updatedAt;
-      savePersonalSyncUpdatedAt(updatedAt);
-      return synchronized;
-    });
-  }, []);
-  const getDirectSnapshot = useCallback(() => ({ dataJson: personalSyncJsonRef.current, updatedAt: personalSyncUpdatedAtRef.current }), []);
-  const directPeer = useDirectPeerSync({ ready: personalRestoreReady, kind: currentDevice, dataJson: personalSyncJson, getSnapshot: getDirectSnapshot, onSnapshot: acceptDirectSnapshot });
+  const getPhoneSnapshot = useCallback(() => ({ dataJson: personalSyncJsonRef.current, updatedAt: personalSyncUpdatedAtRef.current }), []);
+  const acceptPhoneSnapshot = useCallback((snapshot: PhoneBridgeSnapshot) => { acceptLocalSyncSnapshot(snapshot, true); }, [acceptLocalSyncSnapshot]);
+  const phoneBridge = usePhoneBridgeSync({ ready: personalRestoreReady, mobile: IS_ANDROID, web: IS_WEB, code: state.settings.phoneSyncCode, address: state.settings.phoneSyncAddress, dataJson: personalSyncJson, catalogJson: sharedCatalogJson, english, getSnapshot: getPhoneSnapshot, onSnapshot: acceptPhoneSnapshot, onCatalog: acceptLocalSyncCatalog });
   const onlineDevices = [...new Set([
     ...recentConnectedDevices(state.settings.localSyncEnabled, connectedDevices, presenceReceivedAt),
-    ...(directPeer.status === "connected" && directPeer.remoteKind ? [currentDevice, directPeer.remoteKind] : []),
+    ...phoneBridge.online,
   ])];
 
   const acceptBackgroundSyncStatus = useCallback((background: BackgroundSyncStatus) => {
@@ -1434,6 +1438,20 @@ export default function App() {
 
   useEffect(() => {
     void checkCreatorAccess();
+  }, [checkCreatorAccess]);
+
+  useEffect(() => {
+    if (IS_ANDROID || (!isTauri() && !import.meta.env.DEV)) return;
+    const openOwnerEntry = (event: KeyboardEvent) => {
+      if (!event.repeat && event.ctrlKey && event.altKey && event.shiftKey && event.code === "KeyO") {
+        event.preventDefault();
+        setOwnerEntryRequested(true);
+        setTab("settings");
+        void checkCreatorAccess();
+      }
+    };
+    window.addEventListener("keydown", openOwnerEntry);
+    return () => window.removeEventListener("keydown", openOwnerEntry);
   }, [checkCreatorAccess]);
 
   useEffect(() => {
@@ -2212,9 +2230,7 @@ export default function App() {
                   <span className="eyebrow"><Sparkles size={14} /> {isTeamMode ? tx("CONTEO DE EQUIPO", "TEAM COUNT") : `${tx("INTENTO", "ATTEMPT")} · ${activeCharacter.name}`}</span>
                   <h2>{currentPoints}<small> / {target} {tx("puntos", "points")}</small></h2>
                   <p>{isTeamMode ? `${currentClaims} ${english ? (currentClaims === 1 ? "shared reward" : "shared rewards") : (currentClaims === 1 ? "recompensa compartida" : "recompensas compartidas")}. ${tx("Se suman al intento individual de cada integrante.", "They are added to every member's individual attempt.")}` : `${currentClaims} ${english ? (currentClaims === 1 ? "claimed reward" : "claimed rewards") : (currentClaims === 1 ? "recompensa reclamada" : "recompensas reclamadas")}. ${tx("La caja puede salir antes: regístrala cuando aparezca.", "The crate may drop early: record it when it appears.")}`}</p>
-                  <div className="progress-track" role="progressbar" aria-label="Progreso del intento" aria-valuemin={0} aria-valuemax={target} aria-valuenow={Math.min(currentPoints, target)}>
-                    <span style={{ width: `${targetProgress}%` }} />
-                  </div>
+                  <RewardProgressBar value={currentPoints} target={target} label={tx("Progreso del intento", "Attempt progress")} />
                   <div className="hero-actions">
                     {!isTeamMode && <button type="button" className="primary" disabled={currentActions.length === 0} onClick={() => markBox("normal")}><Box size={19} /> {tx("¡Salió la caja!", "The crate dropped!")}</button>}
                     {!isTeamMode && <button type="button" className="secondary platform-mail-button" disabled={currentActions.length === 0} onClick={() => markBox("platform-mail")}><Mail size={18} /> {tx("Llegó por Plataformas", "Platforms mail arrived")}</button>}
@@ -2223,7 +2239,7 @@ export default function App() {
                     <button type="button" className="secondary" disabled={currentPointRoundActions.length === 0} onClick={saveCurrentPointRound}><Save size={18} /> {tx("Guardar ronda", "Save round")}</button>
                   </div>
                 </div>
-                <div className="ghost-orbit" aria-hidden="true"><div className="orbital-ring" /><img className="ghost-crate-image" src={PHANTOM_CRATE_IMAGE} alt="" /><span className="ghost-crate-module"><ShinyModuleMark /></span><Sparkles className="spark-one" /><Sparkles className="spark-two" /></div>
+                <CounterChestArt />
               </article>
 
               <article className="chance-card panel">
@@ -2234,7 +2250,7 @@ export default function App() {
               </article>
             </div>
 
-            <div className="section-heading"><div><span className="eyebrow">{tx("RECOMPENSAS PRO", "PRO REWARDS")}</span><h2>{tx("Suma lo que reclames", "Add each claimed reward")}</h2></div><span>{tx("Solo las recompensas completadas cuentan", "Only completed rewards count")}</span></div>
+            <div className="section-heading"><div><span className="eyebrow">{tx("ACTIVIDADES DEL MAPA", "MAP ACTIVITIES")}</span><h2>{tx("Registra tus recorridos", "Track your runs")}</h2></div><span>{tx("Jefes, silos y desafíos · cuenta al reclamar", "Bosses, silos and challenges · count on claim")}</span></div>
             <div className="activity-grid">
               {state.catalog.proActivities.map((activity) => <ActivityCard
                 key={activity.id}
@@ -2349,10 +2365,7 @@ export default function App() {
               <StatCard icon={MonitorUp} label={tx("Más alta", "Highest")} value={stats.count ? pointsLabel(stats.maximum, language) : "—"} />
               <StatCard icon={BarChart3} label={tx("Promedio", "Average")} value={stats.count ? pointsLabel(Number(stats.average.toFixed(1)), language) : "—"} />
             </div>
-            <article className="probability-explainer panel">
-              <div><span className="eyebrow">{tx("PROBABILIDAD OBSERVADA", "OBSERVED PROBABILITY")}</span><strong>{stats.perPointPercent.toFixed(3)}%</strong><p>{tx(`Una caja por cada ${stats.perPointPercent ? (100 / stats.perPointPercent).toFixed(1) : "—"} puntos, usando únicamente tu historial manual aproximado y tus cajas confirmadas. Una instalación nueva empieza en cero; no es una tasa oficial del juego.`, `One crate per ${stats.perPointPercent ? (100 / stats.perPointPercent).toFixed(1) : "—"} points, using only your approximate manual history and confirmed crates. A new installation starts at zero; this is not an official game rate.`)}</p></div>
-              <div className="probability-ring" style={{ "--value": `${Math.min(100, stats.currentChancePercent) * 3.6}deg` } as React.CSSProperties}><span>{stats.currentChancePercent.toFixed(0)}%</span></div>
-            </article>
+            <ObservedProbability count={stats.count} perPointPercent={stats.perPointPercent} currentChancePercent={stats.currentChancePercent} tx={tx} />
 
             <article className="manual-history-panel panel">
               <div className="panel-title"><div><span className="eyebrow"><Plus size={15} /> {tx("HISTORIAL APROXIMADO", "APPROXIMATE HISTORY")}</span><h2>{tx("Cargar valores manualmente", "Add values manually")}</h2></div>{state.manualBaselinePoints.length > 0 && <button type="button" className="danger-quiet compact" onClick={() => commitState((current) => ({ ...current, manualBaselinePoints: [] }))}><Trash2 size={15} /> {tx("Borrar manuales", "Clear manual values")}</button>}</div>
@@ -2369,11 +2382,7 @@ export default function App() {
             {state.boxes.length === 0 ? <div className="empty-card history-empty"><History size={32} /><strong>{tx("Todavía no hay cajas registradas", "No crates recorded yet")}</strong><span>{tx("Cuando pulses “¡Salió la caja!”, aparecerá aquí con todos los datos del intento.", "When you press ‘The crate dropped!’, it will appear here with all attempt details.")}</span></div> : (
               <div className="history-list">
                 {state.boxes.map((box, index) => (
-                  <article className="history-record panel" key={box.id}>
-                    <div className="record-number">#{state.boxes.length - index}</div>
-                    <div className="record-main"><span>{box.characterName ?? state.characters.find((character) => character.id === (box.characterId ?? DEFAULT_CHARACTER_ID))?.name ?? tx("Personaje principal", "Main character")} · {formatDate(box.occurredAt, language)}</span><strong>{pointsLabel(box.points, language)}</strong><small>{box.claims} {tx("recompensas reclamadas", "rewards claimed")}{box.source === "platform-mail" ? ` · ${tx("correo de Plataformas", "Platforms mail")} · ${box.carriedPoints ?? 0} pts ${tx("transferidos", "carried over")}` : ""}</small></div>
-                    <details><summary>Ver desglose</summary>{box.breakdown.map((item) => <div key={item.name}><span>{item.name} · {item.count}×</span><strong>{item.points}</strong></div>)}</details>
-                  </article>
+                  <CrateHistoryCard key={box.id} box={box} number={state.boxes.length - index} characterName={box.characterName ?? state.characters.find((character) => character.id === (box.characterId ?? DEFAULT_CHARACTER_ID))?.name ?? tx("Personaje principal", "Main character")} formattedDate={formatDate(box.occurredAt, language)} pointsText={pointsLabel(box.points, language)} tx={tx} />
                 ))}
               </div>
             )}
@@ -2438,7 +2447,7 @@ export default function App() {
 
         {tab === "devices" && (
           <section className="page devices-page">
-            <DirectPeerSyncPanel peer={directPeer} english={english} />
+            <PhoneBridgeSyncPanel bridge={phoneBridge} mobile={IS_ANDROID} web={IS_WEB} language={language} address={state.settings.phoneSyncAddress} code={state.settings.phoneSyncCode} newCode={createPairingCode} onAddress={address => { phoneBridge.setEnabled(false); commitState(current => ({ ...current, settings: { ...current.settings, phoneSyncAddress: address } })); }} onCode={code => { if (IS_WEB) phoneBridge.setEnabled(false); commitState(current => ({ ...current, settings: { ...current.settings, phoneSyncCode: code } })); }} />
             <article className="device-version-panel panel">
               <div className="device-version-icon"><ShieldCheck size={27} /></div>
               <div><span className="eyebrow">{tx("VERSIÓN INSTALADA", "INSTALLED VERSION")}</span><h2>Caja Fantasma v{APP_VERSION}</h2><p>{IS_WEB ? tx("Versión web gratuita con guardado local y funcionamiento sin conexión.", "Free web version with local storage and offline support.") : IS_ANDROID ? tx("Aplicación Android ARM64 con actualizaciones verificadas dentro de la app.", "ARM64 Android app with verified in-app updates.") : tx("Aplicación de Windows con actualizaciones firmadas desde GitHub Releases.", "Windows app with signed updates from GitHub Releases.")}</p><small className="version-developer"><Github size={12} aria-hidden="true" /> {tx("Creado por", "Created by")} <strong>{AUTHOR}</strong></small></div>
@@ -2517,7 +2526,7 @@ export default function App() {
 
             <article className="backup-panel panel"><div><span className="eyebrow">{tx("DATOS PERSONALES", "PERSONAL DATA")}</span><h2>{tx("Respaldo local", "Local backup")}</h2><p>{tx("El historial permanece en este equipo y no se sube al repositorio público.", "Your history stays on this device and is not uploaded to the public repository.")}</p></div><div><button type="button" className="secondary" onClick={() => exportState(state)}><Download size={17} /> {tx("Exportar", "Export")}</button><button type="button" className="secondary" onClick={() => importRef.current?.click()}><Upload size={17} /> {tx("Importar", "Import")}</button><input ref={importRef} hidden type="file" accept="application/json,.json" onChange={(event) => void onImport(event.target.files?.[0])} /></div></article>
 
-            <article className="owner-panel panel">
+            {(creatorAccess === "granted" || ownerEntryRequested) && <article className="owner-panel panel">
               <div className="panel-title"><div><span className="eyebrow">{creatorAccess === "granted" ? "MODO DESARROLLADOR" : "CUENTA PROPIETARIA"}</span><h2>{creatorAccess === "granted" ? "Editor de OscarD0823" : "Acceso privado"}</h2></div><span className={`creator-access-badge ${creatorAccess}`}>{creatorAccess === "granted" ? <UserCheck size={15} /> : <LockKeyhole size={15} />}{creatorAccess === "granted" ? "Propietario verificado" : creatorAccess === "checking" ? "Comprobando" : "Bloqueado"}</span></div>
               {creatorAccess === "granted" ? <>
                 <p>Las herramientas privadas, el control del contador y la publicación completa solo aparecen al propietario verificado.</p>
@@ -2532,7 +2541,7 @@ export default function App() {
                 <OverlayPreviewLab catalog={state.catalog} scale={state.settings.overlayScale} addonScale={state.settings.overlayAddonScale} whaleCounterScale={state.settings.overlayWhaleCounterScale} whaleCounterStyle={state.settings.overlayWhaleCounterStyle} whaleShowTime={state.settings.overlayWhaleShowTime} shape={state.settings.overlayShape} counterStyle={state.settings.overlayCounterStyle} nameMode={state.settings.overlayNameMode} customName={state.settings.overlayCustomName} onScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayScale: clampNumber(scale, .2, 1.5) } }))} onAddonScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayAddonScale: clampNumber(scale, .2, 1) } }))} onWhaleCounterScaleChange={(scale) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterScale: clampNumber(scale, .2, 1.5) } }))} onWhaleCounterStyleChange={(style) => commitState((current) => ({ ...current, settings: { ...current.settings, overlayWhaleCounterStyle: style } }))} onAppearanceChange={(patch) => commitState((current) => ({ ...current, settings: { ...current.settings, ...(patch.shape ? { overlayShape: patch.shape } : {}), ...(patch.counterStyle ? { overlayCounterStyle: patch.counterStyle } : {}), ...(patch.nameMode ? { overlayNameMode: patch.nameMode } : {}), ...(patch.customName !== undefined ? { overlayCustomName: patch.customName.slice(0, 40) } : {}) } }))} onOpenRealOverlay={() => commitState((current) => ({ ...current, settings: { ...current.settings, overlayEnabled: true } }))} />
                 <CatalogEditor catalog={state.catalog} onSave={saveCatalog} onPublish={publishCatalog} />
               </> : <div className="creator-login-card"><div className="creator-lock"><LockKeyhole size={25} /></div><div><strong>Acceso privado del propietario</strong><span>{creatorMessage}</span>{!IS_ANDROID && <div className="creator-login-actions"><button type="button" className="primary compact" onClick={() => void startCreatorLogin()}><LogIn size={15} /> Iniciar sesión con GitHub</button><button type="button" className="secondary compact" disabled={creatorAccess === "checking"} onClick={() => void checkCreatorAccess()}><RefreshCw size={15} /> Comprobar cuenta</button></div>}</div></div>}
-            </article>
+            </article>}
           </section>
         )}
       </main>
@@ -2562,10 +2571,10 @@ export function StartupIntro({ language, onSkip }: { language: UiLanguage; onSki
   onSkipRef.current = onSkip;
   useEffect(() => {
     if (previewMs > 0) return;
-    const timeout = window.setTimeout(() => onSkipRef.current(), window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 1_200 : 6_900);
+    const timeout = window.setTimeout(() => onSkipRef.current(), window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 1_200 : 7_700);
     return () => window.clearTimeout(timeout);
   }, []);
-  return <button type="button" className={`startup-intro ${previewMs > 0 ? "intro-preview" : ""}`} style={previewMs > 0 ? { "--intro-preview-time": Math.min(6500, previewMs) } as import("react").CSSProperties : undefined} onClick={onSkip} aria-label={english ? "Skip opening animation" : "Omitir animación de apertura"}>
+  return <button type="button" className={`startup-intro ${previewMs > 0 ? "intro-preview" : ""}`} style={previewMs > 0 ? { "--intro-preview-time": Math.min(7400, previewMs) } as import("react").CSSProperties : undefined} onClick={onSkip} aria-label={english ? "Skip opening animation" : "Omitir animación de apertura"}>
     <span className="intro-letterbox" aria-hidden="true" />
     <span className="intro-world" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /><i /></span>
     <span className="intro-scan" aria-hidden="true" />
@@ -2575,13 +2584,13 @@ export function StartupIntro({ language, onSkip }: { language: UiLanguage; onSki
     <span className="intro-crate-arrival" aria-hidden="true">
       <span className="intro-crate-shadow" />
       <span className="intro-crate">
-        <CrateOpeningArt keyMark={<GameLogoMark />} ghostMark={<GhostMark />} moduleMark={<ShinyModuleMark />} />
+        <CrateOpeningArt keyMark={<ShinyModuleMark />} ghostMark={<GhostMark />} />
         <span className="intro-light" />
         <span className="intro-impact-wave"><i /><i /></span>
         <span className="intro-sparks"><i /><i /><i /><i /><i /><i /></span>
       </span>
     </span>
-    <span className="intro-title"><small>{english ? "LOCK SIGNATURE VERIFIED" : "FIRMA DE CERRADURA VERIFICADA"}</small><strong>CAJA FANTASMA</strong><em>ONCE HUMAN · TRACKER 17</em></span>
+    <span className="intro-title"><small>{english ? "BRILLIANT MODULE · VAULT UNSEALED" : "MÓDULO BRILLANTE · COFRE ABIERTO"}</small><strong>CAJA FANTASMA</strong><em>ONCE HUMAN · TRACKER 17</em></span>
     <span className="intro-progress" aria-hidden="true"><i /></span>
     <span className="intro-hint">{english ? "Tap to continue" : "Pulsa para continuar"}</span>
   </button>;
