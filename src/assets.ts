@@ -1,4 +1,4 @@
-import phantomCrateImage from "./assets/phantom-crate-once-human.png";
+import phantomCrateImage from "./assets/phantom-crate-reference.webp";
 import lunarEventImage from "./assets/lunar-event.png";
 import symbiosisEventImage from "./assets/symbiosis-event.png";
 import gravityEventImageA from "./assets/gravity-event-a.png";
@@ -6,7 +6,7 @@ import gravityEventImageB from "./assets/gravity-event-b.png";
 import gravityWhaleBossImage from "./assets/gravity-whale-boss-v2.webp";
 import type { Vision } from "./model";
 
-// Edición de la referencia aportada por OscarD0823: sin enlace, con la marca del juego y cantidad 17.
+// Ilustración del cofre de la página de proyectos de OscarD0823; reutilizada localmente, sin petición remota.
 export const PHANTOM_CRATE_IMAGE = phantomCrateImage;
 export const LUNAR_EVENT_IMAGE = lunarEventImage;
 export const SYMBIOSIS_EVENT_IMAGE = symbiosisEventImage;

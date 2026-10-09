@@ -46,6 +46,20 @@ assert.equal((crate.match(/className="vault-hologram"/g) ?? []).length, 1);
 assert(crate.includes("vault-key-port") && crate.includes("vault-lid-hinge"));
 assert(!crate.includes("<img"), "Opening geometry must not slice a reference photo.");
 assert(crate.includes("vault-lock-bolts") && crate.includes("vault-ground-radar"));
+assert(crate.includes("vault-roof-plate") && crate.includes("vault-reward-module") && crate.includes("ghostMark"));
+const Opening = await loadComponent("src/CrateOpeningArt.tsx");
+const openingArt = renderToStaticMarkup(createElement("div", null, createElement(Opening, { keyMark: createElement(Emblem) }), createElement(Opening, { keyMark: createElement(Emblem) })));
+const openingIds = [...openingArt.matchAll(/\bid="([^"]+)"/g)].map((match) => match[1]);
+assert.equal(openingIds.length, new Set(openingIds).size, "Multiple chests need isolated material/clip IDs.");
+assert.equal((openingArt.match(/class="vault-roof-plate"/g) ?? []).length, 16, "Each lid is assembled from eight physical plates.");
+const commandArity = { m: 2, l: 2, h: 1, v: 1, c: 6, s: 4, q: 4, t: 2, a: 7, z: 0 };
+for (const [, path] of openingArt.matchAll(/\bd="([^"]+)"/g)) {
+  for (const [, command, coordinates] of path.matchAll(/([a-df-z])([^a-df-z]*)/gi)) {
+    const arity = commandArity[command.toLowerCase()];
+    const numbers = coordinates.match(/[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?/gi) ?? [];
+    assert(arity === 0 ? numbers.length === 0 : numbers.length >= arity && numbers.length % arity === 0, `Malformed ${command} coordinates: ${path}`);
+  }
+}
 const openingStyles = await read("src/crateOpening.css");
 assert(openingStyles.includes(".startup-intro *, .startup-intro *::before, .startup-intro *::after { animation: none !important; }"), "Reduced motion must win the opening cascade.");
 const readme = await read("README.md");

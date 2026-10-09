@@ -11,6 +11,8 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
+import android.view.View
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import app.tauri.plugin.JSObject
@@ -21,6 +23,7 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.nio.charset.StandardCharsets
+import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 
 private const val SYNC_PREFERENCES = "caja_fantasma_background_sync"
@@ -38,6 +41,7 @@ internal data class SyncConfiguration(
     val dataJson: String,
     val updatedAt: String,
     val knownRevision: Long,
+    val eventTimingJson: String,
 )
 
 private data class SocketTarget(val host: String, val port: Int)
@@ -69,6 +73,8 @@ internal object BackgroundSyncStore {
         require(args.dataJson.toByteArray(StandardCharsets.UTF_8).size <= MAX_SYNC_BYTES) { "Los datos superan el límite de 8 MB." }
         require(isIsoTimestamp(args.updatedAt)) { "La fecha de sincronización no es válida." }
         require(JSONObject(args.dataJson).length() >= 0) { "Los datos personales no son válidos." }
+        require(args.eventTimingJson.length <= 8_192) { "Los tiempos de notificación no son válidos." }
+        JSONObject(args.eventTimingJson)
         parseTarget(args.address)
     }
 
@@ -86,6 +92,7 @@ internal object BackgroundSyncStore {
                 .putBoolean("active", true)
                 .putString("address", args.address.trim())
                 .putString("pairingCode", args.pairingCode)
+                .putString("eventTimingJson", args.eventTimingJson)
                 .putString("dataJson", if (preserveExisting) existingJson else args.dataJson)
                 .putString("updatedAt", if (preserveExisting) existingUpdatedAt else args.updatedAt)
                 .putLong("revision", if (preserveExisting) preferences.getLong("revision", 0L) else args.knownRevision.coerceAtLeast(preferences.getLong("revision", 0L)))
@@ -118,6 +125,7 @@ internal object BackgroundSyncStore {
             dataJson = preferences.getString("dataJson", "{}") ?: "{}",
             updatedAt = preferences.getString("updatedAt", EPOCH_TIMESTAMP) ?: EPOCH_TIMESTAMP,
             knownRevision = preferences.getLong("revision", 0L),
+            eventTimingJson = preferences.getString("eventTimingJson", "{}") ?: "{}",
         )
     }
 
@@ -227,7 +235,7 @@ internal object BackgroundSyncStore {
 class BackgroundSyncService : Service() {
     private val running = AtomicBoolean(false)
     private var worker: Thread? = null
-    private var lastNotificationConnected: Boolean? = null
+    private var lastNotificationSignature: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -393,14 +401,54 @@ class BackgroundSyncService : Service() {
             buildNotification(connected),
             type,
         )
-        lastNotificationConnected = connected
+        lastNotificationSignature = notificationSignature(connected)
     }
 
     private fun updateNotificationIfNeeded(connected: Boolean) {
-        if (lastNotificationConnected == connected) return
+        val signature = notificationSignature(connected)
+        if (lastNotificationSignature == signature) return
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(NOTIFICATION_ID, buildNotification(connected))
-        lastNotificationConnected = connected
+        lastNotificationSignature = signature
+    }
+
+    private fun eventClocks(): EventNotificationClocks? = try {
+        val configuration = BackgroundSyncStore.configuration(this)
+        val settings = JSONObject(configuration.eventTimingJson)
+        val catalog = BackgroundSyncStore.status(this).optString("catalogJson", "{}")
+        val published = JSONObject(catalog).optJSONObject("eventTiming")
+        // The service also receives administrator timing changes while the UI sleeps.
+        val timing = if (published != null && published.optString("updatedAt") >= settings.optString("sharedTimingUpdatedAt")) published else settings
+        val selected = timing.optString("selectedVisionId", "gravity")
+        val english = settings.optString("uiLanguage", "es") != "es"
+        val defaultName = when (selected) { "gravity" -> if (english) "Gravity" else "Gravedad"; "lunar" -> "Lunar"; "symbiosis" -> if (english) "Symbiosis" else "Simbiosis"; else -> if (english) "Vision" else "Visión" }
+        notificationClocks(EventTiming(
+            selectedVisionId = selected,
+            name = defaultName,
+            phase = timing.optString("phase", "waiting"),
+            startedAt = Instant.parse(timing.getString("phaseStartedAt")).toEpochMilli(),
+            waitMs = timing.optLong("waitMinutes", 30).coerceIn(1, 525_600) * 60_000,
+            activeMs = timing.optLong("activeMinutes", 30).coerceIn(1, 525_600) * 60_000,
+            delayMs = timing.optLong("transitionDelayMilliseconds", 3_000).coerceIn(0, 300_000),
+            english = english,
+        ), System.currentTimeMillis())
+    } catch (_: Exception) { null }
+
+    private fun notificationSignature(connected: Boolean): String = "$connected:${eventClocks()}"
+
+    private fun timerViews(clocks: EventNotificationClocks): RemoteViews {
+        val views = RemoteViews(packageName, R.layout.caja_fantasma_event_timers)
+        val now = System.currentTimeMillis()
+        val elapsedNow = SystemClock.elapsedRealtime()
+        fun setClock(labelId: Int, timerId: Int, clock: NotificationClock) {
+            views.setTextViewText(labelId, clock.label)
+            views.setViewVisibility(timerId, if (clock.endsAt == null) View.GONE else View.VISIBLE)
+            views.setBoolean(timerId, "setCountDown", true)
+            views.setChronometer(timerId, elapsedNow + ((clock.endsAt ?: now) - now).coerceAtLeast(0), null, clock.endsAt != null)
+        }
+        setClock(R.id.vision_timer_label, R.id.vision_timer, clocks.vision)
+        setClock(R.id.whale_timer_label, R.id.whale_timer, clocks.whale)
+        return views
     }
 
     private fun buildNotification(connected: Boolean): Notification {
@@ -419,7 +467,7 @@ class BackgroundSyncService : Service() {
             Intent(this, BackgroundSyncService::class.java).setAction(ACTION_STOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setContentTitle("Caja Fantasma · Datos en vivo")
             .setContentText(if (connected) "PC conectado; sincronizando en segundo plano" else "Buscando el PC en la red local")
@@ -429,7 +477,13 @@ class BackgroundSyncService : Service() {
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .addAction(0, "Pausar", stopIntent)
-            .build()
+        eventClocks()?.let { clocks ->
+            builder.setStyle(NotificationCompat.DecoratedCustomViewStyle())
+                .setCustomContentView(timerViews(clocks))
+                .setCustomBigContentView(timerViews(clocks))
+                .setSubText(if (connected) "Datos en vivo · conectado" else "Datos en vivo · reconectando")
+        }
+        return builder.build()
     }
 
     private fun createNotificationChannel() {

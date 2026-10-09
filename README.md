@@ -12,7 +12,7 @@ Tu seguimiento de recompensas, cajas y módulos Brillantes de Once Human, en **P
 
 Las descargas llevan a la **última versión publicada**, no a versiones en preparación. Los archivos también están organizados en [Programa](Programa/).
 
-**1.21.5 · Guardado e indicativos:** evita recuperar puntos de cajas cerradas y corrige la señal animada de Web en Android. [Qué cambió](NOTAS-VERSION-1.21.5.md).
+**1.21.6 · Cofre espectral y conexión local:** nueva apertura con fantasma y módulo Brillante, cronómetros en la notificación Android con PC y conexión directa web ↔ celular en la misma Wi-Fi. [Qué cambió](NOTAS-VERSION-1.21.6.md).
 
 ## Empieza en un minuto
 
@@ -38,6 +38,8 @@ Los porcentajes son estimaciones de tu historial: **no garantizan una caja ni so
 En Windows, abre **Dispositivos → Compartir con el celular**. Conecta el teléfono y la web usando la **misma dirección, puerto y código** del PC; activa **Sincronización en vivo** para reflejar cambios en ambos sentidos.
 
 El PC debe seguir ejecutándose y los dispositivos deben comunicarse por una red local de confianza o anclaje USB. Algunos navegadores restringen el acceso de páginas HTTPS a la red local; la web muestra instrucciones cuando ocurre. No es sincronización en la nube: no requiere Firebase ni un servicio de pago.
+
+**Sin PC:** en **Dispositivos → Conexión directa**, crea una invitación en la web o el celular, pégala en el otro y devuelve su respuesta al primero. Ambas apps deben estar abiertas en la misma Wi-Fi. Se combinan los historiales, incluyendo las restas; una copia vacía no sustituye tu progreso. Si el sistema suspende una app, vuelve a emparejarlas. No usa Cloudflare ni servidores de retransmisión. [Detalles y límites](DISENO-COFRE-Y-CONEXION-LOCAL.md).
 
 ## Cuida tu progreso
 

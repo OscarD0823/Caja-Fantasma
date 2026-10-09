@@ -46,6 +46,7 @@ class BackgroundSyncArgs {
     lateinit var dataJson: String
     lateinit var updatedAt: String
     var knownRevision: Long = 0
+    var eventTimingJson: String = "{}"
 }
 
 @TauriPlugin

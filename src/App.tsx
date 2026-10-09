@@ -56,7 +56,7 @@ import OverlayPreviewLab from "./OverlayPreviewLab";
 import AppUpdater from "./Updater";
 import WebInstallNotice from "./WebInstallNotice";
 import DevicePresence from "./DevicePresenceStrip";
-import GameLogoMark from "./GameLogoMark";
+import GameLogoMark, { GhostMark, ShinyModuleMark } from "./GameLogoMark";
 import ConsoleGlyph from "./ConsoleGlyph";
 import { recentConnectedDevices } from "./devicePresence";
 import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, PHANTOM_CRATE_IMAGE, SYMBIOSIS_EVENT_IMAGE, visionVisualImage, visionVisualTheme } from "./assets";
@@ -105,6 +105,9 @@ import { loadWebPersonalBackup, readWebStorageStatus, requestPersistentWebStorag
 import { usePwaInstall } from "./usePwaInstall";
 import CrateOpeningArt from "./CrateOpeningArt";
 import { persistDesktopProgress } from "./desktopProgress";
+import DirectPeerSyncPanel from "./DirectPeerSyncPanel";
+import { useDirectPeerSync } from "./useDirectPeerSync";
+import type { PeerKind, PeerSnapshot } from "./directPeerProtocol";
 
 type ShinyCatalogModule = typeof import("./shinyModsCatalog");
 const EMPTY_SHINY_CATALOG: ShinyModCatalogItem[] = [];
@@ -201,6 +204,18 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  {
+    version: "1.21.6",
+    date: "8 de octubre de 2026",
+    title: "Cofre espectral, cronómetros Android y conexión directa local",
+    items: [
+      "Cofre de tapa curva con piezas metálicas, llave en la cerradura, fantasma y módulo Brillante 17 al abrir; nueva identidad original en PC, Android y web.",
+      "La notificación del servicio Android con PC muestra el tiempo del evento y de la Ballena mediante cronómetros nativos.",
+      "Web y celular pueden combinar sus historiales directamente en la misma Wi-Fi mediante invitación y respuesta, manteniendo ambas apps abiertas.",
+      "Las transferencias se verifican completas antes de aplicarse y conservan las restas intencionales; una copia vacía no reemplaza tu progreso.",
+      "Se conserva el puente anterior con PC y su servicio en segundo plano. Sin Cloudflare, Firebase ni servicios de pago.",
+    ],
+  },
   {
     version: "1.21.5",
     date: "8 de octubre de 2026",
@@ -899,6 +914,12 @@ export default function App() {
   const referencePoints = useMemo(() => [...state.manualBaselinePoints], [state.manualBaselinePoints]);
   const personalSyncJson = useMemo(() => JSON.stringify(personalSyncPayload(state)), [state.actions, state.deletedActionIds, state.activityHistory, state.boxes, state.pointRounds, state.pointRoundBoundaries, state.manualBaselinePoints, state.shinyMods, state.characters, state.activeCharacterId, state.trackingMode, state.teamMemberIds, state.activeTeamSessionId]);
   const sharedCatalogJson = useMemo(() => JSON.stringify(state.catalog), [state.catalog]);
+  const eventNotificationJson = useMemo(() => JSON.stringify({
+    selectedVisionId: state.settings.selectedVisionId, phase: state.settings.phase,
+    phaseStartedAt: state.settings.phaseStartedAt, waitMinutes: state.settings.waitMinutes,
+    activeMinutes: state.settings.activeMinutes, transitionDelayMilliseconds: state.settings.transitionDelayMilliseconds,
+    sharedTimingUpdatedAt: state.settings.sharedTimingUpdatedAt, uiLanguage: state.settings.uiLanguage,
+  }), [state.settings.selectedVisionId, state.settings.phase, state.settings.phaseStartedAt, state.settings.waitMinutes, state.settings.activeMinutes, state.settings.transitionDelayMilliseconds, state.settings.sharedTimingUpdatedAt, state.settings.uiLanguage]);
   const target = clampNumber(state.catalog.boxTargetPoints, 1, 10_000);
   const activeCharacter = state.characters.find((character) => character.id === state.activeCharacterId) ?? state.characters[0];
   const isTeamMode = state.trackingMode === "team" && state.characters.length > 1;
@@ -944,8 +965,7 @@ export default function App() {
   const whale = computeGravityWhale(state.settings, now);
   const whaleAvailable = selectedVision?.id === "gravity" && state.settings.activeMinutes > 15;
   const whaleNextMs = cycle.phase === "active" ? Math.max(0, 15 * 60_000 - (state.settings.activeMinutes * 60_000 - cycle.remainingMs)) : cycle.remainingMs + 15 * 60_000;
-  const currentDevice = IS_WEB ? "web" : IS_ANDROID ? "mobile" : "pc";
-  const onlineDevices = recentConnectedDevices(state.settings.localSyncEnabled, connectedDevices, presenceReceivedAt);
+  const currentDevice: PeerKind = IS_WEB ? "web" : IS_ANDROID ? "mobile" : "pc";
   const visibleTabs = TABS.filter((item) => item.id !== "changes" || creatorAccess === "granted");
   const targetProgress = Math.min(100, Math.round((currentPoints / target) * 100));
   const selectedShinyMod = SHINY_MOD_CATALOG.find((item) => item.id === selectedShinyModId) ?? defaultShinyMod;
@@ -1056,6 +1076,26 @@ export default function App() {
     if (!validateCatalog(catalog)) throw new Error(tx("El PC devolvió un catálogo público inválido.", "The PC returned an invalid public catalog."));
     setState((current) => applyRemoteCatalog(current, catalog));
   }, [tx]);
+
+  const acceptDirectSnapshot = useCallback((snapshot: PeerSnapshot) => {
+    const value: unknown = JSON.parse(snapshot.dataJson);
+    setState((current) => {
+      if (personalHistoryCount(current) > 0 && personalHistoryCount(value) === 0 && !hasIntentionalActionDeletions(value)) return current;
+      const newer = Date.parse(snapshot.updatedAt) >= Date.parse(personalSyncUpdatedAtRef.current);
+      const synchronized = mergePersonalSyncPayload(current, value, newer);
+      personalSyncJsonRef.current = JSON.stringify(personalSyncPayload(synchronized));
+      const updatedAt = newer ? snapshot.updatedAt : personalSyncUpdatedAtRef.current;
+      personalSyncUpdatedAtRef.current = updatedAt;
+      savePersonalSyncUpdatedAt(updatedAt);
+      return synchronized;
+    });
+  }, []);
+  const getDirectSnapshot = useCallback(() => ({ dataJson: personalSyncJsonRef.current, updatedAt: personalSyncUpdatedAtRef.current }), []);
+  const directPeer = useDirectPeerSync({ ready: personalRestoreReady, kind: currentDevice, dataJson: personalSyncJson, getSnapshot: getDirectSnapshot, onSnapshot: acceptDirectSnapshot });
+  const onlineDevices = [...new Set([
+    ...recentConnectedDevices(state.settings.localSyncEnabled, connectedDevices, presenceReceivedAt),
+    ...(directPeer.status === "connected" && directPeer.remoteKind ? [currentDevice, directPeer.remoteKind] : []),
+  ])];
 
   const acceptBackgroundSyncStatus = useCallback((background: BackgroundSyncStatus) => {
     if (background.connected) { setConnectedDevices(background.connectedDevices?.length ? background.connectedDevices : ["pc", "mobile"]); setPresenceReceivedAt(Date.now()); }
@@ -1188,12 +1228,13 @@ export default function App() {
           dataJson: backgroundDataJson,
           updatedAt: backgroundUpdatedAt,
           knownRevision: backgroundRevision,
+          eventTimingJson: eventNotificationJson,
         }).then(acceptBackgroundSyncStatus).catch(() => undefined);
       }
       localSyncInFlightRef.current = false;
       if (showBusy) setLocalSyncBusy(false);
     }
-  }, [acceptBackgroundSyncStatus, acceptLocalSyncCatalog, acceptLocalSyncSnapshot, state.settings.localSyncAddress, state.settings.localSyncCode, state.settings.localSyncLiveEnabled, tx]);
+  }, [acceptBackgroundSyncStatus, acceptLocalSyncCatalog, acceptLocalSyncSnapshot, eventNotificationJson, state.settings.localSyncAddress, state.settings.localSyncCode, state.settings.localSyncLiveEnabled, tx]);
 
   useEffect(() => {
     if (personalSyncJsonRef.current !== personalSyncJson) {
@@ -1322,6 +1363,7 @@ export default function App() {
       dataJson: personalSyncJsonRef.current,
       updatedAt: personalSyncUpdatedAtRef.current,
       knownRevision: liveRevisionRef.current,
+      eventTimingJson: eventNotificationJson,
     }).then(applyStatus).catch((error) => {
       if (active) setLocalSyncStatus(error instanceof Error ? error.message : String(error));
     });
@@ -1334,7 +1376,7 @@ export default function App() {
       window.removeEventListener("focus", readStatus);
       document.removeEventListener("visibilitychange", readStatus);
     };
-  }, [acceptBackgroundSyncStatus, personalRestoreReady, state.settings.localSyncAddress, state.settings.localSyncCode, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
+  }, [acceptBackgroundSyncStatus, eventNotificationJson, personalRestoreReady, state.settings.localSyncAddress, state.settings.localSyncCode, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
 
   useEffect(() => {
     if (!personalRestoreReady || !IS_ANDROID || !isTauri() || !state.settings.localSyncEnabled || !state.settings.localSyncLiveEnabled) return;
@@ -1347,8 +1389,9 @@ export default function App() {
       dataJson: personalSyncJsonRef.current,
       updatedAt: personalSyncUpdatedAtRef.current,
       knownRevision: liveRevisionRef.current,
+      eventTimingJson: eventNotificationJson,
     }).then(acceptBackgroundSyncStatus).catch(() => undefined);
-  }, [acceptBackgroundSyncStatus, personalRestoreReady, personalSyncJson, state.settings.localSyncAddress, state.settings.localSyncCode, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
+  }, [acceptBackgroundSyncStatus, eventNotificationJson, personalRestoreReady, personalSyncJson, state.settings.localSyncAddress, state.settings.localSyncCode, state.settings.localSyncEnabled, state.settings.localSyncLiveEnabled]);
 
   const checkCreatorAccess = useCallback(async () => {
     if (IS_ANDROID) {
@@ -2180,7 +2223,7 @@ export default function App() {
                     <button type="button" className="secondary" disabled={currentPointRoundActions.length === 0} onClick={saveCurrentPointRound}><Save size={18} /> {tx("Guardar ronda", "Save round")}</button>
                   </div>
                 </div>
-                <div className="ghost-orbit" aria-hidden="true"><div className="orbital-ring" /><img className="ghost-crate-image" src={PHANTOM_CRATE_IMAGE} alt="" /><div className="once-human-wordmark"><span>ONCE</span><strong>HUMAN</strong></div><Sparkles className="spark-one" /><Sparkles className="spark-two" /></div>
+                <div className="ghost-orbit" aria-hidden="true"><div className="orbital-ring" /><img className="ghost-crate-image" src={PHANTOM_CRATE_IMAGE} alt="" /><span className="ghost-crate-module"><ShinyModuleMark /></span><Sparkles className="spark-one" /><Sparkles className="spark-two" /></div>
               </article>
 
               <article className="chance-card panel">
@@ -2349,7 +2392,7 @@ export default function App() {
             </div>
 
             <article className="shiny-rule panel">
-              <div className="shiny-rule-icon"><Gem /></div>
+              <div className="shiny-rule-icon"><ShinyModuleMark /></div>
               <div><span className="eyebrow">{tx("CÓMO FUNCIONA", "HOW IT WORKS")}</span><h2>{tx("Del nivel 1 al 17, después Brillante", "From level 1 to 17, then Shiny")}</h2><p>{tx("Todos los módulos progresan del nivel 1 al 17. Cuando ya tienes uno en nivel 17, otro igual puede convertirse en Brillante. Pulsa “Otro +17 no se convirtió” después de cada fallo; cuando salga, márcalo como conseguido.", "All mods progress from level 1 to 17. Once you have one at level 17, another copy can become Shiny. Press ‘Another +17 failed’ after each failed conversion, then mark it as obtained when it succeeds.")}</p></div>
             </article>
 
@@ -2395,6 +2438,7 @@ export default function App() {
 
         {tab === "devices" && (
           <section className="page devices-page">
+            <DirectPeerSyncPanel peer={directPeer} english={english} />
             <article className="device-version-panel panel">
               <div className="device-version-icon"><ShieldCheck size={27} /></div>
               <div><span className="eyebrow">{tx("VERSIÓN INSTALADA", "INSTALLED VERSION")}</span><h2>Caja Fantasma v{APP_VERSION}</h2><p>{IS_WEB ? tx("Versión web gratuita con guardado local y funcionamiento sin conexión.", "Free web version with local storage and offline support.") : IS_ANDROID ? tx("Aplicación Android ARM64 con actualizaciones verificadas dentro de la app.", "ARM64 Android app with verified in-app updates.") : tx("Aplicación de Windows con actualizaciones firmadas desde GitHub Releases.", "Windows app with signed updates from GitHub Releases.")}</p><small className="version-developer"><Github size={12} aria-hidden="true" /> {tx("Creado por", "Created by")} <strong>{AUTHOR}</strong></small></div>
@@ -2500,7 +2544,7 @@ function ShinyTrackerCard({ record, language, onDecrease, onIncrease, onToggle, 
   const english = language !== "es";
   return <article className={`shiny-tracker-card panel ${record.isShiny ? "obtained" : ""}`}>
     <div className="shiny-tracker-top">
-      <span className="shiny-mod-icon">{record.isShiny ? <Trophy size={20} /> : <Gem size={20} />}</span>
+      <span className={`shiny-mod-icon ${record.isShiny ? "module-brillante" : ""}`}><ShinyModuleMark /></span>
       <div><small>{record.groupName}</small><h3>{record.modName}</h3>{record.englishName && <em>{record.englishName}</em>}</div>
       <button type="button" className="shiny-delete" aria-label={`${english ? "Delete" : "Eliminar"} ${record.modName}`} onClick={onDelete}><Trash2 size={15} /></button>
     </div>
@@ -2531,7 +2575,7 @@ export function StartupIntro({ language, onSkip }: { language: UiLanguage; onSki
     <span className="intro-crate-arrival" aria-hidden="true">
       <span className="intro-crate-shadow" />
       <span className="intro-crate">
-        <CrateOpeningArt keyMark={<GameLogoMark />} />
+        <CrateOpeningArt keyMark={<GameLogoMark />} ghostMark={<GhostMark />} moduleMark={<ShinyModuleMark />} />
         <span className="intro-light" />
         <span className="intro-impact-wave"><i /><i /></span>
         <span className="intro-sparks"><i /><i /><i /><i /><i /><i /></span>

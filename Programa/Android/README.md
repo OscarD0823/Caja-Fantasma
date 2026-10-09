@@ -1,12 +1,15 @@
-# Android · Caja Fantasma 1.21.5
+# Android · Caja Fantasma 1.21.6
 
-[Descargar APK](Caja-Fantasma-Android-1.21.5.apk) · [Última versión publicada](https://github.com/OscarD0823/Caja-Fantasma/releases/latest) · [SHA-256](SHA256SUMS.txt)
+[Descargar APK](Caja-Fantasma-Android-1.21.6.apk) · [Última versión publicada](https://github.com/OscarD0823/Caja-Fantasma/releases/latest) · [SHA-256](SHA256SUMS.txt)
 
-Android 8+ / API 26, ARM64. Versión 1.21.5, `versionCode` 1021005. Firma RSA 4096 del proyecto, con esquemas v2/v3 y el certificado habitual de actualización.
+Android 8+ / API 26, ARM64. Versión 1.21.6, `versionCode` 1021006. Firma RSA 4096 del proyecto, con esquemas v2/v3 y el certificado habitual de actualización.
 
 Instala sobre la versión anterior **sin desinstalarla** para conservar los datos. La app comprueba, descarga y verifica las siguientes versiones; Android requiere aceptar su confirmación de instalación.
 
 - Indicativos PC, Web y Móvil conservados al atravesar el servicio nativo; Web conectado activa su animación también en el teléfono.
+- Cofre original con tapa curva, fantasma y módulo Brillante 17. Nuevo icono propio, sin el logo oficial del juego.
+- La notificación del servicio con PC muestra cronómetros de evento y Ballena, incluso con la interfaz en segundo plano.
+- **Dispositivos → Conexión directa** permite combinar datos con la web en la misma Wi-Fi sin PC, intercambiando invitación y respuesta. Ambas apps deben permanecer abiertas; vuelve a emparejarlas si Android las suspende.
 - Recuperación protegida del intento tras una caja; conserva la interfaz industrial y su apertura adaptada a pantallas pequeñas.
 - Crédito visible de OscarD0823 y enlaces a PC, página y GitHub que abren el navegador del teléfono.
 - La misma IP, puerto y código enlazan PC, celular y web. El PC debe permanecer ejecutándose.
@@ -15,4 +18,4 @@ Instala sobre la versión anterior **sin desinstalarla** para conservar los dato
 
 Exporta un respaldo desde **Configuración → Respaldo local** antes de desinstalar o cambiar de teléfono.
 
-[Sincronización y sus límites](../../docs/ANDROID-Y-SINCRONIZACION.md) · [Qué cambió](../../NOTAS-VERSION-1.21.5.md) · [Proyecto comunitario, no oficial](../../AVISO-COMUNITARIO.md)
+[Sincronización y sus límites](../../docs/ANDROID-Y-SINCRONIZACION.md) · [Qué cambió](../../NOTAS-VERSION-1.21.6.md) · [Proyecto comunitario, no oficial](../../AVISO-COMUNITARIO.md)

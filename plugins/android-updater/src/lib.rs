@@ -36,6 +36,7 @@ struct BackgroundSyncArgs {
     data_json: String,
     updated_at: String,
     known_revision: u64,
+    event_timing_json: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -82,6 +83,7 @@ async fn start_background_sync<R: Runtime>(
     data_json: String,
     updated_at: String,
     known_revision: u64,
+    event_timing_json: Option<String>,
 ) -> Result<BackgroundSyncStatus, String> {
     app.state::<AndroidUpdater<R>>()
         .0
@@ -93,6 +95,7 @@ async fn start_background_sync<R: Runtime>(
                 data_json,
                 updated_at,
                 known_revision,
+                event_timing_json: event_timing_json.unwrap_or_else(|| "{}".into()),
             },
         )
         .await
@@ -107,6 +110,7 @@ async fn update_background_sync<R: Runtime>(
     data_json: String,
     updated_at: String,
     known_revision: u64,
+    event_timing_json: Option<String>,
 ) -> Result<BackgroundSyncStatus, String> {
     app.state::<AndroidUpdater<R>>()
         .0
@@ -118,6 +122,7 @@ async fn update_background_sync<R: Runtime>(
                 data_json,
                 updated_at,
                 known_revision,
+                event_timing_json: event_timing_json.unwrap_or_else(|| "{}".into()),
             },
         )
         .await

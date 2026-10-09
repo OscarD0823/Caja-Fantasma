@@ -6,6 +6,7 @@ import App from "./App";
 import Overlay from "./Overlay";
 import WhaleVisualHarness from "./WhaleVisualHarness";
 import InterfaceVisualHarness from "./InterfaceVisualHarness";
+import DirectPeerVisualHarness from "./DirectPeerVisualHarness";
 import "./styles.css";
 import "./crateOpening.css";
 import "./interface.css";
@@ -39,7 +40,8 @@ const label = (() => {
 
 const visualWhaleTest = import.meta.env.DEV && new URLSearchParams(window.location.search).has("whale-visual-test");
 const visualInterfaceTest = import.meta.env.DEV && new URLSearchParams(window.location.search).has("interface-visual-test");
+const directPeerTest = import.meta.env.DEV && new URLSearchParams(window.location.search).has("direct-peer-test");
 
 createRoot(document.getElementById("root")!).render(
-  <StrictMode>{visualInterfaceTest ? <InterfaceVisualHarness /> : visualWhaleTest ? <WhaleVisualHarness /> : label === "overlay" ? <Overlay /> : <App />}</StrictMode>,
+  <StrictMode>{directPeerTest ? <DirectPeerVisualHarness /> : visualInterfaceTest ? <InterfaceVisualHarness /> : visualWhaleTest ? <WhaleVisualHarness /> : label === "overlay" ? <Overlay /> : <App />}</StrictMode>,
 );
