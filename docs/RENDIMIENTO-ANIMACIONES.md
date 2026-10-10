@@ -38,7 +38,7 @@ Las cifras de la tabla corresponden a la primera optimización (vídeo a 30 FPS)
 
 Prueba física de esta revisión el 10 de octubre: apertura y llegada automática al menú con grabación; `gfxinfo` informó de 528 cuadros nativos y 5 con retraso (0,95 %), percentil 50 de 5 ms y percentil 90 de 18 ms. Última muestra PSS: 285 MiB. Son medidas de la interfaz nativa durante esa ejecución, no del decodificador de vídeo. Se conservó la misma firma y no se sobrescribieron los instaladores publicados.
 
-Los respaldos privados antes y después de instalar y probar esta revisión coinciden exactamente en recompensas, eliminaciones, actividad, cajas, módulos, personajes y base manual: 213 puntos, 97 recompensas del intento, 560 entradas de actividad y una caja. La conexión para obtener los respaldos solo leyó el progreso y se desactivó al terminar.
+Los respaldos privados antes y después de instalar y probar esta revisión coinciden exactamente en recompensas, eliminaciones, actividad, cajas, módulos, personajes y base manual. Sus valores e historiales personales no se distribuyen. La conexión para obtener los respaldos solo leyó el progreso y se desactivó al terminar.
 
 Para repetir la comprobación: obtener primero un respaldo reciente por el puente del teléfono y guardarlo como `respaldo-telefono-antes.json` dentro de una carpeta privada de `Entrega/`. Ejecutar `node scripts/check-android-chest.mjs --output <carpeta> --label <nombre>`, añadiendo `--record` para grabar. El script reinicia únicamente la app para probar la apertura; no instala, importa, borra ni edita recompensas. Los respaldos y grabaciones quedan fuera del repositorio público.
 
