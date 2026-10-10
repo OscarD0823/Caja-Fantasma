@@ -22,9 +22,11 @@ const network = new Map([[scope, shell], [scope + "assets/app.js", "app code"], 
 const records = new Map();
 const events = new Map();
 let offline = false;
+let partial = false;
 const key = (request) => typeof request === "string" ? request : request.url;
 const fetchResource = async (request) => {
   if (offline) throw new TypeError("offline");
+  if (partial) return new Response("video fragment", { status: 206 });
   const body = network.get(key(request));
   return new Response(body ?? "missing", { status: body === undefined ? 404 : 200 });
 };
@@ -53,4 +55,7 @@ assert.equal(await (await request(scope + "?v=installed", "navigate")).text(), s
 assert.equal(await (await request(scope + "assets/app.js")).text(), "app code");
 assert.equal((await request(scope + "assets/missing.js")).type, "error", "Missing scripts must never receive HTML as fallback");
 assert.equal(await request("http://192.168.1.10:47183/sync"), undefined, "The service worker must not intercept the local sync bridge");
+offline = false; partial = true;
+assert.equal((await request(scope + "assets/opening.mp4")).status, 206, "A video range must be returned without trying to Cache.put a partial response.");
+assert(!records.has(scope + "assets/opening.mp4"), "Only complete resources can be cached for offline playback.");
 console.log("PWA OK: icons, installable scope, offline shell and local bridge isolation");

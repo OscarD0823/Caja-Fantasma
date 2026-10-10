@@ -1,4 +1,4 @@
-const CACHE = "caja-fantasma-web-v1.22.1";
+const CACHE = "caja-fantasma-web-v1.22.2";
 const shell = new URL("./", self.registration.scope).href;
 self.addEventListener("install", (event) => event.waitUntil((async () => {
   const cache = await caches.open(CACHE);
@@ -31,7 +31,8 @@ self.addEventListener("fetch", (event) => {
     if (cached && url.pathname.includes("/assets/")) return cached;
     try {
       const response = await fetch(request);
-      if (response.ok) { const cache = await caches.open(CACHE); await cache.put(request, response.clone()); }
+      // A video range response (206) cannot be stored with Cache.put.
+      if (response.status === 200) { const cache = await caches.open(CACHE); await cache.put(request, response.clone()); }
       return response;
     } catch { return cached || Response.error(); }
   })());

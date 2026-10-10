@@ -57,7 +57,7 @@ import OverlayPreviewLab from "./OverlayPreviewLab";
 import AppUpdater from "./Updater";
 import WebInstallNotice from "./WebInstallNotice";
 import DevicePresence from "./DevicePresenceStrip";
-import GameLogoMark, { GhostMark, ShinyModuleMark } from "./GameLogoMark";
+import GameLogoMark, { ShinyModuleMark } from "./GameLogoMark";
 import ConsoleGlyph from "./ConsoleGlyph";
 import { recentConnectedDevices, type DeviceKind } from "./devicePresence";
 import { GRAVITY_EVENT_IMAGE_A, GRAVITY_EVENT_IMAGE_B, LUNAR_EVENT_IMAGE, SYMBIOSIS_EVENT_IMAGE, visionVisualImage, visionVisualTheme } from "./assets";
@@ -105,7 +105,7 @@ import AppTutorial from "./AppTutorial";
 import type { ShinyModCatalogItem } from "./shinyModsCatalog";
 import { loadWebPersonalBackup, readWebStorageStatus, requestPersistentWebStorage, saveWebPersonalBackup, type WebStorageStatus } from "./webStorage";
 import { usePwaInstall } from "./usePwaInstall";
-import CrateOpeningArt from "./CrateOpeningArt";
+import StartupOpeningVideo from "./StartupOpeningVideo";
 import CounterChestArt from "./CounterChestArt";
 import { persistDesktopProgress } from "./desktopProgress";
 import PhoneBridgeSyncPanel from "./PhoneBridgeSyncPanel";
@@ -212,6 +212,7 @@ const TABS: Array<{ id: TabId; es: string; en: string; icon: typeof Box }> = [
 ];
 
 const CHANGELOG = [
+  { version: "1.22.2", date: "10 de octubre de 2026", title: "Cofre fluido y animaciones ligeras", items: ["Apertura del cofre en vídeo local a 60 FPS, sin cargar el modelo 3D pesado durante el inicio.", "El fantasma emerge y se aleja de forma continua, sin las pausas de la trayectoria anterior.", "El cofre junto a los puntos conserva su tapa y fantasma con cerca de un 95 % menos de elementos; se pausa fuera de pantalla y en segundo plano.", "Reproducción adaptada a Windows, Android y web, con alternativa estática si falla el vídeo o se prefiere reducir movimiento.", "Conserva los puntos, las cajas, los personajes, los módulos y la sincronización existente."] },
   { version: "1.22.1", date: "9 de octubre de 2026", title: "Cofre con profundidad e iconos fieles", items: ["Cofre con herrajes en relieve, tapa curva, cerradura profunda y paredes interiores; conserva la apertura del módulo y el fantasma.", "Acabado de metal envejecido con tornillos, ranuras y desgaste sutil, sin el aspecto plástico anterior.", "El logo y los iconos de Windows, Android y web se generan desde el mismo cofre tridimensional, con proporciones y márgenes seguros.", "Piezas estáticas reutilizadas y animaciones que respetan movimiento reducido; no cambia el progreso, el historial ni la sincronización."] },
   { version: "1.22.0", date: "9 de octubre de 2026", title: "Conexiones juntas y consola de progreso", items: ["La web en Android y las PWA muestran Conectar con el celular; ya no se confunden con la APK.", "Dispositivos reúne PC, web, Android y ambos enlaces en el mismo lugar.", "Progreso con energía segmentada, cofre que refleja su carga, botones de metal e indicadores de conexión con circuitos animados.", "Apertura más fluida, icono con márgenes seguros para móvil, tutorial de seis pasos y nueva vista de actualización.", "Detección automática del idioma en instalaciones nuevas; las elecciones anteriores se conservan."] },
   {
@@ -2588,28 +2589,28 @@ export function StartupIntro({ language, onSkip }: { language: UiLanguage; onSki
   const english = language !== "es";
   const previewMs = import.meta.env.DEV ? Number(new URLSearchParams(window.location.search).get("intro-preview")) : 0;
   const onSkipRef = useRef(onSkip);
+  const [finishing, setFinishing] = useState(false);
+  const finish = useCallback(() => setFinishing(true), []);
   onSkipRef.current = onSkip;
   useEffect(() => {
+    // Only one chest animates while the full-screen opening hides the dashboard.
+    document.documentElement.dataset.introActive = "true";
+    return () => { delete document.documentElement.dataset.introActive; };
+  }, []);
+  useEffect(() => {
     if (previewMs > 0) return;
-    const timeout = window.setTimeout(() => onSkipRef.current(), window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 1_200 : 7_700);
+    const timeout = window.setTimeout(finish, window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 1_200 : 10_000);
     return () => window.clearTimeout(timeout);
   }, []);
-  return <button type="button" className={`startup-intro ${previewMs > 0 ? "intro-preview" : ""}`} style={previewMs > 0 ? { "--intro-preview-time": Math.min(7400, previewMs) } as import("react").CSSProperties : undefined} onClick={onSkip} aria-label={english ? "Skip opening animation" : "Omitir animación de apertura"}>
+  useEffect(() => {
+    if (!finishing || previewMs > 0) return;
+    const timer = window.setTimeout(() => onSkipRef.current(), 180);
+    return () => window.clearTimeout(timer);
+  }, [finishing, previewMs]);
+  return <button type="button" className={`startup-intro intro-video-mode ${finishing ? "intro-video-finished" : ""} ${previewMs > 0 ? "intro-preview" : ""}`} style={previewMs > 0 ? { "--intro-preview-time": Math.min(7400, previewMs) } as import("react").CSSProperties : undefined} onClick={onSkip} aria-label={english ? "Skip opening animation" : "Omitir animación de apertura"}>
     <span className="intro-letterbox" aria-hidden="true" />
-    <span className="intro-world" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /><i /></span>
-    <span className="intro-scan" aria-hidden="true" />
     <span className="intro-hud" aria-hidden="true"><i /><i /><i /><i /><b>CF–17</b><em>{english ? "PHANTOM ACCESS" : "ACCESO FANTASMA"}</em></span>
-    <span className="intro-aura" aria-hidden="true"><i /><i /></span>
-    <span className="intro-energy-route" aria-hidden="true"><i /><i /><i /></span>
-    <span className="intro-crate-arrival" aria-hidden="true">
-      <span className="intro-crate-shadow" />
-      <span className="intro-crate">
-        <CrateOpeningArt keyMark={<ShinyModuleMark />} ghostMark={<GhostMark />} />
-        <span className="intro-light" />
-        <span className="intro-impact-wave"><i /><i /></span>
-        <span className="intro-sparks"><i /><i /><i /><i /><i /><i /></span>
-      </span>
-    </span>
+    <StartupOpeningVideo previewAtMs={previewMs} onFinished={finish} />
     <span className="intro-title"><small>{english ? "BRILLIANT MODULE · VAULT UNSEALED" : "MÓDULO BRILLANTE · COFRE ABIERTO"}</small><strong>CAJA FANTASMA</strong><em>ONCE HUMAN · TRACKER 17</em></span>
     <span className="intro-progress" aria-hidden="true"><i /></span>
     <span className="intro-hint">{english ? "Tap to continue" : "Pulsa para continuar"}</span>

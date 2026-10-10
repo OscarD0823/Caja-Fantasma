@@ -5,6 +5,7 @@
 - [Android y sincronización](ANDROID-Y-SINCRONIZACION.md)
 - [Conexión web–celular](../DISENO-COFRE-Y-CONEXION-LOCAL.md)
 - [Web gratuita](VERSION-WEB-GRATUITA.md)
+- [Rendimiento y pruebas de las animaciones](RENDIMIENTO-ANIMACIONES.md)
 - [Historial de versiones](versiones/README.md)
 - [Aviso comunitario](../AVISO-COMUNITARIO.md)
 - [Auditoría del instalador](../AUDITORIA-INSTALADOR.md)

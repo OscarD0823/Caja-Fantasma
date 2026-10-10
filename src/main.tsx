@@ -12,8 +12,12 @@ import "./styles.css";
 import "./crateOpening.css";
 import "./interface.css";
 import "./refinement.css";
+import "./chestChoreography.css";
+import "./chestPerformance.css";
+import { currentChestDetail } from "./chestMotion";
 
 const nativeHost = isTauri();
+document.documentElement.dataset.chestDetail = currentChestDetail();
 // Stop decorative CSS motion while this surface is hidden, including background Android/web.
 const updateMotionVisibility = () => { document.documentElement.dataset.appHidden = String(document.hidden); };
 updateMotionVisibility();

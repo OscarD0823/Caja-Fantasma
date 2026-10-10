@@ -15,6 +15,7 @@ const loadComponent = async (file, exportName = "default") => {
   const cache = new Map();
   const load = path => {
     if (extname(path) === ".png") return { default: `data:image/png;base64,${readFileSync(path).toString("base64")}` };
+    if (extname(path) === ".mp4") return { default: "/assets/chest-opening.mp4" };
     if (cache.has(path)) return cache.get(path).exports;
     const module = { exports: {} }; cache.set(path, module);
     const compiled = ts.transpileModule(readFileSync(path, "utf8").replaceAll("import.meta.env.DEV", "false"), { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
@@ -179,7 +180,7 @@ assert(!(await read("src/GameLogoMark.tsx")).includes("EmblemRelief"), "Do not b
 const counter = await read("src/CounterChestArt.tsx");
 assert(counter.includes("memo(function CounterChestArt") && counter.includes("<CrateOpeningArt compact") && !counter.includes("<img") && !counter.includes("setInterval"));
 const app = await read("src/App.tsx");
-assert(app.includes('<CrateOpeningArt keyMark={<ShinyModuleMark />}') && app.includes("<CounterChestArt value={currentPoints} target={target}") && !app.includes("PHANTOM_CRATE_IMAGE"));
+assert(app.includes("<StartupOpeningVideo previewAtMs={previewMs}") && app.includes("<CounterChestArt value={currentPoints} target={target}") && !app.includes("PHANTOM_CRATE_IMAGE") && !app.includes("<CrateOpeningArt"));
 assert(app.includes('(creatorAccess === "granted" || ownerEntryRequested) && <article className="owner-panel panel">'), "Visitors must not see the owner login panel by default.");
 assert(app.includes('event.ctrlKey && event.altKey && event.shiftKey') && !app.includes("Suma lo que reclames"));
 assert(openingStyles.includes(".startup-intro *, .startup-intro *::before, .startup-intro *::after { animation: none !important; }"), "Reduced motion must win the opening cascade.");
@@ -212,6 +213,63 @@ for (const progress of [null, 72]) {
   assert.equal(experience.includes("aria-valuenow"), progress !== null, "Unknown download progress must not invent a percentage.");
 }
 const Counter = await loadComponent("src/CounterChestArt.tsx");
+const detail = await loadComponent("src/chestMotion.ts", "chooseChestDetail");
+assert.equal(detail({ mobile: false, coarse: false, width: 1280, cores: 8, memory: 8 }), "full");
+for (const options of [{ mobile: true, coarse: false, width: 1600 }, { mobile: false, coarse: true, width: 1000 }, { mobile: false, coarse: false, width: 390 }, { mobile: false, coarse: false, width: 1280, cores: 4 }, { mobile: false, coarse: false, width: 1280, memory: 4 }]) assert.equal(detail(options), "light");
+const renderChest = (detail, compact = false) => renderToStaticMarkup(createElement(Opening, { detail, compact, keyMark: createElement(ShinyKey), ghostMark: createElement(Ghost) }));
+const fullChest = renderChest("full"), lightChest = renderChest("light"), miniChest = renderChest("light", true);
+const nodes = html => (html.match(/<[a-z][\w-]*(?:\s|>)/g) ?? []).length;
+assert(nodes(lightChest) < nodes(fullChest) * .15, "Mobile artwork must remove at least 85% of the model's live DOM, not merely hide it.");
+for (const art of [lightChest, miniChest]) {
+  assert(!art.includes("vault-relief-wall") && !art.includes("vault-relief-bevel"));
+  for (const moving of ["vault-camera", "vault-lid-hinge", "vault-key-port", "vault-key", "vault-clasp", "vault-hologram", "spectral-courier"]) assert(art.includes(moving), `Lightweight chest must retain ${moving}.`);
+  assert.equal((art.match(/class="vault-roof-plate"/g) ?? []).length, 8);
+  assert(!art.includes("vault-motes") && !art.includes("vault-anomaly-orbits"), "Hidden mobile ornaments must not be mounted.");
+}
+const performanceStyles = await read("src/chestPerformance.css");
+assert(performanceStyles.includes('data-motion-paused="true"') && performanceStyles.includes('data-app-hidden="true"') && performanceStyles.includes('data-intro-active="true"'));
+assert(counter.includes("IntersectionObserver") && counter.includes("observer.disconnect()") && counter.includes("memo(function CounterChestScene"));
+assert(!/setInterval|requestAnimationFrame|localStorage|invoke\(/.test(counter + performanceStyles + await read("src/LightweightChestSurface.tsx")), "Art must not run frame loops or access progress/synchronization.");
+const surfaces = JSON.parse(await read("src/assets/chest-surfaces.render.json"));
+const surfacePng = readFileSync(resolve(root, "src/assets/chest-surfaces.png"));
+assert.equal(surfacePng.readUInt32BE(16), 1024); assert.equal(surfacePng.readUInt32BE(20), 1024); assert.equal(surfacePng[25], 6);
+assert(surfacePng.length < 800000, "The shared static metalwork must stay small for mobile.");
+assert.equal(createHash("sha256").update(surfacePng).digest("hex"), surfaces.sha256);
+for (const [source, digest] of Object.entries(surfaces.sources)) assert.equal(createHash("sha256").update((await read(source)).replaceAll("\r\n", "\n")).digest("hex"), digest, `Stale chest surface: ${source}. Run pnpm chest:surfaces.`);
+console.log(`Chest performance: ${nodes(fullChest)} → ${nodes(lightChest)} DOM nodes; small counter ${nodes(miniChest)} nodes.`);
+const movie = JSON.parse(await read("src/assets/chest-opening.render.json"));
+const movieBytes = readFileSync(resolve(root, "src/assets/chest-opening.mp4"));
+assert.equal(movieBytes.toString("ascii", 4, 8), "ftyp");
+assert(movieBytes.length < 2000000, "A short mobile startup must not become a multi-megabyte download.");
+assert.equal(movie.codec, "h264"); assert.equal(movie.profile, "baseline"); assert.equal(movie.audio, false);
+assert.equal(movie.fps, 60); assert.equal(movie.frameCount, 456); assert.equal(movie.durationMs, 7600);
+const choreography = await read("src/chestChoreography.css");
+assert(choreography.includes("animation-name: vault-spirit-flow") && choreography.includes("animation-timing-function: linear"));
+const flight = [...choreography.matchAll(/(\d+)% \{ opacity: ([\d.]+); transform: translate\(([-\d.]+)px, ([-\d.]+)px\)/g)].map(([, percent, opacity, x, y]) => ({ percent: Number(percent), opacity: Number(opacity), x: Number(x), y: Number(y) }));
+assert(flight.length >= 38, "Keep the ghost's densely sampled continuous flight.");
+for (let index = 1; index < flight.length; index++) {
+  const a = flight[index - 1], b = flight[index];
+  assert(b.y < a.y && Math.hypot(b.x - a.x, b.y - a.y) > 1, "The departing ghost must not stop, bob back or freeze.");
+}
+assert((await read("src/main.tsx")).includes('import "./chestChoreography.css";'));
+assert((await read("scripts/render-opening-video.mjs")).includes("animation.currentTime="), "Recording must seek a deterministic animation clock, not repeatedly restart CSS.");
+assert.equal(createHash("sha256").update(movieBytes).digest("hex"), movie.sha256);
+assert.equal(createHash("sha256").update(readFileSync(resolve(root, "src/assets/chest-opening-poster.png"))).digest("hex"), movie.posterSha256);
+for (const [source, digest] of Object.entries(movie.sources)) assert.equal(createHash("sha256").update((await read(source)).replaceAll("\r\n", "\n")).digest("hex"), digest, `Stale opening video: ${source}. Run pnpm chest:video -- --ffmpeg <path>.`);
+const savedWindow = globalThis.window;
+try {
+  globalThis.window = { matchMedia: () => ({ matches: false }) };
+  const Video = await loadComponent("src/StartupOpeningVideo.tsx");
+  const motion = renderToStaticMarkup(createElement(Video, { onFinished() {} }));
+  assert(motion.includes("<video") && /muted=""/i.test(motion) && /playsinline=""/i.test(motion) && !motion.includes("loop="));
+  assert(!motion.includes("vault-solid") && nodes(motion) <= 2, "Startup must not mount the full 3D model behind its video.");
+  globalThis.window = { matchMedia: () => ({ matches: true }) };
+  const still = renderToStaticMarkup(createElement(Video, { onFinished() {} }));
+  assert(still.includes("<img") && !still.includes("<video"), "Reduced motion must not download/autoplay the movie.");
+} finally { if (savedWindow === undefined) delete globalThis.window; else globalThis.window = savedWindow; }
+const movieSource = await read("src/StartupOpeningVideo.tsx");
+assert(movieSource.includes('document.addEventListener("visibilitychange", resume)') && movieSource.includes('document.removeEventListener("visibilitychange", resume)') && movieSource.includes("player.pause()"));
+assert(!/requestAnimationFrame|setInterval|localStorage|invoke\(/.test(movieSource), "Playback must not add a frame loop or touch personal data.");
 const confirmation = renderToStaticMarkup(createElement(Update, { status: "confirming", progress: 100, route: { current: "1.21.8", next: "1.22.0" }, language: "en", android: true, notes: "", error: "", dismiss() {}, install() {} }));
 assert(confirmation.includes("Verification") && !confirmation.includes(">Installation</li>"), "Opening Android's installer confirms verification, not that installation has finished.");
 const charged = renderToStaticMarkup(createElement(Counter, { value: 187, target: 1000 }));

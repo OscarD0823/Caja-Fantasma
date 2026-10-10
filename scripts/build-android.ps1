@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param()
+param([string]$OutputDirectory = "")
 
 $ErrorActionPreference = "Stop"
 Add-Type -AssemblyName System.Security
@@ -10,7 +10,7 @@ $Version = (Get-Content -Raw (Join-Path $ProjectRoot "src-tauri\tauri.conf.json"
 $SigningDirectory = Join-Path $env:LOCALAPPDATA "Caja Fantasma\signing"
 $KeyStore = Join-Path $SigningDirectory "android-release.jks"
 $PasswordPath = Join-Path $SigningDirectory "android-release.pass.dpapi"
-$OutputDirectory = Join-Path $ProjectRoot "Programa\Android"
+$OutputDirectory = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $ProjectRoot "Programa\Android" }
 $OutputApk = Join-Path $OutputDirectory "Caja-Fantasma-Android-$Version.apk"
 $Node = (Get-Command node.exe -ErrorAction Stop).Source
 $TauriCli = Join-Path $ProjectRoot "node_modules\@tauri-apps\cli\tauri.js"

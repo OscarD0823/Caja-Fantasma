@@ -14,7 +14,7 @@ Tu seguimiento de recompensas, cajas y módulos Brillantes de Once Human, en **P
 
 Las descargas llevan a la **última versión publicada**, no a versiones en preparación. Los archivos también están organizados en [Programa](Programa/).
 
-**1.22.1 · Cofre con profundidad e iconos fieles:** herrajes en relieve, tapa curva y metal envejecido. Los iconos de Windows, Android y web usan el mismo cofre de la animación, con proporciones y márgenes seguros. No cambia el progreso ni la sincronización. [Qué cambió](docs/versiones/NOTAS-VERSION-1.22.1.md) · [Historial de versiones](docs/versiones/).
+**1.22.2 · Cofre fluido y animaciones ligeras:** apertura en vídeo local a 60 FPS y salida continua del fantasma. El cofre del contador conserva el mismo diseño con cerca de un 95 % menos de elementos y se pausa cuando no se ve. No cambia el progreso ni la sincronización. [Qué cambió](docs/versiones/NOTAS-VERSION-1.22.2.md) · [Historial de versiones](docs/versiones/).
 
 ## Empieza en un minuto
 

@@ -1,10 +1,12 @@
 import { memo, useId, type CSSProperties, type ReactNode } from "react";
 import { ChestBolt, ChestMaterialDefs } from "./ChestMaterials";
 import ChestRelief, { LidLatchRelief, LockRelief } from "./ChestRelief";
+import { currentChestDetail, type ChestDetail } from "./chestMotion";
+import { LightweightChestSurface, roofTexture } from "./LightweightChestSurface";
 
 
 /** Static vector metalwork; identical finishes are used by the app icon. */
-const Metalwork = memo(function Metalwork({ side = false, lid = false }: { side?: boolean; lid?: boolean }) {
+export const Metalwork = memo(function Metalwork({ side = false, lid = false }: { side?: boolean; lid?: boolean }) {
   const id = `vault-${useId().replace(/:/g, "")}`;
   const width = side ? 160 : 300;
   const height = lid ? 52 : 180;
@@ -57,8 +59,16 @@ const ROOF_PLATES = Array.from({ length: 8 }, (_, index) => {
   } as CSSProperties;
 });
 
-const VaultedLid = memo(function VaultedLid() {
+export const VaultedLid = memo(function VaultedLid({ light = false }: { light?: boolean }) {
   const id = `lid-metal-${useId().replace(/:/g, "")}`;
+  if (light) return <>
+    {ROOF_PLATES.map((style, index) => <span key={index} className="vault-roof-plate" style={{ ...style, ...roofTexture(index, Number(style.height)) }} />)}
+    <span className="vault-lid-end end-left"><LightweightChestSurface kind="end" /></span>
+    <span className="vault-lid-end end-right"><LightweightChestSurface kind="end" /></span>
+    <span className="vault-lid-lip lip-front"><i /><i /><i /></span><span className="vault-lid-lip lip-back" />
+    <span className="vault-lid-underside"><LightweightChestSurface kind="underside" /></span>
+    <span className="vault-lid-latch"><LightweightChestSurface kind="latch" /></span>
+  </>;
   return <>
     <svg className="vault-relief-materials" aria-hidden="true"><defs><ChestMaterialDefs id={id} /></defs></svg>
     {ROOF_PLATES.map((style, index) => <span key={index} className="vault-roof-plate" style={style}>
@@ -101,26 +111,27 @@ const VaultedLid = memo(function VaultedLid() {
 });
 
 /** An assembled chest: the docking module stays in its lock after the ghost leaves. */
-export default function CrateOpeningArt({ keyMark, ghostMark, compact = false }: { keyMark: ReactNode; ghostMark?: ReactNode; compact?: boolean }) {
-  return <span className={`opening-vault${compact ? " counter-vault" : ""}`} aria-hidden="true">
-    <span className="vault-anomaly-orbits"><i /><i /><i /></span>
-    <span className="vault-ground-radar"><i /><i /><b>17</b></span>
+export default function CrateOpeningArt({ keyMark, ghostMark, compact = false, detail }: { keyMark: ReactNode; ghostMark?: ReactNode; compact?: boolean; detail?: ChestDetail }) {
+  const light = (detail ?? (compact ? "light" : currentChestDetail())) === "light";
+  return <span className={`opening-vault${compact ? " counter-vault" : ""}${light ? " vault-light" : ""}`} aria-hidden="true">
+    {!compact && !light && <><span className="vault-anomaly-orbits"><i /><i /><i /></span>
+      <span className="vault-ground-radar"><i /><i /><b>17</b></span></>}
     <span className="vault-camera">
-      <span className="vault-floor-shadow" />
+      {!compact && <span className="vault-floor-shadow" />}
       <span className="vault-solid">
-        <span className="vault-face vault-back"><Metalwork /></span>
-        <span className="vault-face vault-side vault-left"><Metalwork side /><ChestRelief side /><span className="vault-handle" /></span>
-        <span className="vault-face vault-side vault-right"><Metalwork side /><ChestRelief side /><span className="vault-handle" /></span>
+        <span className="vault-face vault-back">{light ? <LightweightChestSurface kind="front" /> : <Metalwork />}</span>
+        <span className="vault-face vault-side vault-left">{light ? <LightweightChestSurface kind="side" /> : <><Metalwork side /><ChestRelief side /><span className="vault-handle" /></>}</span>
+        <span className="vault-face vault-side vault-right">{light ? <LightweightChestSurface kind="side" /> : <><Metalwork side /><ChestRelief side /><span className="vault-handle" /></>}</span>
         <span className="vault-face vault-bottom" />
         <span className="vault-inner-wall inner-back"><i /></span><span className="vault-inner-wall inner-front"><i /></span>
         <span className="vault-inner-wall inner-left"><i /></span><span className="vault-inner-wall inner-right"><i /></span>
         <span className="vault-cavity"><span className="vault-core" /><i /><i /><i /></span>
         <span className="vault-face vault-front">
-          <Metalwork />
-          <ChestRelief />
-          <span className="vault-keystone"><LockRelief /></span>
-          <span className="vault-identity"><small>CF · PHANTOM</small><em>17</em></span>
-          <span className="vault-serial"><i /><i /><i /><i /><i /><i /><i /><i /></span>
+          {light ? <LightweightChestSurface kind="front" /> : <><Metalwork />
+            <ChestRelief />
+            <span className="vault-keystone"><LockRelief /></span>
+            <span className="vault-identity"><small>CF · PHANTOM</small><em>17</em></span>
+            <span className="vault-serial"><i /><i /><i /><i /><i /><i /><i /><i /></span></>}
           <span className="vault-clasp clasp-left"><i /></span><span className="vault-clasp clasp-right"><i /></span>
           <span className="vault-key-port"><span className="vault-key-outline">{keyMark}</span><span className="vault-key">{keyMark}</span><span className="vault-key-ring" /></span>
           <span className="vault-lock-bolts"><i /><i /></span>
@@ -128,13 +139,13 @@ export default function CrateOpeningArt({ keyMark, ghostMark, compact = false }:
         </span>
         <span className="vault-rim" />
         <span className="vault-hinge hinge-left" /><span className="vault-hinge hinge-right" />
-        <span className="vault-lid-hinge"><VaultedLid /></span>
+        <span className="vault-lid-hinge"><VaultedLid light={light} /></span>
       </span>
     </span>
-    <span className="vault-energy-column" />
-    <span className="vault-release-shock"><i /><i /></span>
-    <span className="vault-spirit-aperture"><span className="vault-hologram"><span className="vault-holo-rings"><i /><i /></span><span className="vault-holo-emblem">{ghostMark ?? keyMark}</span><span className="vault-spirit-wake"><i /><i /><i /></span></span></span>
-    <span className="vault-motes">{Array.from({ length: 10 }, (_, index) => <i key={index} />)}</span>
-    <span className="vault-sequence"><i>01 · MODULE</i><i>02 · UNLOCK</i><i>03 · RELEASE</i></span>
+    {!compact && !light && <><span className="vault-energy-column" />
+      <span className="vault-release-shock"><i /><i /></span></>}
+    <span className="vault-spirit-aperture"><span className="vault-hologram">{!compact && !light && <span className="vault-holo-rings"><i /><i /></span>}<span className="vault-holo-emblem">{ghostMark ?? keyMark}</span>{!light && <span className="vault-spirit-wake"><i /><i /><i /></span>}</span></span>
+    {!compact && !light && <><span className="vault-motes">{Array.from({ length: 10 }, (_, index) => <i key={index} />)}</span>
+      <span className="vault-sequence"><i>01 · MODULE</i><i>02 · UNLOCK</i><i>03 · RELEASE</i></span></>}
   </span>;
 }

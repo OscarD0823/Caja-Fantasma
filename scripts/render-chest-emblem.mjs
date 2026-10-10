@@ -42,7 +42,16 @@ ${readFileSync(join(root, "src/crateOpening.css"), "utf8")}
 const browser = "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe";
 if (!existsSync(browser)) throw new Error("Necesitas el motor local de Edge para regenerar el icono desde el modelo.");
 execFileSync(browser, ["--headless=new", "--no-first-run", "--no-default-browser-check", "--disable-background-networking", "--disable-extensions", "--hide-scrollbars", "--default-background-color=00000000", `--user-data-dir=${join(temporary, "isolated-render-profile")}`, "--window-size=1024,1024", `--screenshot=${png}`, pathToFileURL(html).href], { timeout: 60000, stdio: "pipe", windowsHide: true });
-const data = readFileSync(png);
+const deadline = Date.now() + 15000;
+let data;
+while (Date.now() < deadline) {
+  if (existsSync(png)) {
+    const candidate = readFileSync(png);
+    if (candidate.subarray(-8, -4).toString("ascii") === "IEND") { data = candidate; break; }
+  }
+  await new Promise(resolve => setTimeout(resolve, 100));
+}
+if (!data) throw new Error("El renderizador no completó el icono del cofre.");
 if (data.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a" || data.readUInt32BE(16) !== 1024 || data.readUInt32BE(20) !== 1024 || data[25] !== 6) throw new Error("La imagen del cofre debe ser PNG RGBA de 1024 × 1024.");
 copyFileSync(png, join(root, "src/assets/chest-emblem.png"));
 const dependencies = ["src/CrateOpeningArt.tsx", "src/ChestRelief.tsx", "src/ChestMaterials.tsx", "src/crateOpening.css", "src/GameLogoMark.tsx", "scripts/render-chest-emblem.mjs"];
